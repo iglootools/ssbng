@@ -1,0 +1,35 @@
+[tool.poetry]
+name = "ssb"
+version = "0.1.0"
+description = "Simple Safe Backup - A secure backup solution"
+authors = ["Sami Dalouche <sami.dalouche@gmail.com>"]
+readme = "README.md"
+packages = [{include = "ssb"}]
+
+[tool.poetry.scripts]
+ssb = "ssb.cli:main"
+
+[tool.poetry.dependencies]
+python = "^3.13"
+cryptography = "^42.0.0"
+typer = "^0.16.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+black = "^24.0.0"
+flake8 = "^7.0.0"
+mypy = "^1.9.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 79
+target-version = ['py313']
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
