@@ -1,24 +1,27 @@
-[tool.poetry]
+[project]
 name = "ssb"
 version = "0.1.0"
 description = "Simple Safe Backup - A secure backup solution"
-authors = ["Sami Dalouche <sami.dalouche@gmail.com>"]
+authors = [{name = "Sami Dalouche", email = "sami.dalouche@gmail.com"}]
 readme = "README.md"
-packages = [{include = "ssb"}]
+requires-python = ">=3.13"
+dependencies = [
+    "typer (>=0.24.0,<1.0.0)",
+    "pyyaml (>=6.0,<7.0)",
+]
 
-[tool.poetry.scripts]
+[project.scripts]
 ssb = "ssb.cli:main"
 
-[tool.poetry.dependencies]
-python = "^3.13"
-cryptography = "^46.0.0"
-typer = "^0.24.0"
+[tool.poetry]
+packages = [{include = "ssb"}]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.0"
 black = "^26.0.0"
 flake8 = "^7.0.0"
 mypy = "^1.9.0"
+types-pyyaml = "^6.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -27,6 +30,11 @@ build-backend = "poetry.core.masonry.api"
 [tool.black]
 line-length = 79
 target-version = ['py314']
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: Integration tests requiring Docker",
+]
 
 [tool.mypy]
 python_version = "3.14"

@@ -1,4 +1,4 @@
-.PHONY: install test format lint type-check clean build publish help
+.PHONY: install test test-integration test-all format lint type-check clean build publish help
 
 help: ## Show this help message
 	@echo "Available commands:"
@@ -7,7 +7,13 @@ help: ## Show this help message
 install: ## Install dependencies
 	poetry install
 
-test: ## Run tests
+test: ## Run unit tests (no Docker)
+	poetry run pytest tests/ --ignore=tests/integration/ -v
+
+test-integration: ## Run integration tests (requires Docker)
+	poetry run pytest tests/integration/ -v
+
+test-all: ## Run all tests
 	poetry run pytest tests/ -v
 
 format: ## Format code with black

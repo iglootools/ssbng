@@ -1,0 +1,172 @@
+"""Integration tests: btrfs snapshots via remote Docker container."""
+
+from __future__ import annotations
+
+import time
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from ssb.btrfs import create_snapshot, get_latest_snapshot
+from ssb.model import (
+    Config,
+    LocalVolume,
+    RemoteVolume,
+    SyncConfig,
+    SyncEndpoint,
+)
+from ssb.rsync import run_rsync
+
+from .conftest import ssh_exec
+
+pytestmark = pytest.mark.integration
+
+
+def _setup_btrfs_latest(docker_container: dict[str, Any]) -> None:
+    """Create the 'latest' btrfs subvolume and snapshots dir."""
+    ssh_exec(
+        docker_container,
+        "btrfs subvolume create /mnt/btrfs/latest",
+    )
+    ssh_exec(docker_container, "mkdir -p /mnt/btrfs/snapshots")
+
+
+def _make_btrfs_config(
+    src_path: str,
+    remote_btrfs_volume: RemoteVolume,
+) -> tuple[SyncConfig, Config]:
+    src_vol = LocalVolume(name="src", path=src_path)
+    sync = SyncConfig(
+        name="test-sync",
+        source=SyncEndpoint(volume_name="src"),
+        destination=SyncEndpoint(volume_name="dst"),
+        btrfs_snapshots=True,
+    )
+    config = Config(
+        volumes={"src": src_vol, "dst": remote_btrfs_volume},
+        syncs={"test-sync": sync},
+    )
+    return sync, config
+
+
+class TestBtrfsSnapshots:
+    def test_snapshot_created(
+        self,
+        tmp_path: Path,
+        docker_container: dict[str, Any],
+        remote_btrfs_volume: RemoteVolume,
+    ) -> None:
+        _setup_btrfs_latest(docker_container)
+
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "data.txt").write_text("snapshot me")
+
+        sync, config = _make_btrfs_config(str(src), remote_btrfs_volume)
+
+        # Rsync into latest
+        result = run_rsync(sync, config)
+        assert result.returncode == 0
+
+        # Create snapshot
+        snapshot_path = create_snapshot(sync, config)
+
+        # Verify snapshot exists
+        check = ssh_exec(docker_container, f"test -d {snapshot_path}")
+        assert check.returncode == 0
+
+    def test_snapshot_readonly(
+        self,
+        tmp_path: Path,
+        docker_container: dict[str, Any],
+        remote_btrfs_volume: RemoteVolume,
+    ) -> None:
+        _setup_btrfs_latest(docker_container)
+
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "data.txt").write_text("readonly test")
+
+        sync, config = _make_btrfs_config(str(src), remote_btrfs_volume)
+        run_rsync(sync, config)
+        snapshot_path = create_snapshot(sync, config)
+
+        # Check readonly property
+        check = ssh_exec(
+            docker_container,
+            f"btrfs property get {snapshot_path} ro",
+        )
+        assert check.returncode == 0
+        assert "ro=true" in check.stdout
+
+    def test_second_sync_link_dest(
+        self,
+        tmp_path: Path,
+        docker_container: dict[str, Any],
+        remote_btrfs_volume: RemoteVolume,
+    ) -> None:
+        _setup_btrfs_latest(docker_container)
+
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "file.txt").write_text("v1")
+
+        sync, config = _make_btrfs_config(str(src), remote_btrfs_volume)
+
+        # First sync + snapshot
+        run_rsync(sync, config)
+        create_snapshot(sync, config)
+
+        # Small delay to ensure distinct timestamp
+        time.sleep(0.1)
+
+        # Second sync should use link-dest from first snapshot
+        latest_snap = get_latest_snapshot(sync, config)
+        assert latest_snap is not None
+
+        link_dest = f"../../snapshots/{latest_snap.rsplit('/', 1)[-1]}"
+        result = run_rsync(sync, config, link_dest=link_dest)
+        assert result.returncode == 0
+
+        # Create second snapshot
+        snapshot_path = create_snapshot(sync, config)
+        check = ssh_exec(docker_container, f"test -d {snapshot_path}")
+        assert check.returncode == 0
+
+    def test_dry_run_no_snapshot(
+        self,
+        tmp_path: Path,
+        docker_container: dict[str, Any],
+        remote_btrfs_volume: RemoteVolume,
+    ) -> None:
+        _setup_btrfs_latest(docker_container)
+
+        # Count existing snapshots before dry run
+        before = ssh_exec(
+            docker_container,
+            "ls /mnt/btrfs/snapshots 2>/dev/null || true",
+        )
+        count_before = len(
+            [s for s in before.stdout.strip().split("\n") if s.strip()]
+        )
+
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "data.txt").write_text("dry run")
+
+        sync, config = _make_btrfs_config(str(src), remote_btrfs_volume)
+
+        # Dry-run rsync
+        result = run_rsync(sync, config, dry_run=True)
+        assert result.returncode == 0
+
+        # Verify no new snapshot was created
+        after = ssh_exec(
+            docker_container,
+            "ls /mnt/btrfs/snapshots 2>/dev/null || true",
+        )
+        count_after = len(
+            [s for s in after.stdout.strip().split("\n") if s.strip()]
+        )
+        assert count_after == count_before
