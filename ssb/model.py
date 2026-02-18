@@ -1,18 +1,21 @@
-"""Pydantic-based data models for SSB backup configuration and status."""
-
 from __future__ import annotations
-from typing import Optional, List, Dict, Union
-from pydantic import BaseModel, Field, model_validator, field_validator
+from pydantic import root_validator
+from typing import Annotated, Optional, List, Dict, Union, Literal
+from pydantic import BaseModel, Field, ValidationInfo, model_validator, field_validator
 import enum
+
 
 class LocalVolume(BaseModel):
 	model_config = {"frozen": True}
+	type: Literal["local"] = "local"
 	"""A local filesystem volume."""
 	name: str = Field(..., min_length=1)
 	path: str = Field(..., min_length=1)
 
+
 class RemoteVolume(BaseModel):
 	model_config = {"frozen": True}
+	type: Literal["remote"] = "remote"
 	"""A remote volume accessible via SSH."""
 	name: str = Field(..., min_length=1)
 	host: str = Field(..., min_length=1)
@@ -22,7 +25,7 @@ class RemoteVolume(BaseModel):
 	ssh_key: Optional[str] = None
 	ssh_options: List[str] = Field(default_factory=list)
 
-Volume = Union[LocalVolume, RemoteVolume]
+Volume = Annotated[Union[LocalVolume, RemoteVolume], Field(discriminator="type")]
 
 class SyncEndpoint(BaseModel):
 	"""A sync endpoint referencing a volume by name."""
@@ -40,84 +43,21 @@ class SyncConfig(BaseModel):
 class Config(BaseModel):
 	"""Top-level SSB configuration."""
 	volumes: Dict[str, Volume] = Field(default_factory=dict)
-	syncs: Dict[str, SyncConfig] = Field(default_factory=dict)
 
+    # The volume name is the key in the volumes dict, but we also want it as a field in the Volume objects to make pydantic happy
 	@field_validator('volumes', mode='before')
 	@classmethod
-	def parse_volumes(cls, v):
-		if not isinstance(v, dict):
-			raise ValueError("'volumes' must be a mapping")
+	def inject_volume_names(cls, v, info: ValidationInfo):
 		result = {}
-		for name, data in v.items():
-			# Allow already-instantiated model objects
-			if isinstance(data, (LocalVolume, RemoteVolume)):
-				result[name] = data
-				continue
-			if not isinstance(data, dict):
-				raise ValueError(f"Volume '{name}' must be a mapping")
-			vol_type = data.get("type")
-			if vol_type == "local":
-				path = data.get("path")
-				if not path:
-					raise ValueError(f"Local volume '{name}' requires 'path'")
-				result[name] = LocalVolume(name=name, path=path)
-			elif vol_type == "remote":
-				host = data.get("host")
-				path = data.get("path")
-				if not host or not path:
-					raise ValueError(f"Remote volume '{name}' requires 'host' and 'path'")
-				result[name] = RemoteVolume(
-					name=name,
-					host=host,
-					path=path,
-					port=data.get("port", 22),
-					user=data.get("user"),
-					ssh_key=data.get("ssh_key"),
-					ssh_options=data.get("ssh_options", []),
-				)
-			else:
-				raise ValueError(f"Volume '{name}' has invalid type: {vol_type}")
+		for volume_name, volume_data in v.items():
+			# Inject the name if not present
+			if "name" not in volume_data:
+				volume_data = dict(volume_data)
+				volume_data["name"] = volume_name
+			result[volume_name] = volume_data
 		return result
 
-	@field_validator('syncs', mode='before')
-	@classmethod
-	def parse_syncs(cls, v):
-		if not isinstance(v, dict):
-			raise ValueError("'syncs' must be a mapping")
-		result = {}
-		for name, data in v.items():
-			# Allow already-instantiated model objects
-			if isinstance(data, SyncConfig):
-				result[name] = data
-				continue
-			if not isinstance(data, dict):
-				raise ValueError(f"Sync '{name}' must be a mapping")
-			source_data = data.get("source")
-			dest_data = data.get("destination")
-			if not isinstance(source_data, dict):
-				raise ValueError(f"Sync '{name}' requires 'source' mapping")
-			if not isinstance(dest_data, dict):
-				raise ValueError(f"Sync '{name}' requires 'destination' mapping")
-			source_vol = source_data.get("volume")
-			if not source_vol:
-				raise ValueError(f"Sync '{name}' source requires 'volume'")
-			dest_vol = dest_data.get("volume")
-			if not dest_vol:
-				raise ValueError(f"Sync '{name}' destination requires 'volume'")
-			result[name] = SyncConfig(
-				name=name,
-				source=SyncEndpoint(
-					volume_name=source_vol,
-					subdir=source_data.get("subdir"),
-				),
-				destination=SyncEndpoint(
-					volume_name=dest_vol,
-					subdir=dest_data.get("subdir"),
-				),
-				enabled=data.get("enabled", True),
-				btrfs_snapshots=data.get("btrfs_snapshots", False),
-			)
-		return result
+	syncs: Dict[str, SyncConfig] = Field(default_factory=dict)
 
 	@model_validator(mode="after")
 	def validate_cross_references(self):

@@ -52,7 +52,7 @@ def load_config(config_path: str | None = None) -> Config:
     try:
         config = Config.model_validate(raw)
     except Exception as e:
-        raise ConfigError(f"Config validation error: {e}")
+        raise ConfigError(f"Config validation error") from e
     return config
 
 
