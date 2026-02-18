@@ -47,15 +47,20 @@ class TestLoadConfig:
             assert cause is not None
             errors = cause.errors()
             assert any(
-                err["loc"] == ("syncs", "photos-to-nas", "name") and err["type"] == "missing"
+                err["loc"] == ("syncs", "photos-to-nas", "name")
+                and err["type"] == "missing"
                 for err in errors
             )
             assert any(
-                err["loc"] == ("syncs", "photos-to-nas", "source", "volume_name") and err["type"] == "missing"
+                err["loc"]
+                == ("syncs", "photos-to-nas", "source", "volume_name")
+                and err["type"] == "missing"
                 for err in errors
             )
             assert any(
-                err["loc"] == ("syncs", "photos-to-nas", "destination", "volume_name") and err["type"] == "missing"
+                err["loc"]
+                == ("syncs", "photos-to-nas", "destination", "volume_name")
+                and err["type"] == "missing"
                 for err in errors
             )
             return
@@ -87,15 +92,18 @@ class TestLoadConfig:
             assert cause is not None
             errors = cause.errors()
             assert any(
-                err["loc"] == ("syncs", "s1", "name") and err["type"] == "missing"
+                err["loc"] == ("syncs", "s1", "name")
+                and err["type"] == "missing"
                 for err in errors
             )
             assert any(
-                err["loc"] == ("syncs", "s1", "source", "volume_name") and err["type"] == "missing"
+                err["loc"] == ("syncs", "s1", "source", "volume_name")
+                and err["type"] == "missing"
                 for err in errors
             )
             assert any(
-                err["loc"] == ("syncs", "s1", "destination", "volume_name") and err["type"] == "missing"
+                err["loc"] == ("syncs", "s1", "destination", "volume_name")
+                and err["type"] == "missing"
                 for err in errors
             )
             return
@@ -136,7 +144,8 @@ class TestLoadConfig:
         assert cause is not None
         errors = cause.errors()
         assert any(
-            err["loc"] == ("volumes", "v", "local", "path") and err["type"] == "missing"
+            err["loc"] == ("volumes", "v", "local", "path")
+            and err["type"] == "missing"
             for err in errors
         )
 
@@ -151,7 +160,8 @@ class TestLoadConfig:
         assert cause is not None
         errors = cause.errors()
         assert any(
-            err["loc"] == ("volumes", "v", "remote", "host") and err["type"] == "missing"
+            err["loc"] == ("volumes", "v", "remote", "host")
+            and err["type"] == "missing"
             for err in errors
         )
 
@@ -168,7 +178,8 @@ class TestLoadConfig:
         assert cause is not None
         errors = cause.errors()
         assert any(
-            err["loc"] == ("syncs", "s", "destination", "volume_name") and err["type"] == "missing"
+            err["loc"] == ("syncs", "s", "destination", "volume_name")
+            and err["type"] == "missing"
             for err in errors
         )
 
@@ -185,7 +196,8 @@ class TestLoadConfig:
         assert cause is not None
         errors = cause.errors()
         assert any(
-            err["loc"] == ("syncs", "s", "source", "volume_name") and err["type"] == "missing"
+            err["loc"] == ("syncs", "s", "source", "volume_name")
+            and err["type"] == "missing"
             for err in errors
         )
 

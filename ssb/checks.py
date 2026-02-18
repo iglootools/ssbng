@@ -9,8 +9,10 @@ from .model import (
     LocalVolume,
     RemoteVolume,
     SyncConfig,
+    SyncReason,
     SyncStatus,
     Volume,
+    VolumeReason,
     VolumeStatus,
 )
 from .ssh import run_remote_command
@@ -29,13 +31,16 @@ def _check_local_volume(volume: LocalVolume) -> VolumeStatus:
     marker = Path(volume.path) / ".ssb-vol"
     if marker.exists():
         return VolumeStatus(
-            name=volume.name, config=volume, active=True, reason="ok"
+            name=volume.name,
+            config=volume,
+            active=True,
+            reason=VolumeReason.OK,
         )
     return VolumeStatus(
         name=volume.name,
         config=volume,
         active=False,
-        reason=f"marker not found: {marker}",
+        reason=VolumeReason.MARKER_NOT_FOUND,
     )
 
 
@@ -45,13 +50,16 @@ def _check_remote_volume(volume: RemoteVolume) -> VolumeStatus:
     result = run_remote_command(volume, f"test -f {marker_path}")
     if result.returncode == 0:
         return VolumeStatus(
-            name=volume.name, config=volume, active=True, reason="ok"
+            name=volume.name,
+            config=volume,
+            active=True,
+            reason=VolumeReason.OK,
         )
     return VolumeStatus(
         name=volume.name,
         config=volume,
         active=False,
-        reason="unreachable",
+        reason=VolumeReason.UNREACHABLE,
     )
 
 
@@ -90,7 +98,7 @@ def check_sync(
             source_status=src_status,
             destination_status=dst_status,
             active=False,
-            reason="disabled",
+            reason=SyncReason.DISABLED,
         )
 
     if not src_status.active:
@@ -100,7 +108,7 @@ def check_sync(
             source_status=src_status,
             destination_status=dst_status,
             active=False,
-            reason="source unavailable",
+            reason=SyncReason.SOURCE_UNAVAILABLE,
         )
 
     if not dst_status.active:
@@ -110,7 +118,7 @@ def check_sync(
             source_status=src_status,
             destination_status=dst_status,
             active=False,
-            reason="destination unavailable",
+            reason=SyncReason.DESTINATION_UNAVAILABLE,
         )
 
     src_vol = config.volumes[src_vol_name]
@@ -123,7 +131,7 @@ def check_sync(
             source_status=src_status,
             destination_status=dst_status,
             active=False,
-            reason="source marker .ssb-src not found",
+            reason=SyncReason.SOURCE_MARKER_NOT_FOUND,
         )
 
     if not _check_endpoint_marker(
@@ -135,7 +143,7 @@ def check_sync(
             source_status=src_status,
             destination_status=dst_status,
             active=False,
-            reason="destination marker .ssb-dst not found",
+            reason=SyncReason.DESTINATION_MARKER_NOT_FOUND,
         )
 
     return SyncStatus(
@@ -144,7 +152,7 @@ def check_sync(
         source_status=src_status,
         destination_status=dst_status,
         active=True,
-        reason="ok",
+        reason=SyncReason.OK,
     )
 
 

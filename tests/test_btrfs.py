@@ -59,6 +59,7 @@ class TestCreateSnapshotLocal:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _local_config()
         from datetime import datetime, timezone
+
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
         path = create_snapshot(sync, config, now=fixed_now)
         assert path == ("/mnt/dst/backup/snapshots/2024-01-15T12:00:00.000Z")
@@ -75,6 +76,7 @@ class TestCreateSnapshotLocal:
         )
         config, sync = _local_config()
         from datetime import datetime, timezone
+
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
         with pytest.raises(RuntimeError, match="btrfs snapshot"):
             create_snapshot(sync, config, now=fixed_now)
@@ -86,6 +88,7 @@ class TestCreateSnapshotRemote:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _remote_config()
         from datetime import datetime, timezone
+
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
         path = create_snapshot(sync, config, now=fixed_now)
         assert path == ("/backup/data/snapshots/2024-01-15T12:00:00.000Z")

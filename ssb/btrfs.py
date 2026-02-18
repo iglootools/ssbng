@@ -26,10 +26,7 @@ def create_snapshot(sync: SyncConfig, config: Config, *, now=None) -> str:
         now = datetime.now(timezone.utc)
     dest_path = _resolve_dest_path(sync, config)
     # isoformat uses +00:00, but Z is more conventional for UTC.
-    timestamp = (
-        now.isoformat(timespec="milliseconds")
-        .replace("+00:00", "Z")
-    )
+    timestamp = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
     snapshot_path = f"{dest_path}/snapshots/{timestamp}"
     latest_path = f"{dest_path}/latest"
 

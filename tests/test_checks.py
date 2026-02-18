@@ -16,6 +16,8 @@ from ssb.model import (
     RemoteVolume,
     SyncConfig,
     SyncEndpoint,
+    SyncReason,
+    VolumeReason,
     VolumeStatus,
 )
 
@@ -26,13 +28,13 @@ class TestCheckLocalVolume:
         (tmp_path / ".ssb-vol").touch()
         status = check_volume(vol)
         assert status.active is True
-        assert status.reason == "ok"
+        assert status.reason == VolumeReason.OK
 
     def test_inactive(self, tmp_path: Path) -> None:
         vol = LocalVolume(name="data", path=str(tmp_path))
         status = check_volume(vol)
         assert status.active is False
-        assert "marker not found" in status.reason
+        assert status.reason == VolumeReason.MARKER_NOT_FOUND
 
 
 class TestCheckRemoteVolume:
@@ -50,7 +52,7 @@ class TestCheckRemoteVolume:
         vol = RemoteVolume(name="nas", host="nas.local", path="/backup")
         status = check_volume(vol)
         assert status.active is False
-        assert status.reason == "unreachable"
+        assert status.reason == VolumeReason.UNREACHABLE
 
 
 class TestCheckSync:
@@ -89,19 +91,19 @@ class TestCheckSync:
                 name="src",
                 config=config.volumes["src"],
                 active=True,
-                reason="ok",
+                reason=VolumeReason.OK,
             ),
             "dst": VolumeStatus(
                 name="dst",
                 config=config.volumes["dst"],
                 active=True,
-                reason="ok",
+                reason=VolumeReason.OK,
             ),
         }
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is True
-        assert status.reason == "ok"
+        assert status.reason == SyncReason.OK
 
     def test_disabled_sync(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
@@ -121,19 +123,19 @@ class TestCheckSync:
                 name="src",
                 config=config.volumes["src"],
                 active=True,
-                reason="ok",
+                reason=VolumeReason.OK,
             ),
             "dst": VolumeStatus(
                 name="dst",
                 config=config.volumes["dst"],
                 active=True,
-                reason="ok",
+                reason=VolumeReason.OK,
             ),
         }
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert status.reason == "disabled"
+        assert status.reason == SyncReason.DISABLED
 
     def test_source_unavailable(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
@@ -147,19 +149,19 @@ class TestCheckSync:
                 name="src",
                 config=config.volumes["src"],
                 active=False,
-                reason="marker not found",
+                reason=VolumeReason.MARKER_NOT_FOUND,
             ),
             "dst": VolumeStatus(
                 name="dst",
                 config=config.volumes["dst"],
                 active=True,
-                reason="ok",
+                reason=VolumeReason.OK,
             ),
         }
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert status.reason == "source unavailable"
+        assert status.reason == SyncReason.SOURCE_UNAVAILABLE
 
     def test_missing_src_marker(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
@@ -176,19 +178,19 @@ class TestCheckSync:
                 name="src",
                 config=config.volumes["src"],
                 active=True,
-                reason="ok",
+                reason=VolumeReason.OK,
             ),
             "dst": VolumeStatus(
                 name="dst",
                 config=config.volumes["dst"],
                 active=True,
-                reason="ok",
+                reason=VolumeReason.OK,
             ),
         }
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert ".ssb-src" in status.reason
+        assert status.reason == SyncReason.SOURCE_MARKER_NOT_FOUND
 
 
 class TestCheckAllSyncs:

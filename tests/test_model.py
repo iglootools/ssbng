@@ -7,8 +7,10 @@ from ssb.model import (
     RemoteVolume,
     SyncConfig,
     SyncEndpoint,
+    SyncReason,
     SyncResult,
     SyncStatus,
+    VolumeReason,
     VolumeStatus,
 )
 
@@ -21,11 +23,12 @@ class TestLocalVolume:
 
     def test_frozen(self) -> None:
         import pydantic
+
         vol = LocalVolume(name="data", path="/mnt/data")
         try:
             vol.name = "other"  # type: ignore[misc]
             assert False, "Should be frozen"
-        except (AttributeError, pydantic.ValidationError):
+        except AttributeError, pydantic.ValidationError:
             pass
 
 
@@ -55,11 +58,12 @@ class TestRemoteVolume:
 
     def test_frozen(self) -> None:
         import pydantic
+
         vol = RemoteVolume(name="nas", host="nas.local", path="/backup")
         try:
             vol.host = "other"  # type: ignore[misc]
             assert False, "Should be frozen"
-        except (AttributeError, pydantic.ValidationError):
+        except AttributeError, pydantic.ValidationError:
             pass
 
 
@@ -121,15 +125,25 @@ class TestConfig:
 class TestVolumeStatus:
     def test_construction(self) -> None:
         vol = LocalVolume(name="data", path="/mnt/data")
-        vs = VolumeStatus(name="data", config=vol, active=True, reason="ok")
+        vs = VolumeStatus(
+            name="data",
+            config=vol,
+            active=True,
+            reason=VolumeReason.OK,
+        )
         assert vs.active is True
-        assert vs.reason == "ok"
+        assert vs.reason == VolumeReason.OK
 
 
 class TestSyncStatus:
     def test_construction(self) -> None:
         vol = LocalVolume(name="data", path="/mnt/data")
-        vs = VolumeStatus(name="data", config=vol, active=True, reason="ok")
+        vs = VolumeStatus(
+            name="data",
+            config=vol,
+            active=True,
+            reason=VolumeReason.OK,
+        )
         sc = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="data"),
@@ -141,7 +155,7 @@ class TestSyncStatus:
             source_status=vs,
             destination_status=vs,
             active=True,
-            reason="ok",
+            reason=SyncReason.OK,
         )
         assert ss.active is True
 

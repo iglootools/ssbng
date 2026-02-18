@@ -14,8 +14,10 @@ from ssb.model import (
     RemoteVolume,
     SyncConfig,
     SyncEndpoint,
+    SyncReason,
     SyncResult,
     SyncStatus,
+    VolumeReason,
     VolumeStatus,
 )
 
@@ -50,13 +52,13 @@ def _sample_vol_statuses(
             name="local-data",
             config=config.volumes["local-data"],
             active=True,
-            reason="ok",
+            reason=VolumeReason.OK,
         ),
         "nas": VolumeStatus(
             name="nas",
             config=config.volumes["nas"],
             active=False,
-            reason="unreachable",
+            reason=VolumeReason.UNREACHABLE,
         ),
     }
 
@@ -72,7 +74,7 @@ def _sample_sync_statuses(
             source_status=vol_statuses["local-data"],
             destination_status=vol_statuses["nas"],
             active=False,
-            reason="destination unavailable",
+            reason=SyncReason.DESTINATION_UNAVAILABLE,
         ),
     }
 

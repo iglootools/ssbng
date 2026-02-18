@@ -10,7 +10,9 @@ from ssb.model import (
     RemoteVolume,
     SyncConfig,
     SyncEndpoint,
+    SyncReason,
     SyncStatus,
+    VolumeReason,
     VolumeStatus,
 )
 from ssb.runner import run_all_syncs
@@ -68,7 +70,12 @@ def _active_statuses(
     config: Config,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     vol_statuses = {
-        name: VolumeStatus(name=name, config=vol, active=True, reason="ok")
+        name: VolumeStatus(
+            name=name,
+            config=vol,
+            active=True,
+            reason=VolumeReason.OK,
+        )
         for name, vol in config.volumes.items()
     }
     sync_statuses = {
@@ -78,7 +85,7 @@ def _active_statuses(
             source_status=vol_statuses[sync.source.volume_name],
             destination_status=vol_statuses[sync.destination.volume_name],
             active=True,
-            reason="ok",
+            reason=SyncReason.OK,
         )
         for name, sync in config.syncs.items()
     }
@@ -93,7 +100,7 @@ def _inactive_statuses(
             name=name,
             config=vol,
             active=False,
-            reason="unreachable",
+            reason=VolumeReason.UNREACHABLE,
         )
         for name, vol in config.volumes.items()
     }
@@ -104,7 +111,7 @@ def _inactive_statuses(
             source_status=vol_statuses[sync.source.volume_name],
             destination_status=vol_statuses[sync.destination.volume_name],
             active=False,
-            reason="source unavailable",
+            reason=SyncReason.SOURCE_UNAVAILABLE,
         )
         for name, sync in config.syncs.items()
     }

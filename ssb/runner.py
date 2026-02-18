@@ -33,7 +33,7 @@ def run_all_syncs(
                     dry_run=dry_run,
                     rsync_exit_code=-1,
                     output="",
-                    error=f"Sync not active: {status.reason}",
+                    error=f"Sync not active: {status.reason.value}",
                 )
             )
             continue

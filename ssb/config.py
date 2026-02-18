@@ -54,7 +54,3 @@ def load_config(config_path: str | None = None) -> Config:
     except Exception as e:
         raise ConfigError(f"Config validation error") from e
     return config
-
-
-
-
