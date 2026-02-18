@@ -9,93 +9,6 @@ Rather than reinventing the wheel, this project leverages existing tools and lib
 - btrfs for performing incremental backups thanks to snapshotting (optional)
 - cryptsetup for encryption (optional). Not directly used by the tool yet, but can be used to create encrypted volumes for storing backups
 
-## Concepts
-
-### Backup Config
-
-Expressed in YAML. Sourced from the regular locations (e.g. `/etc/ssb/config.yaml`, `~/.config/ssb/config.yaml`, etc) and can also be provided as an argument when calling the backup tool.
-
-#### Sync
-
-A sync describes a source and destination pair with the relevant config (type of the backup, source and destination paths, server, etc). 
-Both the source and destination can be local or remote, and can be on removable drives.
-The only supported backup type for now is rsync, but other backup types will be added in the future (e.g. git, etc). 
-
-For a sync to be considered active, both the source and the destination must provide a `.ssb-src` and `.ssb-dst` file respectively.
-For remote sources/destinations, the server must be reachable for the corresponding sync to be active.
-
-This is to ensure that when using removable drives, both the source and destinations are currently mounted / available to prevent data loss 
-or backups to the wrong drives.
-
-For the rsync backup type, the source and the destination can either be a rsync local or a rsync remote volume, and can specify a subdirectory on the volume.
-
-Individual syncs can be enabled or disabled when calling the backup tool.
-
-A sync can optionally enable btrfs snapshots, which will be used to perform incremental backups. 
-This is only supported for local sources and destinations that are on btrfs volumes.
-
-The latest backup will be stored under ${destination}/latest and snapshots (if enabled and supported) will be stored under ${destination}/snapshots/${iso8601_timestamp}.
-When enabled, a new btrfs snapshot is created each time the backup completes.
-
-### Rsync Local Volume
-
-A reusable configuration for a local source or destination that can be shared between multiple syncs. 
-
-To be considered active, a local volume must have a `.ssb-vol` file in the root of the volume.
-
-### Rsync Remote Volume
-
-A reusable configuration for a remote source or destination that can be shared between multiple syncs.
-Provides the host, port, user, ssh key, and path to the remote volume.
-
-To be considered active, a remote volume must have a `.ssb-vol` file in the root of the volume, and the server must be reachable.
-
-### Example Config
-
-```yaml
-volumes:
-  # Local volume on a removable drive
-  laptop:
-    type: local
-    path: /mnt/data
-
-  # Local volume on a btrfs filesystem
-  usb-drive:
-    type: local
-    path: /mnt/usb-backup
-
-  # Remote NAS accessible via SSH
-  nas:
-    type: remote
-    host: nas.example.com
-    port: 5022                  # optional, defaults to 22
-    user: backup                # optional
-    ssh_key: ~/.ssh/nas_ed25519 # optional
-    path: /volume1/backups
-    ssh_options:                # optional
-      - StrictHostKeyChecking=no
-
-syncs:
-  # Simple local-to-remote sync
-  photos-to-nas:
-    source:
-      volume: laptop
-      subdir: photos            # optional subdirectory on the volume
-    destination:
-      volume: nas
-      subdir: photos-backup
-    enabled: true               # optional, defaults to true
-
-  # Local-to-local sync with btrfs snapshots
-  documents-to-usb:
-    source:
-      volume: laptop
-      subdir: documents
-    destination:
-      volume: usb-drive
-    btrfs_snapshots: true       # optional, defaults to false
-```
-
 ## Features
 
 ### Commands
@@ -109,96 +22,108 @@ All commands provide the following outputs:
 - Human-readable logs (default)
 - JSON
 
-
 ## Usage
 
-### CLI
+See [docs/usage.md](docs/usage.md) for detailed usage instructions for both the CLI and Python API, including examples.
 
-TODO: add CLI usage examples here.
+## Architecture
 
-#### Get help:
-```bash
-ssb --help
-```
+See [docs/architecture.md](docs/architecture.md) for a detailed overview of the architecture, design patterns, and execution flow.
 
-### Python API
+## Concepts
 
-TODO: add Python API usage examples here.
+See [docs/concepts.md](docs/concepts.md) for explanations of key concepts such as volumes, syncs, and the configuration model.
+
+## Conventions
+
+See [docs/conventions.md](docs/conventions.md) for coding conventions, testing practices, and other guidelines for contributing to the codebase.
 
 ## Development
 
 ### Setup Development Environment
 
-**Requirements:**
-- Python 3.14 or higher
+See [docs/setup-development-environment.md](docs/setup-development-environment.md) for instructions on setting up the development environment.
 
-1. Install Poetry and other tools if you haven't already:
-   ```bash
-   # Mac OS X with Homebrew:
-   brew install poetry docker
-   # TODO: add asdf instructions
+### Building and Testing
 
-   # TODO: add instructions for other platforms
-   ```
-
-2. Install dependencies:
-   ```bash
-   poetry install
-   ```
-
-3. Activate the virtual environment:
-   ```bash
-   poetry shell
-   ```
-
-### Running Tests
-
-Run unit tests (no external dependencies):
-```bash
-make test
-```
-
-Run integration tests (requires Docker):
-```bash
-make test-integration
-```
-
-Run all checks (format, lint, type-check, unit tests):
-```bash
-make check
-```
-
-### Integration Tests
-
-Integration tests exercise the real rsync/SSH/btrfs pipeline against a Docker container.
-
-**Requirements:**
-- Docker Desktop (or Docker Engine on Linux)
-
-Run integration tests:
-```bash
-make test-integration
-```
-
-Run all tests (unit + integration):
-```bash
-make test-all
-```
-
-The integration test suite automatically:
-- Generates an ephemeral SSH key pair
-- Builds and starts a Docker container with SSH, rsync, and a btrfs filesystem
-- Runs tests covering local-to-local, local-to-remote, remote-to-local syncs, btrfs snapshots, and status checks
-- Tears down the container on completion
-
-If Docker is not available, integration tests are skipped with a clear message.
+See [docs/building-and-testing.md](docs/building-and-testing.md) for instructions on how to run unit and integration tests, as well as formatting and linting checks.
 
 ## License
 
 This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
 
-
 ## TODO
-- `status`: check existence of dependencies on remote volumes (rsync, btrfs-tools, etc) and report in the status output.
+
+
+Features:
+- Support for Remote to Remote? How do handle authentication and connectivity checks for both servers? rsync filter files., other problems?
+- Git source support
+- Dry run for both run and status: display all the commands that would be executed. Do we want additional option for that?
+  - Even better? Can generate plain shell script to perform the backup to avoid any dependency on ssb?
+  - Should work with relative directory for destination, and should run on both linux and mac os X. Should include all the status checks
+  - Goals: 1. make it easy to understand what the tool is doing 2. implement custom things without having to contribute to the codebase
+  - Actually run rsync with --dry-run, and maybe pass -v automatically during dry-runs to provide more detailed output?
+- Server: ability to use private vs public ip? CLI flag? List of IPs/hostnames to check for connectivity in order?
+  `--private vs --public`
+- Make it possible (optional) to perform syncs in parallel when there are no overlapping source or destination volumes.
+
+Build & CI:
+- Rename the tool, repository, and all related files from ssbng to something else (ssb-next? ssb2? ssb-nextgen? ssb-ng? ssb?).
+- Add Github workflows
 - Figure out poetry and asdf integration for Python version management and installation instructions.
 - Makefile: is there a better way?
+  A Makefile is fine, but for a Poetry-centric Python project there are often cleaner options:
+    - poe the poet (inside Poetry)
+      Define tasks in pyproject.toml under [tool.poe.tasks]
+      Best if most commands already run via poetry run ...
+      Keeps task config in one Python-native file
+    - nox (or tox)
+      Better when you need structured test/lint matrices (Python versions, env combos)
+      More scalable than Make for CI-like orchestration
+    - just (justfile)
+      Like Make but simpler syntax and fewer Make quirks
+      Good if you want a command runner without Python test-matrix features
+    - Plain shell scripts in scripts/
+- packaging and publishing (PyPI) to use as a regular app
+- Add end to end tests with filters, and other more complex configurations.
+- Integration tests
+  - add local tests with btrfs snapshots on docker, with ssb fully installed as an app
+  - add remote to remote tests with two docker containers, with ssh server set up on one of them, and ssb?rsync fully installed as an app on both of them. Test connectivity checks, rsync backup, btrfs snapshots, etc.
+- Make it possible to install and run using tools such as pipx
+- Conventional commit changelog release system / workflow
+- Add `testcli` CLI app:
+  - set up a docker environment to manually test the generated config and outputs, and to use for development in general?
+- Dry run: actually call rsync with `--dry-run`
+- Investigate use of mise / rtx: https://mise.jdx.dev/:
+  - tools
+  - tasks
+- Investigate use of devenv
+
+Doc:
+- Use cases instead of features
+  - Provide comparison with borg and restic. Why ssb over these alternatives.
+- Testing strategy and practices in conventions
+- Architecture: use mermaid diagram, and complete architecture overview
+- Review Features, Usage, Architecture and Concepts sections
+- `poetry config virtualenvs.in-project true` => conventions?
+- Conventions: dry-run for all destructive operations
+- document btrfs subvolume setup conventions used: one per destination
+- Skills / conventions for all the tools / libraries used in the project? (pydantic, testcontainers, ...)
+- Convention: When execuuting shell commands, use command lines expressed as arg array, not strings. This is safer and more robust, as it avoids issues with shell quoting and escaping. For example, instead of `subprocess.run("rsync -avz source/ destination/")`, use `subprocess.run(["rsync", "-avz", "source/", "destination/"])`. This also allows for better error handling and debugging, as you can easily see the exact command being executed without worrying about shell interpretation.
+- Convention: assert pydantic errors in tests with `assert e.errors() == [...]` instead of just checking the error message string. This is more robust and less brittle, as it checks the actual structure and content of the validation errors rather than relying on specific wording in the error messages, which may change or be localized. For example, instead of `assert str(e) == "1 validation error for Config\nfield\n  field required (type=value_error.missing)"`, use `assert e.errors() == [{"loc": ("field",), "msg": "field required", "type": "value_error.missing"}]`. This also allows for better test coverage and clarity, as you can easily see which fields are causing validation errors and what the specific issues are.
+- 4 types of documentation. Implement full documentation website? (Nuxt content, ...). Or maybe a python-specific doc generator?
+- terminal demo: https://asciinema.org/
+
+Features - Think harder about:
+- Add support for mouting encrypted volumes using cryptsetup, and a key stored in the client OS keyring (python keyring library).
+  - investigate what `secretstorage` ( D-Bus Secret Service API) can do on Linux
+  - Problem: requires sudo permissions, so would need some sort of agent running directly on the machine, or a way to trigger mounts using a different mechanism
+  - `systemd-run --pipe --wait systemctl start systemd-cryptsetup@securedata.service`
+  - Other checks / troubleshooting instructions needed (cryptsetup, etc?)?
+
+Bugs:
+- can prune work without sudo?
+  Deleting readonly btrfs subvolumes requires either `CAP_SYS_ADMIN` or the `user_subvol_rm_allowed` mount option.
+  The integration test Docker setup uses `mount -o user_subvol_rm_allowed` to allow the unprivileged testuser to delete snapshots.
+  For production use, the btrfs volume should be mounted with `user_subvol_rm_allowed` or the user should have `CAP_SYS_ADMIN`.
+  https://unix.stackexchange.com/questions/88932/why-cant-a-regular-user-delete-a-btrfs-subvolume
