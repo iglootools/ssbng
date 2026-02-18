@@ -17,16 +17,17 @@ def _resolve_dest_path(sync: SyncConfig, config: Config) -> str:
     return vol.path
 
 
-def create_snapshot(sync: SyncConfig, config: Config) -> str:
+def create_snapshot(sync: SyncConfig, config: Config, *, now=None) -> str:
     """Create a read-only btrfs snapshot of latest/ into snapshots/.
 
     Returns the snapshot path.
     """
+    if now is None:
+        now = datetime.now(timezone.utc)
     dest_path = _resolve_dest_path(sync, config)
     # isoformat uses +00:00, but Z is more conventional for UTC.
     timestamp = (
-        datetime.now(timezone.utc)
-        .isoformat(timespec="milliseconds")
+        now.isoformat(timespec="milliseconds")
         .replace("+00:00", "Z")
     )
     snapshot_path = f"{dest_path}/snapshots/{timestamp}"
