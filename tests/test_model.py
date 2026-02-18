@@ -20,11 +20,12 @@ class TestLocalVolume:
         assert vol.path == "/mnt/data"
 
     def test_frozen(self) -> None:
+        import pydantic
         vol = LocalVolume(name="data", path="/mnt/data")
         try:
             vol.name = "other"  # type: ignore[misc]
             assert False, "Should be frozen"
-        except AttributeError:
+        except (AttributeError, pydantic.ValidationError):
             pass
 
 
@@ -53,11 +54,12 @@ class TestRemoteVolume:
         assert vol.ssh_key == "~/.ssh/id_rsa"
 
     def test_frozen(self) -> None:
+        import pydantic
         vol = RemoteVolume(name="nas", host="nas.local", path="/backup")
         try:
             vol.host = "other"  # type: ignore[misc]
             assert False, "Should be frozen"
-        except AttributeError:
+        except (AttributeError, pydantic.ValidationError):
             pass
 
 

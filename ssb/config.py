@@ -8,14 +8,7 @@ from typing import Any
 
 import yaml
 
-from .model import (
-    Config,
-    LocalVolume,
-    RemoteVolume,
-    SyncConfig,
-    SyncEndpoint,
-    Volume,
-)
+from .model import Config
 
 
 class ConfigError(Exception):
@@ -56,105 +49,12 @@ def load_config(config_path: str | None = None) -> Config:
     if not isinstance(raw, dict):
         raise ConfigError("Config file must be a YAML mapping")
 
-    volumes = _parse_volumes(raw.get("volumes", {}))
-    syncs = _parse_syncs(raw.get("syncs", {}))
-
-    config = Config(volumes=volumes, syncs=syncs)
-    _validate(config)
+    try:
+        config = Config.model_validate(raw)
+    except Exception as e:
+        raise ConfigError(f"Config validation error: {e}")
     return config
 
 
-def _parse_volumes(
-    raw_volumes: Any,
-) -> dict[str, Volume]:
-    """Parse the volumes section of the config."""
-    if not isinstance(raw_volumes, dict):
-        raise ConfigError("'volumes' must be a mapping")
-
-    volumes: dict[str, Volume] = {}
-    for name, data in raw_volumes.items():
-        if not isinstance(data, dict):
-            raise ConfigError(f"Volume '{name}' must be a mapping")
-
-        vol_type = data.get("type")
-        if vol_type == "local":
-            path = data.get("path")
-            if not path:
-                raise ConfigError(f"Local volume '{name}' requires 'path'")
-            volumes[name] = LocalVolume(name=name, path=path)
-        elif vol_type == "remote":
-            host = data.get("host")
-            path = data.get("path")
-            if not host or not path:
-                raise ConfigError(
-                    f"Remote volume '{name}' requires 'host' and 'path'"
-                )
-            volumes[name] = RemoteVolume(
-                name=name,
-                host=host,
-                path=path,
-                port=data.get("port", 22),
-                user=data.get("user"),
-                ssh_key=data.get("ssh_key"),
-                ssh_options=data.get("ssh_options", []),
-            )
-        else:
-            raise ConfigError(f"Volume '{name}' has invalid type: {vol_type}")
-
-    return volumes
 
 
-def _parse_syncs(raw_syncs: Any) -> dict[str, SyncConfig]:
-    """Parse the syncs section of the config."""
-    if not isinstance(raw_syncs, dict):
-        raise ConfigError("'syncs' must be a mapping")
-
-    syncs: dict[str, SyncConfig] = {}
-    for name, data in raw_syncs.items():
-        if not isinstance(data, dict):
-            raise ConfigError(f"Sync '{name}' must be a mapping")
-
-        source_data = data.get("source")
-        dest_data = data.get("destination")
-        if not isinstance(source_data, dict):
-            raise ConfigError(f"Sync '{name}' requires 'source' mapping")
-        if not isinstance(dest_data, dict):
-            raise ConfigError(f"Sync '{name}' requires 'destination' mapping")
-
-        source_vol = source_data.get("volume")
-        if not source_vol:
-            raise ConfigError(f"Sync '{name}' source requires 'volume'")
-        dest_vol = dest_data.get("volume")
-        if not dest_vol:
-            raise ConfigError(f"Sync '{name}' destination requires 'volume'")
-
-        syncs[name] = SyncConfig(
-            name=name,
-            source=SyncEndpoint(
-                volume_name=source_vol,
-                subdir=source_data.get("subdir"),
-            ),
-            destination=SyncEndpoint(
-                volume_name=dest_vol,
-                subdir=dest_data.get("subdir"),
-            ),
-            enabled=data.get("enabled", True),
-            btrfs_snapshots=data.get("btrfs_snapshots", False),
-        )
-
-    return syncs
-
-
-def _validate(config: Config) -> None:
-    """Validate cross-references in the config."""
-    for sync_name, sync in config.syncs.items():
-        if sync.source.volume_name not in config.volumes:
-            raise ConfigError(
-                f"Sync '{sync_name}' references unknown source "
-                f"volume '{sync.source.volume_name}'"
-            )
-        if sync.destination.volume_name not in config.volumes:
-            raise ConfigError(
-                f"Sync '{sync_name}' references unknown destination "
-                f"volume '{sync.destination.volume_name}'"
-            )

@@ -72,8 +72,8 @@ def status(
 
     if fmt == OutputFormat.JSON:
         data = {
-            "volumes": [dataclasses.asdict(v) for v in vol_statuses.values()],
-            "syncs": [dataclasses.asdict(s) for s in sync_statuses.values()],
+            "volumes": [v.model_dump() for v in vol_statuses.values()],
+            "syncs": [s.model_dump() for s in sync_statuses.values()],
         }
         typer.echo(json.dumps(data, indent=2))
         return
@@ -144,7 +144,7 @@ def run(
     fmt = OutputFormat(output)
 
     if fmt == OutputFormat.JSON:
-        data = [dataclasses.asdict(r) for r in results]
+        data = [r.model_dump() for r in results]
         typer.echo(json.dumps(data, indent=2))
     else:
         _print_human_results(results, dry_run)
