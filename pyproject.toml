@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Simple Safe Backup - A secure backup solution"
 authors = [{name = "Sami Dalouche", email = "sami.dalouche@gmail.com"}]
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
     "typer (>=0.24.0,<1.0.0)",
     "pyyaml (>=6.0,<7.0)",
@@ -41,3 +41,6 @@ python_version = "3.14"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+
+[virtualenvs]
+in-project = true
