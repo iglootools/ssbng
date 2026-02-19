@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import enum
 
-import typer
+from rich import box
+from rich.console import Console
+from rich.table import Table
+from rich.text import Text
 
 from .config import Config, LocalVolume, RemoteVolume
 from .runner import SyncResult
-from .status import SyncStatus, VolumeStatus
+from .status import SyncReason, SyncStatus, VolumeReason, VolumeStatus
 
 
 class OutputFormat(str, enum.Enum):
@@ -18,6 +21,17 @@ class OutputFormat(str, enum.Enum):
     JSON = "json"
 
 
+def _status_text(
+    active: bool,
+    reasons: list[VolumeReason] | list[SyncReason],
+) -> Text:
+    """Format status with optional reasons as styled text."""
+    if active:
+        return Text("active", style="green")
+    reason_str = ", ".join(r.value for r in reasons)
+    return Text(f"inactive ({reason_str})", style="red")
+
+
 def format_volume_display(
     vol: LocalVolume | RemoteVolume, config: Config
 ) -> str:
@@ -25,14 +39,13 @@ def format_volume_display(
     match vol:
         case RemoteVolume():
             server = config.rsync_servers[vol.rsync_server]
-            parts = []
             if server.user:
-                parts.append(f"{server.user}@{server.host}")
+                host_part = f"{server.user}@{server.host}"
             else:
-                parts.append(server.host)
+                host_part = server.host
             if server.port != 22:
-                parts[-1] += f":{server.port}"
-            return " ".join(parts)
+                host_part += f":{server.port}"
+            return f"{host_part}:{vol.path}"
         case LocalVolume():
             return vol.path
 
@@ -43,7 +56,16 @@ def print_human_status(
     config: Config,
 ) -> None:
     """Print human-readable status output."""
-    typer.echo("Volumes:")
+    console = Console()
+
+    vol_table = Table(
+        title="Volumes:",
+    )
+    vol_table.add_column("Name", style="bold")
+    vol_table.add_column("Type")
+    vol_table.add_column("Location")
+    vol_table.add_column("Status")
+
     for vs in vol_statuses.values():
         vol = vs.config
         match vol:
@@ -51,46 +73,66 @@ def print_human_status(
                 vol_type = "remote"
             case LocalVolume():
                 vol_type = "local"
-        display = format_volume_display(vol, config)
-        status_str = "active" if vs.active else "inactive"
-        reason = (
-            "" if vs.active else f" ({', '.join(r.value for r in vs.reasons)})"
-        )
-        typer.echo(
-            f"  {vs.name:<18s}{vol_type:<10s}{display:<24s}"
-            f"{status_str}{reason}"
+        vol_table.add_row(
+            vs.name,
+            vol_type,
+            format_volume_display(vol, config),
+            _status_text(vs.active, vs.reasons),
         )
 
-    typer.echo("")
-    typer.echo("Syncs:")
+    console.print(vol_table)
+    console.print()
+
+    sync_table = Table(
+        title="Syncs:",
+    )
+    sync_table.add_column("Name", style="bold")
+    sync_table.add_column("Source")
+    sync_table.add_column("Destination")
+    sync_table.add_column("Status")
+
     for ss in sync_statuses.values():
-        src = ss.config.source.volume
-        dst = ss.config.destination.volume
-        arrow = f"{src} -> {dst}"
-        status_str = "active" if ss.active else "inactive"
-        reason = (
-            "" if ss.active else f" ({', '.join(r.value for r in ss.reasons)})"
+        sync_table.add_row(
+            ss.name,
+            ss.config.source.volume,
+            ss.config.destination.volume,
+            _status_text(ss.active, ss.reasons),
         )
-        typer.echo(f"  {ss.name:<18s}{arrow:<30s}{status_str}{reason}")
+
+    console.print(sync_table)
 
 
 def print_human_results(results: list[SyncResult], dry_run: bool) -> None:
     """Print human-readable run results."""
+    console = Console()
     mode = " (dry run)" if dry_run else ""
-    typer.echo(f"SSB run{mode}:")
-    typer.echo("")
+
+    table = Table(
+        title=f"SSB run{mode}:",
+    )
+    table.add_column("Name", style="bold")
+    table.add_column("Status")
+    table.add_column("Details")
 
     for r in results:
         if r.success:
-            status = "OK"
+            status = Text("OK", style="green")
         else:
-            status = "FAILED"
+            status = Text("FAILED", style="red")
 
-        typer.echo(f"  {r.sync_name}: {status}")
+        details_parts: list[str] = []
         if r.error:
-            typer.echo(f"    Error: {r.error}")
+            details_parts.append(f"Error: {r.error}")
         if r.snapshot_path:
-            typer.echo(f"    Snapshot: {r.snapshot_path}")
+            details_parts.append(f"Snapshot: {r.snapshot_path}")
         if r.output and not r.success:
-            for line in r.output.strip().split("\n")[:5]:
-                typer.echo(f"    {line}")
+            lines = r.output.strip().split("\n")[:5]
+            details_parts.extend(lines)
+
+        table.add_row(
+            r.sync_name,
+            status,
+            "\n".join(details_parts),
+        )
+
+    console.print(table)
