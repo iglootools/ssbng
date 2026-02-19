@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 import tempfile
@@ -14,7 +13,7 @@ import pytest
 
 from ssb.config import RemoteVolume, RsyncServer
 
-DOCKER_COMPOSE_DIR = Path(__file__).parent / "docker"
+DOCKER_DIR = Path(__file__).parent / "docker"
 
 
 def _docker_available() -> bool:
@@ -73,68 +72,50 @@ def docker_container(
 
     Yields a dict with keys: host, port, user, private_key.
     """
+    from testcontainers.core.container import DockerContainer
+    from testcontainers.core.image import DockerImage
+    from testcontainers.core.wait_strategies import (
+        LogMessageWaitStrategy,
+    )
+
     private_key, public_key = ssh_key_pair
 
-    env = {
-        **os.environ,
-        "SSB_TEST_SSH_PUBKEY": str(public_key),
-    }
-
-    # Build and start the container
-    subprocess.run(
-        [
-            "docker",
-            "compose",
-            "up",
-            "-d",
-            "--build",
-            "--wait",
-        ],
-        cwd=str(DOCKER_COMPOSE_DIR),
-        env=env,
-        capture_output=True,
-        check=True,
-        timeout=120,
+    image = DockerImage(
+        path=str(DOCKER_DIR),
+        tag="ssb-test-server:latest",
     )
+    image.build()
 
-    # Get the dynamically assigned port
-    result = subprocess.run(
-        [
-            "docker",
-            "compose",
-            "port",
-            "ssb-test-server",
-            "22",
-        ],
-        cwd=str(DOCKER_COMPOSE_DIR),
-        env=env,
-        capture_output=True,
-        text=True,
-        check=True,
+    wait_strategy = LogMessageWaitStrategy(
+        "Server listening",
+    ).with_startup_timeout(30)
+
+    container = (
+        DockerContainer(str(image))
+        .with_exposed_ports(22)
+        .with_volume_mapping(
+            str(public_key),
+            "/tmp/authorized_keys",
+            "ro",
+        )
+        .with_kwargs(privileged=True)
+        .waiting_for(wait_strategy)
     )
-    # Output is like "0.0.0.0:55123"
-    port = int(result.stdout.strip().split(":")[-1])
+    container.start()
 
+    port = int(container.get_exposed_port(22))
     info: dict[str, Any] = {
-        "host": "127.0.0.1",
+        "host": container.get_container_host_ip(),
         "port": port,
         "user": "testuser",
         "private_key": str(private_key),
     }
 
-    # Wait for SSH to be ready
     _wait_for_ssh(info, timeout=30)
-
     yield info
 
-    # Teardown
-    subprocess.run(
-        ["docker", "compose", "down", "-v"],
-        cwd=str(DOCKER_COMPOSE_DIR),
-        env=env,
-        capture_output=True,
-        timeout=30,
-    )
+    container.stop()
+    image.remove()
 
 
 def _wait_for_ssh(info: dict[str, Any], timeout: int = 30) -> None:

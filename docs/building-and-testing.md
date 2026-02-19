@@ -25,7 +25,7 @@ poetry run mypy ssb/ tests/                                             # type-c
 poetry run pytest tests/test_ssh.py::TestBuildSshBaseArgs::test_full -v # run a single test
 ```
 
-The integration test suite automatically:
+The integration test suite uses [testcontainers](https://testcontainers-python.readthedocs.io/) and automatically:
 - Generates an ephemeral SSH key pair
 - Builds and starts a Docker container with SSH, rsync, and a btrfs filesystem
 - Runs tests covering local-to-local, local-to-remote, remote-to-local syncs, btrfs snapshots, and status checks

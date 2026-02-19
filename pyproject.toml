@@ -23,6 +23,7 @@ black = "^26.0.0"
 flake8 = "^7.0.0"
 mypy = "^1.9.0"
 types-pyyaml = "^6.0"
+testcontainers = "^4.0.0"
 
 [build-system]
 requires = ["poetry-core"]
