@@ -23,6 +23,9 @@ class SyncReason(str, enum.Enum):
     DESTINATION_UNAVAILABLE = "destination unavailable"
     SOURCE_MARKER_NOT_FOUND = "source marker .ssb-src not found"
     DESTINATION_MARKER_NOT_FOUND = "destination marker .ssb-dst not found"
+    RSYNC_NOT_FOUND_ON_SOURCE = "rsync not found on source"
+    RSYNC_NOT_FOUND_ON_DESTINATION = "rsync not found on destination"
+    BTRFS_NOT_FOUND_ON_DESTINATION = "btrfs not found on destination"
 
 
 class VolumeStatus(BaseModel):

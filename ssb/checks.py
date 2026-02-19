@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from .config import (
@@ -85,6 +86,16 @@ def _check_endpoint_marker(
             return result.returncode == 0
 
 
+def _check_command_available(volume: Volume, command: str) -> bool:
+    """Check if a command is available on the volume's host."""
+    match volume:
+        case LocalVolume():
+            return shutil.which(command) is not None
+        case RemoteVolume():
+            result = run_remote_command(volume, f"which {command}")
+            return result.returncode == 0
+
+
 def check_sync(
     sync: SyncConfig,
     config: Config,
@@ -150,6 +161,36 @@ def check_sync(
             destination_status=dst_status,
             active=False,
             reason=SyncReason.DESTINATION_MARKER_NOT_FOUND,
+        )
+
+    if not _check_command_available(src_vol, "rsync"):
+        return SyncStatus(
+            name=sync.name,
+            config=sync,
+            source_status=src_status,
+            destination_status=dst_status,
+            active=False,
+            reason=SyncReason.RSYNC_NOT_FOUND_ON_SOURCE,
+        )
+
+    if not _check_command_available(dst_vol, "rsync"):
+        return SyncStatus(
+            name=sync.name,
+            config=sync,
+            source_status=src_status,
+            destination_status=dst_status,
+            active=False,
+            reason=SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION,
+        )
+
+    if sync.btrfs_snapshots and not _check_command_available(dst_vol, "btrfs"):
+        return SyncStatus(
+            name=sync.name,
+            config=sync,
+            source_status=src_status,
+            destination_status=dst_status,
+            active=False,
+            reason=SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION,
         )
 
     return SyncStatus(
