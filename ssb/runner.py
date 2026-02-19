@@ -5,7 +5,7 @@ from __future__ import annotations
 from .btrfs import create_snapshot, get_latest_snapshot
 from .checks import check_all_syncs
 from .config import Config
-from .model import SyncResult, SyncStatus
+from .status import SyncResult, SyncStatus
 from .rsync import run_rsync
 
 

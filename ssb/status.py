@@ -1,3 +1,5 @@
+"""Runtime status types for volumes and syncs."""
+
 from __future__ import annotations
 
 import enum
@@ -53,10 +55,3 @@ class SyncResult(BaseModel):
     output: str
     snapshot_path: Optional[str] = None
     error: Optional[str] = None
-
-
-class OutputFormat(str, enum.Enum):
-    """Output format for CLI commands."""
-
-    HUMAN = "human"
-    JSON = "json"

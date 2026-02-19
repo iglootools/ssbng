@@ -11,7 +11,7 @@ from .config import (
     SyncConfig,
     Volume,
 )
-from .model import (
+from .status import (
     SyncReason,
     SyncStatus,
     VolumeReason,

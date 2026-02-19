@@ -1,4 +1,4 @@
-"""Tests for ssb.model."""
+"""Tests for ssb.status and ssb.output."""
 
 from ssb.config import (
     Config,
@@ -7,8 +7,8 @@ from ssb.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ssb.model import (
-    OutputFormat,
+from ssb.output import OutputFormat
+from ssb.status import (
     SyncReason,
     SyncResult,
     SyncStatus,

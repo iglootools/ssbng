@@ -11,7 +11,7 @@ from ssb.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ssb.model import (
+from ssb.status import (
     SyncReason,
     SyncStatus,
     VolumeReason,

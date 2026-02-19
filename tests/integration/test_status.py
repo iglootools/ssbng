@@ -15,7 +15,7 @@ from ssb.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ssb.model import SyncReason
+from ssb.status import SyncReason
 
 from .conftest import create_markers
 
