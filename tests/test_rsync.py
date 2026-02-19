@@ -35,6 +35,8 @@ class TestBuildRsyncCommandLocalToLocal:
             "rsync",
             "-av",
             "--delete",
+            "--delete-excluded",
+            "--safe-links",
             "/mnt/src/photos/",
             "/mnt/dst/backup/latest/",
         ]
@@ -107,6 +109,8 @@ class TestBuildRsyncCommandLocalToRemote:
             "rsync",
             "-av",
             "--delete",
+            "--delete-excluded",
+            "--safe-links",
             "-e",
             "ssh -p 5022 -i ~/.ssh/key",
             "/mnt/src/photos/",
@@ -143,6 +147,8 @@ class TestBuildRsyncCommandRemoteToLocal:
             "rsync",
             "-av",
             "--delete",
+            "--delete-excluded",
+            "--safe-links",
             "-e",
             "ssh",
             "admin@server.local:/data/",
@@ -196,7 +202,7 @@ class TestBuildRsyncCommandRemoteToRemote:
 
         # Inner command should be the last arg
         inner = cmd[-1]
-        assert "rsync -av --delete" in inner
+        assert "rsync -av --delete --delete-excluded --safe-links" in inner
         assert "-e 'ssh -p 2222'" in inner
         assert "srcuser@src.local:/data/photos/" in inner
         assert "/backup/photos/latest/" in inner
@@ -253,6 +259,8 @@ class TestBuildRsyncCommandFilters:
             "rsync",
             "-av",
             "--delete",
+            "--delete-excluded",
+            "--safe-links",
             "--filter=+ *.jpg",
             "--filter=- *.tmp",
             "/mnt/src/",
@@ -278,6 +286,8 @@ class TestBuildRsyncCommandFilters:
             "rsync",
             "-av",
             "--delete",
+            "--delete-excluded",
+            "--safe-links",
             "--filter=merge /etc/ssb/filters.rules",
             "/mnt/src/",
             "/mnt/dst/latest/",
@@ -303,6 +313,8 @@ class TestBuildRsyncCommandFilters:
             "rsync",
             "-av",
             "--delete",
+            "--delete-excluded",
+            "--safe-links",
             "--filter=+ *.jpg",
             "--filter=merge /etc/ssb/filters.rules",
             "/mnt/src/",
@@ -359,6 +371,150 @@ class TestBuildRsyncCommandFilters:
 
         cmd = build_rsync_command(sync, config)
         assert not any("--filter" in arg for arg in cmd)
+
+
+class TestBuildRsyncCommandOptions:
+    def test_override_rsync_options(self) -> None:
+        src = LocalVolume(name="src", path="/mnt/src")
+        dst = LocalVolume(name="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+            rsync_options=["-a"],
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        assert cmd == [
+            "rsync",
+            "-a",
+            "/mnt/src/",
+            "/mnt/dst/latest/",
+        ]
+
+    def test_extra_rsync_options(self) -> None:
+        src = LocalVolume(name="src", path="/mnt/src")
+        dst = LocalVolume(name="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+            extra_rsync_options=["--compress"],
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        assert cmd == [
+            "rsync",
+            "-av",
+            "--delete",
+            "--delete-excluded",
+            "--safe-links",
+            "--compress",
+            "/mnt/src/",
+            "/mnt/dst/latest/",
+        ]
+
+    def test_override_and_extra(self) -> None:
+        src = LocalVolume(name="src", path="/mnt/src")
+        dst = LocalVolume(name="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+            rsync_options=["-a", "--delete"],
+            extra_rsync_options=["--compress"],
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        assert cmd == [
+            "rsync",
+            "-a",
+            "--delete",
+            "--compress",
+            "/mnt/src/",
+            "/mnt/dst/latest/",
+        ]
+
+    def test_remote_to_remote_override(self) -> None:
+        src_server = RsyncServer(name="src-server", host="src.local")
+        dst_server = RsyncServer(name="dst-server", host="dst.local")
+        src = RemoteVolume(
+            name="src",
+            rsync_server="src-server",
+            path="/data",
+        )
+        dst = RemoteVolume(
+            name="dst",
+            rsync_server="dst-server",
+            path="/backup",
+        )
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+            rsync_options=["-a"],
+        )
+        config = Config(
+            rsync_servers={
+                "src-server": src_server,
+                "dst-server": dst_server,
+            },
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        inner = cmd[-1]
+        assert inner.startswith("rsync -a ")
+        assert "--delete" not in inner
+
+    def test_remote_to_remote_extra(self) -> None:
+        src_server = RsyncServer(name="src-server", host="src.local")
+        dst_server = RsyncServer(name="dst-server", host="dst.local")
+        src = RemoteVolume(
+            name="src",
+            rsync_server="src-server",
+            path="/data",
+        )
+        dst = RemoteVolume(
+            name="dst",
+            rsync_server="dst-server",
+            path="/backup",
+        )
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+            extra_rsync_options=["--compress"],
+        )
+        config = Config(
+            rsync_servers={
+                "src-server": src_server,
+                "dst-server": dst_server,
+            },
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        inner = cmd[-1]
+        assert "--compress" in inner
+        assert (
+            "rsync -av --delete --delete-excluded --safe-links"
+            " --compress" in inner
+        )
 
 
 class TestRunRsync:

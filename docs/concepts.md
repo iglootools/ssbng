@@ -44,6 +44,32 @@ References an rsync server by name and provides the path to the remote volume.
 
 To be considered active, a remote volume must have a `.ssb-vol` file in the root of the volume, and the server must be reachable.
 
+### Rsync Options
+
+By default, every sync uses the following rsync flags: `-av --delete --delete-excluded --safe-links`. Two optional fields let you customise the flags per sync:
+
+**`rsync-options`** — replaces the default flags entirely:
+
+```yaml
+syncs:
+  my-sync:
+    rsync-options:
+      - "-a"
+      - "--delete"
+```
+
+**`extra-rsync-options`** — appends additional flags after the defaults (or after `rsync-options` when both are set):
+
+```yaml
+syncs:
+  my-sync:
+    extra-rsync-options:
+      - "--compress"
+      - "--progress"
+```
+
+When neither field is set, the defaults are used unchanged.
+
 ### Filters
 
 A sync can optionally define rsync filters to control which files are included or excluded during the backup. There are three complementary mechanisms:
@@ -134,4 +160,16 @@ syncs:
     destination:
       volume: usb-drive
       btrfs-snapshots: true     # optional, defaults to false
+
+  # Sync with custom rsync options
+  music-to-nas:
+    source:
+      volume: laptop
+      subdir: music
+    destination:
+      volume: nas-backups
+      subdir: music-backup
+    extra-rsync-options:        # optional, appended to defaults
+      - "--compress"
+      - "--progress"
 ```

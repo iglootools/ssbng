@@ -17,6 +17,13 @@ from .ssh import (
     format_remote_path,
 )
 
+DEFAULT_RSYNC_OPTIONS: list[str] = [
+    "-av",
+    "--delete",
+    "--delete-excluded",
+    "--safe-links",
+]
+
 
 def _resolve_path(
     volume: LocalVolume | RemoteVolume, subdir: str | None
@@ -27,9 +34,16 @@ def _resolve_path(
     return volume.path
 
 
-def _base_rsync_args(dry_run: bool, link_dest: str | None) -> list[str]:
+def _base_rsync_args(
+    sync: SyncConfig, dry_run: bool, link_dest: str | None
+) -> list[str]:
     """Build common rsync flags."""
-    args = ["rsync", "-av", "--delete"]
+    options = (
+        sync.rsync_options
+        if sync.rsync_options is not None
+        else DEFAULT_RSYNC_OPTIONS
+    )
+    args = ["rsync"] + list(options) + list(sync.extra_rsync_options)
     if dry_run:
         args.append("--dry-run")
     if link_dest:
@@ -89,7 +103,7 @@ def build_rsync_command(
             )
         case (RemoteVolume() as sv, LocalVolume()):
             src_server = config.rsync_servers[sv.rsync_server]
-            rsync_args = _base_rsync_args(dry_run, link_dest)
+            rsync_args = _base_rsync_args(sync, dry_run, link_dest)
             rsync_args.extend(_filter_args(sync))
             rsync_args.extend(build_ssh_e_option(src_server))
             rsync_args.append(format_remote_path(src_server, src_path) + "/")
@@ -97,7 +111,7 @@ def build_rsync_command(
             return rsync_args
         case (LocalVolume(), RemoteVolume() as dv):
             dst_server = config.rsync_servers[dv.rsync_server]
-            rsync_args = _base_rsync_args(dry_run, link_dest)
+            rsync_args = _base_rsync_args(sync, dry_run, link_dest)
             rsync_args.extend(_filter_args(sync))
             rsync_args.extend(build_ssh_e_option(dst_server))
             rsync_args.append(f"{src_path}/")
@@ -106,7 +120,7 @@ def build_rsync_command(
             )
             return rsync_args
         case _:
-            rsync_args = _base_rsync_args(dry_run, link_dest)
+            rsync_args = _base_rsync_args(sync, dry_run, link_dest)
             rsync_args.extend(_filter_args(sync))
             rsync_args.append(f"{src_path}/")
             rsync_args.append(f"{dst_path}/latest/")
@@ -123,7 +137,14 @@ def _build_remote_to_remote(
     link_dest: str | None,
 ) -> list[str]:
     """Build remote-to-remote rsync command (SSH into dest, rsync from src)."""
-    inner_rsync_parts = ["rsync", "-av", "--delete", "--delete-excluded", "--safe-links"]
+    options = (
+        sync.rsync_options
+        if sync.rsync_options is not None
+        else DEFAULT_RSYNC_OPTIONS
+    )
+    inner_rsync_parts = (
+        ["rsync"] + list(options) + list(sync.extra_rsync_options)
+    )
     if dry_run:
         inner_rsync_parts.append("--dry-run")
     if link_dest:

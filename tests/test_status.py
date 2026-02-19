@@ -106,6 +106,8 @@ class TestSyncConfig:
         assert sc.name == "sync1"
         assert sc.enabled is True
         assert sc.destination.btrfs_snapshots is False
+        assert sc.rsync_options is None
+        assert sc.extra_rsync_options == []
         assert sc.filters == []
         assert sc.filter_file is None
 
@@ -119,11 +121,15 @@ class TestSyncConfig:
                 btrfs_snapshots=True,
             ),
             enabled=False,
+            rsync_options=["-a", "--delete"],
+            extra_rsync_options=["--compress"],
             filters=["+ *.jpg", "- *.tmp"],
             filter_file="/etc/ssb/filters.rules",
         )
         assert sc.enabled is False
         assert sc.destination.btrfs_snapshots is True
+        assert sc.rsync_options == ["-a", "--delete"]
+        assert sc.extra_rsync_options == ["--compress"]
         assert sc.filters == ["+ *.jpg", "- *.tmp"]
         assert sc.filter_file == "/etc/ssb/filters.rules"
 

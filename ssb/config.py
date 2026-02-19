@@ -75,6 +75,8 @@ class SyncConfig(_BaseModel):
     source: SyncEndpoint
     destination: DestinationSyncEndpoint
     enabled: bool = True
+    rsync_options: Optional[List[str]] = None
+    extra_rsync_options: List[str] = Field(default_factory=list)
     filters: List[str] = Field(default_factory=list)
     filter_file: Optional[str] = None
 

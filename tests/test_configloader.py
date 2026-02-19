@@ -64,6 +64,8 @@ class TestLoadConfig:
         assert sync.destination.subdir == "photos-backup"
         assert sync.enabled is True
         assert sync.destination.btrfs_snapshots is False
+        assert sync.rsync_options is None
+        assert sync.extra_rsync_options == []
         assert sync.filters == ["+ *.jpg", "- *.tmp"]
         assert sync.filter_file == "~/.config/ssb/filters/photos.rules"
 
@@ -73,6 +75,8 @@ class TestLoadConfig:
         assert sync.enabled is True
         assert sync.destination.btrfs_snapshots is False
         assert sync.source.subdir is None
+        assert sync.rsync_options is None
+        assert sync.extra_rsync_options == []
         assert sync.filters == []
         assert sync.filter_file is None
 
@@ -206,6 +210,42 @@ class TestLoadConfig:
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
         assert sync.filters == ["+ *.jpg", "- *.tmp", "H .git"]
+
+    def test_rsync_options_override(self, tmp_path: Path) -> None:
+        p = tmp_path / "opts.yaml"
+        p.write_text(
+            "volumes:\n"
+            "  v:\n    type: local\n    path: /x\n"
+            "syncs:\n"
+            "  s:\n"
+            "    source:\n      volume: v\n"
+            "    destination:\n      volume: v\n"
+            "    rsync-options:\n"
+            '      - "-a"\n'
+            '      - "--delete"\n'
+        )
+        cfg = load_config(str(p))
+        sync = cfg.syncs["s"]
+        assert sync.rsync_options == ["-a", "--delete"]
+        assert sync.extra_rsync_options == []
+
+    def test_extra_rsync_options(self, tmp_path: Path) -> None:
+        p = tmp_path / "extra.yaml"
+        p.write_text(
+            "volumes:\n"
+            "  v:\n    type: local\n    path: /x\n"
+            "syncs:\n"
+            "  s:\n"
+            "    source:\n      volume: v\n"
+            "    destination:\n      volume: v\n"
+            "    extra-rsync-options:\n"
+            '      - "--compress"\n'
+            '      - "--progress"\n'
+        )
+        cfg = load_config(str(p))
+        sync = cfg.syncs["s"]
+        assert sync.rsync_options is None
+        assert sync.extra_rsync_options == ["--compress", "--progress"]
 
     def test_invalid_filter_entry(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_filter.yaml"
