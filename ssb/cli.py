@@ -50,17 +50,15 @@ def status(
     assert isinstance(cfg, Config)
     vol_statuses, sync_statuses = check_all_syncs(cfg)
 
-    fmt = OutputFormat(output)
-
-    if fmt == OutputFormat.JSON:
-        data = {
-            "volumes": [v.model_dump() for v in vol_statuses.values()],
-            "syncs": [s.model_dump() for s in sync_statuses.values()],
-        }
-        typer.echo(json.dumps(data, indent=2))
-        return
-
-    print_human_status(vol_statuses, sync_statuses)
+    match OutputFormat(output):
+        case OutputFormat.JSON:
+            data = {
+                "volumes": [v.model_dump() for v in vol_statuses.values()],
+                "syncs": [s.model_dump() for s in sync_statuses.values()],
+            }
+            typer.echo(json.dumps(data, indent=2))
+        case OutputFormat.HUMAN:
+            print_human_status(vol_statuses, sync_statuses)
 
 
 @app.command()
@@ -92,13 +90,12 @@ def run(
         cfg, dry_run=dry_run, sync_names=sync
     )
 
-    fmt = OutputFormat(output)
-
-    if fmt == OutputFormat.JSON:
-        data = [r.model_dump() for r in results]
-        typer.echo(json.dumps(data, indent=2))
-    else:
-        print_human_results(results, dry_run)
+    match OutputFormat(output):
+        case OutputFormat.JSON:
+            data = [r.model_dump() for r in results]
+            typer.echo(json.dumps(data, indent=2))
+        case OutputFormat.HUMAN:
+            print_human_results(results, dry_run)
 
     if any(not r.success for r in results):
         raise typer.Exit(1)

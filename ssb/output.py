@@ -19,16 +19,18 @@ class OutputFormat(str, enum.Enum):
 
 def format_volume_display(vol: LocalVolume | RemoteVolume) -> str:
     """Format a volume for human display."""
-    if isinstance(vol, RemoteVolume):
-        parts = []
-        if vol.user:
-            parts.append(f"{vol.user}@{vol.host}")
-        else:
-            parts.append(vol.host)
-        if vol.port != 22:
-            parts[-1] += f":{vol.port}"
-        return " ".join(parts)
-    return vol.path
+    match vol:
+        case RemoteVolume():
+            parts = []
+            if vol.user:
+                parts.append(f"{vol.user}@{vol.host}")
+            else:
+                parts.append(vol.host)
+            if vol.port != 22:
+                parts[-1] += f":{vol.port}"
+            return " ".join(parts)
+        case LocalVolume():
+            return vol.path
 
 
 def print_human_status(
@@ -39,10 +41,11 @@ def print_human_status(
     typer.echo("Volumes:")
     for vs in vol_statuses.values():
         vol = vs.config
-        if isinstance(vol, RemoteVolume):
-            vol_type = "remote"
-        else:
-            vol_type = "local"
+        match vol:
+            case RemoteVolume():
+                vol_type = "remote"
+            case LocalVolume():
+                vol_type = "local"
         display = format_volume_display(vol)
         status_str = "active" if vs.active else "inactive"
         reason = "" if vs.active else f" ({vs.reason})"

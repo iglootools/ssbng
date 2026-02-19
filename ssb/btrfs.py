@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from datetime import datetime, timezone
 
-from .config import Config, RemoteVolume, SyncConfig
+from .config import Config, LocalVolume, RemoteVolume, SyncConfig
 from .ssh import run_remote_command
 
 
@@ -38,14 +38,15 @@ def create_snapshot(
     cmd = f"btrfs subvolume snapshot -r {latest_path} {snapshot_path}"
 
     dst_vol = config.volumes[sync.destination.volume_name]
-    if isinstance(dst_vol, RemoteVolume):
-        result = run_remote_command(dst_vol, cmd)
-    else:
-        result = subprocess.run(
-            cmd.split(),
-            capture_output=True,
-            text=True,
-        )
+    match dst_vol:
+        case RemoteVolume():
+            result = run_remote_command(dst_vol, cmd)
+        case LocalVolume():
+            result = subprocess.run(
+                cmd.split(),
+                capture_output=True,
+                text=True,
+            )
 
     if result.returncode != 0:
         raise RuntimeError(f"btrfs snapshot failed: {result.stderr}")
@@ -59,14 +60,15 @@ def get_latest_snapshot(sync: SyncConfig, config: Config) -> str | None:
     snapshots_dir = f"{dest_path}/snapshots"
 
     dst_vol = config.volumes[sync.destination.volume_name]
-    if isinstance(dst_vol, RemoteVolume):
-        result = run_remote_command(dst_vol, f"ls {snapshots_dir}")
-    else:
-        result = subprocess.run(
-            ["ls", snapshots_dir],
-            capture_output=True,
-            text=True,
-        )
+    match dst_vol:
+        case RemoteVolume():
+            result = run_remote_command(dst_vol, f"ls {snapshots_dir}")
+        case LocalVolume():
+            result = subprocess.run(
+                ["ls", snapshots_dir],
+                capture_output=True,
+                text=True,
+            )
 
     if result.returncode != 0 or not result.stdout.strip():
         return None

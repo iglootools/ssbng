@@ -22,10 +22,11 @@ from .ssh import run_remote_command
 
 def check_volume(volume: Volume) -> VolumeStatus:
     """Check if a volume is active."""
-    if isinstance(volume, LocalVolume):
-        return _check_local_volume(volume)
-    else:
-        return _check_remote_volume(volume)
+    match volume:
+        case LocalVolume():
+            return _check_local_volume(volume)
+        case RemoteVolume():
+            return _check_remote_volume(volume)
 
 
 def _check_local_volume(volume: LocalVolume) -> VolumeStatus:
@@ -50,19 +51,21 @@ def _check_remote_volume(volume: RemoteVolume) -> VolumeStatus:
     """Check if a remote volume is active (SSH + .ssb-vol marker)."""
     marker_path = f"{volume.path}/.ssb-vol"
     result = run_remote_command(volume, f"test -f {marker_path}")
-    if result.returncode == 0:
-        return VolumeStatus(
-            name=volume.name,
-            config=volume,
-            active=True,
-            reason=VolumeReason.OK,
-        )
-    return VolumeStatus(
-        name=volume.name,
-        config=volume,
-        active=False,
-        reason=VolumeReason.UNREACHABLE,
-    )
+    match result.returncode:
+        case 0:
+            return VolumeStatus(
+                name=volume.name,
+                config=volume,
+                active=True,
+                reason=VolumeReason.OK,
+            )
+        case _:
+            return VolumeStatus(
+                name=volume.name,
+                config=volume,
+                active=False,
+                reason=VolumeReason.UNREACHABLE,
+            )
 
 
 def _check_endpoint_marker(
@@ -74,11 +77,12 @@ def _check_endpoint_marker(
     else:
         rel_path = f"{volume.path}/{marker_name}"
 
-    if isinstance(volume, LocalVolume):
-        return Path(rel_path).exists()
-    else:
-        result = run_remote_command(volume, f"test -f {rel_path}")
-        return result.returncode == 0
+    match volume:
+        case LocalVolume():
+            return Path(rel_path).exists()
+        case RemoteVolume():
+            result = run_remote_command(volume, f"test -f {rel_path}")
+            return result.returncode == 0
 
 
 def check_sync(
