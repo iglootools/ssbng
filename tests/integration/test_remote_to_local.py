@@ -9,6 +9,7 @@ import pytest
 
 from ssb.config import (
     Config,
+    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     SyncConfig,
@@ -55,7 +56,7 @@ class TestRemoteToLocal:
         sync = SyncConfig(
             name="test-sync",
             source=SyncEndpoint(volume_name="src"),
-            destination=SyncEndpoint(volume_name="dst"),
+            destination=DestinationSyncEndpoint(volume_name="dst"),
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},

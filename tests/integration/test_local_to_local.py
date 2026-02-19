@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ssb.config import (
     Config,
+    DestinationSyncEndpoint,
     LocalVolume,
     SyncConfig,
     SyncEndpoint,
@@ -25,8 +26,11 @@ def _make_local_config(
     sync = SyncConfig(
         name="test-sync",
         source=SyncEndpoint(volume_name="src", subdir=src_subdir),
-        destination=SyncEndpoint(volume_name="dst", subdir=dst_subdir),
-        btrfs_snapshots=btrfs_snapshots,
+        destination=DestinationSyncEndpoint(
+            volume_name="dst",
+            subdir=dst_subdir,
+            btrfs_snapshots=btrfs_snapshots,
+        ),
     )
     config = Config(
         volumes={"src": src_vol, "dst": dst_vol},

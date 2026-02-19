@@ -82,5 +82,5 @@ syncs:
       subdir: documents
     destination:
       volume: usb-drive
-    btrfs_snapshots: true       # optional, defaults to false
+      btrfs_snapshots: true     # optional, defaults to false
 ```

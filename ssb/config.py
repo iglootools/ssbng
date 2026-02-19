@@ -44,14 +44,19 @@ class SyncEndpoint(BaseModel):
     subdir: Optional[str] = None
 
 
+class DestinationSyncEndpoint(SyncEndpoint):
+    """A destination sync endpoint with snapshot options."""
+
+    btrfs_snapshots: bool = False
+
+
 class SyncConfig(BaseModel):
     """Configuration for a single sync operation."""
 
     name: str = Field(..., min_length=1)
     source: SyncEndpoint
-    destination: SyncEndpoint
+    destination: DestinationSyncEndpoint
     enabled: bool = True
-    btrfs_snapshots: bool = False
 
 
 class Config(BaseModel):

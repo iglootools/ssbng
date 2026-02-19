@@ -82,7 +82,7 @@ class TestLoadConfig:
         assert sync.destination.volume_name == "nas"
         assert sync.destination.subdir == "photos-backup"
         assert sync.enabled is True
-        assert sync.btrfs_snapshots is False
+        assert sync.destination.btrfs_snapshots is False
 
     def test_minimal_config(self, sample_minimal_config_file: Path) -> None:
         try:
@@ -109,7 +109,7 @@ class TestLoadConfig:
             return
         sync = cfg.syncs["s1"]
         assert sync.enabled is True
-        assert sync.btrfs_snapshots is False
+        assert sync.destination.btrfs_snapshots is False
         assert sync.source.subdir is None
 
     def test_invalid_yaml(self, tmp_path: Path) -> None:

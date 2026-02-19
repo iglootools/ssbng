@@ -10,6 +10,7 @@ import pytest
 from ssb.checks import check_sync, check_volume
 from ssb.config import (
     Config,
+    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     SyncConfig,
@@ -81,7 +82,7 @@ class TestSyncStatus:
         sync = SyncConfig(
             name="test-sync",
             source=SyncEndpoint(volume_name="src"),
-            destination=SyncEndpoint(volume_name="dst"),
+            destination=DestinationSyncEndpoint(volume_name="dst"),
         )
         config = Config(
             volumes={"src": src_vol, "dst": remote_volume},

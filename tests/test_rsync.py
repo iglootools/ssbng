@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from ssb.config import (
     Config,
+    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     SyncConfig,
@@ -21,7 +22,9 @@ class TestBuildRsyncCommandLocalToLocal:
         sync = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="src", subdir="photos"),
-            destination=SyncEndpoint(volume_name="dst", subdir="backup"),
+            destination=DestinationSyncEndpoint(
+                volume_name="dst", subdir="backup"
+            ),
         )
         config = Config(
             volumes={"src": src, "dst": dst},
@@ -43,7 +46,7 @@ class TestBuildRsyncCommandLocalToLocal:
         sync = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="src"),
-            destination=SyncEndpoint(volume_name="dst"),
+            destination=DestinationSyncEndpoint(volume_name="dst"),
         )
         config = Config(
             volumes={"src": src, "dst": dst},
@@ -59,7 +62,7 @@ class TestBuildRsyncCommandLocalToLocal:
         sync = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="src"),
-            destination=SyncEndpoint(volume_name="dst"),
+            destination=DestinationSyncEndpoint(volume_name="dst"),
         )
         config = Config(
             volumes={"src": src, "dst": dst},
@@ -86,7 +89,9 @@ class TestBuildRsyncCommandLocalToRemote:
         sync = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="src", subdir="photos"),
-            destination=SyncEndpoint(volume_name="dst", subdir="photos"),
+            destination=DestinationSyncEndpoint(
+                volume_name="dst", subdir="photos"
+            ),
         )
         config = Config(
             volumes={"src": src, "dst": dst},
@@ -117,7 +122,9 @@ class TestBuildRsyncCommandRemoteToLocal:
         sync = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="src"),
-            destination=SyncEndpoint(volume_name="dst", subdir="backup"),
+            destination=DestinationSyncEndpoint(
+                volume_name="dst", subdir="backup"
+            ),
         )
         config = Config(
             volumes={"src": src, "dst": dst},
@@ -155,7 +162,9 @@ class TestBuildRsyncCommandRemoteToRemote:
         sync = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="src", subdir="photos"),
-            destination=SyncEndpoint(volume_name="dst", subdir="photos"),
+            destination=DestinationSyncEndpoint(
+                volume_name="dst", subdir="photos"
+            ),
         )
         config = Config(
             volumes={"src": src, "dst": dst},
@@ -181,7 +190,7 @@ class TestBuildRsyncCommandRemoteToRemote:
         sync = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="src"),
-            destination=SyncEndpoint(volume_name="dst"),
+            destination=DestinationSyncEndpoint(volume_name="dst"),
         )
         config = Config(
             volumes={"src": src, "dst": dst},
@@ -204,7 +213,7 @@ class TestRunRsync:
         sync = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="src"),
-            destination=SyncEndpoint(volume_name="dst"),
+            destination=DestinationSyncEndpoint(volume_name="dst"),
         )
         config = Config(
             volumes={"src": src, "dst": dst},

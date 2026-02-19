@@ -59,7 +59,7 @@ def _run_single_sync(
 
     # Check for link-dest if btrfs snapshots are configured
     link_dest: str | None = None
-    if sync.btrfs_snapshots:
+    if sync.destination.btrfs_snapshots:
         latest = get_latest_snapshot(sync, config)
         if latest:
             link_dest = f"../../snapshots/{latest.rsplit('/', 1)[-1]}"
@@ -88,7 +88,7 @@ def _run_single_sync(
 
     # Create btrfs snapshot if configured and not dry run
     snapshot_path: str | None = None
-    if sync.btrfs_snapshots and not dry_run:
+    if sync.destination.btrfs_snapshots and not dry_run:
         try:
             snapshot_path = create_snapshot(sync, config)
         except RuntimeError as e:

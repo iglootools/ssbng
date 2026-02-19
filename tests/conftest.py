@@ -8,6 +8,7 @@ import pytest
 
 from ssb.config import (
     Config,
+    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     SyncConfig,
@@ -37,7 +38,7 @@ syncs:
     destination:
       volume: nas
       subdir: photos-backup
-    btrfs_snapshots: false
+      btrfs_snapshots: false
 """
 
 SAMPLE_YAML_MINIMAL = """\
@@ -114,11 +115,12 @@ def sample_config(
             "photos-to-nas": SyncConfig(
                 name="photos-to-nas",
                 source=SyncEndpoint(volume_name="local-data", subdir="photos"),
-                destination=SyncEndpoint(
-                    volume_name="nas", subdir="photos-backup"
+                destination=DestinationSyncEndpoint(
+                    volume_name="nas",
+                    subdir="photos-backup",
+                    btrfs_snapshots=False,
                 ),
                 enabled=True,
-                btrfs_snapshots=False,
             ),
         },
     )

@@ -11,6 +11,7 @@ import pytest
 from ssb.btrfs import create_snapshot, get_latest_snapshot
 from ssb.config import (
     Config,
+    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     SyncConfig,
@@ -40,8 +41,10 @@ def _make_btrfs_config(
     sync = SyncConfig(
         name="test-sync",
         source=SyncEndpoint(volume_name="src"),
-        destination=SyncEndpoint(volume_name="dst"),
-        btrfs_snapshots=True,
+        destination=DestinationSyncEndpoint(
+            volume_name="dst",
+            btrfs_snapshots=True,
+        ),
     )
     config = Config(
         volumes={"src": src_vol, "dst": remote_btrfs_volume},

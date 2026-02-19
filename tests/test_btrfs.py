@@ -9,6 +9,7 @@ import pytest
 from ssb.btrfs import create_snapshot, get_latest_snapshot
 from ssb.config import (
     Config,
+    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     SyncConfig,
@@ -22,8 +23,11 @@ def _local_config() -> tuple[Config, SyncConfig]:
     sync = SyncConfig(
         name="s1",
         source=SyncEndpoint(volume_name="src"),
-        destination=SyncEndpoint(volume_name="dst", subdir="backup"),
-        btrfs_snapshots=True,
+        destination=DestinationSyncEndpoint(
+            volume_name="dst",
+            subdir="backup",
+            btrfs_snapshots=True,
+        ),
     )
     config = Config(
         volumes={"src": src, "dst": dst},
@@ -43,8 +47,11 @@ def _remote_config() -> tuple[Config, SyncConfig]:
     sync = SyncConfig(
         name="s1",
         source=SyncEndpoint(volume_name="src"),
-        destination=SyncEndpoint(volume_name="dst", subdir="data"),
-        btrfs_snapshots=True,
+        destination=DestinationSyncEndpoint(
+            volume_name="dst",
+            subdir="data",
+            btrfs_snapshots=True,
+        ),
     )
     config = Config(
         volumes={"src": src, "dst": dst},

@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 from ssb.cli import app
 from ssb.config import (
     Config,
+    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     SyncConfig,
@@ -38,7 +39,9 @@ def _sample_config() -> Config:
     sync = SyncConfig(
         name="photos-to-nas",
         source=SyncEndpoint(volume_name="local-data", subdir="photos"),
-        destination=SyncEndpoint(volume_name="nas", subdir="photos-backup"),
+        destination=DestinationSyncEndpoint(
+            volume_name="nas", subdir="photos-backup"
+        ),
     )
     return Config(
         volumes={"local-data": src, "nas": dst},

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from ssb.config import (
     Config,
+    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     SyncConfig,
@@ -26,7 +27,7 @@ def _make_local_config() -> Config:
     sync = SyncConfig(
         name="s1",
         source=SyncEndpoint(volume_name="src"),
-        destination=SyncEndpoint(volume_name="dst"),
+        destination=DestinationSyncEndpoint(volume_name="dst"),
     )
     return Config(
         volumes={"src": src, "dst": dst},
@@ -40,8 +41,10 @@ def _make_btrfs_config() -> Config:
     sync = SyncConfig(
         name="s1",
         source=SyncEndpoint(volume_name="src"),
-        destination=SyncEndpoint(volume_name="dst"),
-        btrfs_snapshots=True,
+        destination=DestinationSyncEndpoint(
+            volume_name="dst",
+            btrfs_snapshots=True,
+        ),
     )
     return Config(
         volumes={"src": src, "dst": dst},
@@ -59,8 +62,10 @@ def _make_remote_to_remote_config() -> Config:
     sync = SyncConfig(
         name="s1",
         source=SyncEndpoint(volume_name="src"),
-        destination=SyncEndpoint(volume_name="dst"),
-        btrfs_snapshots=True,
+        destination=DestinationSyncEndpoint(
+            volume_name="dst",
+            btrfs_snapshots=True,
+        ),
     )
     return Config(
         volumes={"src": src, "dst": dst},

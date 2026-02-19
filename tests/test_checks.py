@@ -13,6 +13,7 @@ from ssb.checks import (
 )
 from ssb.config import (
     Config,
+    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     SyncConfig,
@@ -100,7 +101,9 @@ class TestCheckSync:
         sync = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="src", subdir="data"),
-            destination=SyncEndpoint(volume_name="dst", subdir="backup"),
+            destination=DestinationSyncEndpoint(
+                volume_name="dst", subdir="backup"
+            ),
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
@@ -150,7 +153,9 @@ class TestCheckSync:
         sync = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="src", subdir="data"),
-            destination=SyncEndpoint(volume_name="dst", subdir="backup"),
+            destination=DestinationSyncEndpoint(
+                volume_name="dst", subdir="backup"
+            ),
             enabled=False,
         )
         vol_statuses = {
@@ -281,8 +286,11 @@ class TestCheckSync:
         sync = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="src", subdir="data"),
-            destination=SyncEndpoint(volume_name="dst", subdir="backup"),
-            btrfs_snapshots=True,
+            destination=DestinationSyncEndpoint(
+                volume_name="dst",
+                subdir="backup",
+                btrfs_snapshots=True,
+            ),
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
@@ -379,7 +387,9 @@ class TestCheckSyncRemoteCommands:
         sync = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="src", subdir="data"),
-            destination=SyncEndpoint(volume_name="dst", subdir="backup"),
+            destination=DestinationSyncEndpoint(
+                volume_name="dst", subdir="backup"
+            ),
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
@@ -430,7 +440,9 @@ class TestCheckSyncRemoteCommands:
         sync = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="src", subdir="data"),
-            destination=SyncEndpoint(volume_name="dst", subdir="backup"),
+            destination=DestinationSyncEndpoint(
+                volume_name="dst", subdir="backup"
+            ),
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
@@ -481,8 +493,11 @@ class TestCheckSyncRemoteCommands:
         sync = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="src", subdir="data"),
-            destination=SyncEndpoint(volume_name="dst", subdir="backup"),
-            btrfs_snapshots=True,
+            destination=DestinationSyncEndpoint(
+                volume_name="dst",
+                subdir="backup",
+                btrfs_snapshots=True,
+            ),
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
@@ -534,7 +549,7 @@ class TestCheckAllSyncs:
         sync = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="src"),
-            destination=SyncEndpoint(volume_name="dst"),
+            destination=DestinationSyncEndpoint(volume_name="dst"),
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},

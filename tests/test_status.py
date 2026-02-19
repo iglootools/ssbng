@@ -2,6 +2,7 @@
 
 from ssb.config import (
     Config,
+    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     SyncConfig,
@@ -85,22 +86,25 @@ class TestSyncConfig:
         sc = SyncConfig(
             name="sync1",
             source=SyncEndpoint(volume_name="src"),
-            destination=SyncEndpoint(volume_name="dst"),
+            destination=DestinationSyncEndpoint(volume_name="dst"),
         )
         assert sc.name == "sync1"
         assert sc.enabled is True
-        assert sc.btrfs_snapshots is False
+        assert sc.destination.btrfs_snapshots is False
 
     def test_construction_full(self) -> None:
         sc = SyncConfig(
             name="sync1",
             source=SyncEndpoint(volume_name="src", subdir="a"),
-            destination=SyncEndpoint(volume_name="dst", subdir="b"),
+            destination=DestinationSyncEndpoint(
+                volume_name="dst",
+                subdir="b",
+                btrfs_snapshots=True,
+            ),
             enabled=False,
-            btrfs_snapshots=True,
         )
         assert sc.enabled is False
-        assert sc.btrfs_snapshots is True
+        assert sc.destination.btrfs_snapshots is True
 
 
 class TestConfig:
@@ -114,7 +118,7 @@ class TestConfig:
         sync = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="data"),
-            destination=SyncEndpoint(volume_name="data"),
+            destination=DestinationSyncEndpoint(volume_name="data"),
         )
         cfg = Config(
             volumes={"data": vol},
@@ -155,7 +159,7 @@ class TestSyncStatus:
         sc = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="data"),
-            destination=SyncEndpoint(volume_name="data"),
+            destination=DestinationSyncEndpoint(volume_name="data"),
         )
         ss = SyncStatus(
             name="s1",
@@ -176,7 +180,7 @@ class TestSyncStatus:
         sc = SyncConfig(
             name="s1",
             source=SyncEndpoint(volume_name="data"),
-            destination=SyncEndpoint(volume_name="data"),
+            destination=DestinationSyncEndpoint(volume_name="data"),
         )
         ss = SyncStatus(
             name="s1",
