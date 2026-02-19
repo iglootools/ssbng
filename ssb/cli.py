@@ -7,6 +7,7 @@ from typing import Annotated, Optional
 
 import typer
 
+from .config import Config
 from .status import SyncReason, check_all_syncs
 from .configloader import ConfigError, load_config
 from .output import (
@@ -26,15 +27,6 @@ app = typer.Typer(
     help="Simple Safe Backup - An rsync-based backup tool",
     no_args_is_help=True,
 )
-
-
-def _load_or_exit(config_path: str | None) -> object:
-    """Load config or exit with code 2 on error."""
-    try:
-        return load_config(config_path)
-    except ConfigError as e:
-        typer.echo(f"Config error: {e}", err=True)
-        raise typer.Exit(2)
 
 @app.command()
 def status(
@@ -58,10 +50,7 @@ def status(
     ] = True,
 ) -> None:
     """Show status of volumes and syncs."""
-    cfg = _load_or_exit(config)
-    from .config import Config
-
-    assert isinstance(cfg, Config)
+    cfg = _load_config_or_exit(config)
     vol_statuses, sync_statuses = check_all_syncs(cfg)
 
     match OutputFormat(output):
@@ -115,10 +104,7 @@ def run(
     ] = 0,
 ) -> None:
     """Run backup syncs."""
-    cfg = _load_or_exit(config)
-    from .config import Config
-
-    assert isinstance(cfg, Config)
+    cfg = _load_config_or_exit(config)
 
     output_format = OutputFormat(output)
     stream_output = (
@@ -145,6 +131,14 @@ def run(
         raise typer.Exit(1)
 
 
+def _load_config_or_exit(config_path: str | None) -> Config:
+    """Load config or exit with code 2 on error."""
+    try:
+        return load_config(config_path)
+    except ConfigError as e:
+        typer.echo(f"Config error: {e}", err=True)
+        raise typer.Exit(2)
+    
 def main() -> None:
     """Main CLI entry point."""
     app()
