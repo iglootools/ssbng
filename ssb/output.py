@@ -8,7 +8,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from .config import Config, LocalVolume, RemoteVolume
+from .config import Config, LocalVolume, RemoteVolume, SyncConfig
 from .runner import SyncResult
 from .status import SyncReason, SyncStatus, VolumeReason, VolumeStatus
 
@@ -30,6 +30,16 @@ def _status_text(
     else:
         reason_str = ", ".join(r.value for r in reasons)
         return Text(f"inactive ({reason_str})", style="red")
+
+
+def _sync_options(sync: SyncConfig) -> str:
+    """Build a comma-separated string of enabled sync options."""
+    opts: list[str] = []
+    if sync.filters or sync.filter_file:
+        opts.append("rsync-filter")
+    if sync.destination.btrfs_snapshots:
+        opts.append("btrfs-snapshots")
+    return ", ".join(opts)
 
 
 def format_volume_display(
@@ -89,6 +99,7 @@ def print_human_status(
     sync_table.add_column("Name", style="bold")
     sync_table.add_column("Source")
     sync_table.add_column("Destination")
+    sync_table.add_column("Options")
     sync_table.add_column("Status")
 
     for ss in sync_statuses.values():
@@ -96,6 +107,7 @@ def print_human_status(
             ss.slug,
             ss.config.source.volume,
             ss.config.destination.volume,
+            _sync_options(ss.config),
             _status_text(ss.active, ss.reasons),
         )
 
