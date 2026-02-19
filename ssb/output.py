@@ -6,7 +6,7 @@ import enum
 
 import typer
 
-from .config import LocalVolume, RemoteVolume
+from .config import Config, LocalVolume, RemoteVolume
 from .status import SyncResult, SyncStatus, VolumeStatus
 
 
@@ -17,17 +17,20 @@ class OutputFormat(str, enum.Enum):
     JSON = "json"
 
 
-def format_volume_display(vol: LocalVolume | RemoteVolume) -> str:
+def format_volume_display(
+    vol: LocalVolume | RemoteVolume, config: Config
+) -> str:
     """Format a volume for human display."""
     match vol:
         case RemoteVolume():
+            server = config.rsync_servers[vol.rsync_server]
             parts = []
-            if vol.user:
-                parts.append(f"{vol.user}@{vol.host}")
+            if server.user:
+                parts.append(f"{server.user}@{server.host}")
             else:
-                parts.append(vol.host)
-            if vol.port != 22:
-                parts[-1] += f":{vol.port}"
+                parts.append(server.host)
+            if server.port != 22:
+                parts[-1] += f":{server.port}"
             return " ".join(parts)
         case LocalVolume():
             return vol.path
@@ -36,6 +39,7 @@ def format_volume_display(vol: LocalVolume | RemoteVolume) -> str:
 def print_human_status(
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
+    config: Config,
 ) -> None:
     """Print human-readable status output."""
     typer.echo("Volumes:")
@@ -46,7 +50,7 @@ def print_human_status(
                 vol_type = "remote"
             case LocalVolume():
                 vol_type = "local"
-        display = format_volume_display(vol)
+        display = format_volume_display(vol, config)
         status_str = "active" if vs.active else "inactive"
         reason = (
             "" if vs.active else f" ({', '.join(r.value for r in vs.reasons)})"
@@ -59,8 +63,8 @@ def print_human_status(
     typer.echo("")
     typer.echo("Syncs:")
     for ss in sync_statuses.values():
-        src = ss.config.source.volume_name
-        dst = ss.config.destination.volume_name
+        src = ss.config.source.volume
+        dst = ss.config.destination.volume
         arrow = f"{src} -> {dst}"
         status_str = "active" if ss.active else "inactive"
         reason = (

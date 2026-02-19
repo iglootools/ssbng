@@ -8,6 +8,7 @@ from .config import (
     Config,
     LocalVolume,
     RemoteVolume,
+    RsyncServer,
     SyncConfig,
 )
 from .ssh import (
@@ -47,28 +48,40 @@ def build_rsync_command(
     Returns the full command as a list of args, potentially
     wrapped in SSH for remote-to-remote syncs.
     """
-    src_vol = config.volumes[sync.source.volume_name]
-    dst_vol = config.volumes[sync.destination.volume_name]
+    src_vol = config.volumes[sync.source.volume]
+    dst_vol = config.volumes[sync.destination.volume]
 
     src_path = _resolve_path(src_vol, sync.source.subdir)
     dst_path = _resolve_path(dst_vol, sync.destination.subdir)
 
     match (src_vol, dst_vol):
         case (RemoteVolume() as sv, RemoteVolume() as dv):
+            src_server = config.rsync_servers[sv.rsync_server]
+            dst_server = config.rsync_servers[dv.rsync_server]
             return _build_remote_to_remote(
-                sync, sv, dv, src_path, dst_path, dry_run, link_dest
+                sync,
+                src_server,
+                dst_server,
+                src_path,
+                dst_path,
+                dry_run,
+                link_dest,
             )
         case (RemoteVolume() as sv, LocalVolume()):
+            src_server = config.rsync_servers[sv.rsync_server]
             rsync_args = _base_rsync_args(dry_run, link_dest)
-            rsync_args.extend(build_ssh_e_option(sv))
-            rsync_args.append(format_remote_path(sv, src_path) + "/")
+            rsync_args.extend(build_ssh_e_option(src_server))
+            rsync_args.append(format_remote_path(src_server, src_path) + "/")
             rsync_args.append(f"{dst_path}/latest/")
             return rsync_args
         case (LocalVolume(), RemoteVolume() as dv):
+            dst_server = config.rsync_servers[dv.rsync_server]
             rsync_args = _base_rsync_args(dry_run, link_dest)
-            rsync_args.extend(build_ssh_e_option(dv))
+            rsync_args.extend(build_ssh_e_option(dst_server))
             rsync_args.append(f"{src_path}/")
-            rsync_args.append(format_remote_path(dv, dst_path) + "/latest/")
+            rsync_args.append(
+                format_remote_path(dst_server, dst_path) + "/latest/"
+            )
             return rsync_args
         case _:
             rsync_args = _base_rsync_args(dry_run, link_dest)
@@ -79,8 +92,8 @@ def build_rsync_command(
 
 def _build_remote_to_remote(
     sync: SyncConfig,
-    src_vol: RemoteVolume,
-    dst_vol: RemoteVolume,
+    src_server: RsyncServer,
+    dst_server: RsyncServer,
     src_path: str,
     dst_path: str,
     dry_run: bool,
@@ -95,21 +108,21 @@ def _build_remote_to_remote(
 
     # SSH options for source host (from destination's perspective)
     src_ssh_parts = ["ssh"]
-    if src_vol.port != 22:
-        src_ssh_parts.extend(["-p", str(src_vol.port)])
-    if src_vol.ssh_key:
-        src_ssh_parts.extend(["-i", src_vol.ssh_key])
+    if src_server.port != 22:
+        src_ssh_parts.extend(["-p", str(src_server.port)])
+    if src_server.ssh_key:
+        src_ssh_parts.extend(["-i", src_server.ssh_key])
 
     if len(src_ssh_parts) > 1:
         inner_rsync_parts.extend(["-e", "'" + " ".join(src_ssh_parts) + "'"])
 
-    src_remote = format_remote_path(src_vol, src_path)
+    src_remote = format_remote_path(src_server, src_path)
     inner_rsync_parts.append(f"{src_remote}/")
     inner_rsync_parts.append(f"{dst_path}/latest/")
 
     inner_command = " ".join(inner_rsync_parts)
 
-    return build_ssh_base_args(dst_vol) + [inner_command]
+    return build_ssh_base_args(dst_server) + [inner_command]
 
 
 def run_rsync(

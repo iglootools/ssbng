@@ -13,6 +13,7 @@ from ssb.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
+    RsyncServer,
     SyncConfig,
     SyncEndpoint,
 )
@@ -29,7 +30,10 @@ class TestLocalVolumeStatus:
         (vol_path / ".ssb-vol").touch()
 
         vol = LocalVolume(name="local", path=str(vol_path))
-        status = check_volume(vol)
+        config = Config(
+            volumes={"local": vol},
+        )
+        status = check_volume(vol, config)
         assert status.active is True
 
     def test_local_volume_inactive(self, tmp_path: Path) -> None:
@@ -38,7 +42,10 @@ class TestLocalVolumeStatus:
         # No .ssb-vol marker
 
         vol = LocalVolume(name="local", path=str(vol_path))
-        status = check_volume(vol)
+        config = Config(
+            volumes={"local": vol},
+        )
+        status = check_volume(vol, config)
         assert status.active is False
 
 
@@ -46,19 +53,29 @@ class TestRemoteVolumeStatus:
     def test_remote_volume_active(
         self,
         docker_container: dict[str, Any],
+        rsync_server: RsyncServer,
         remote_volume: RemoteVolume,
     ) -> None:
         create_markers(docker_container, "/data", [".ssb-vol"])
-        status = check_volume(remote_volume)
+        config = Config(
+            rsync_servers={"test-server": rsync_server},
+            volumes={"test-remote": remote_volume},
+        )
+        status = check_volume(remote_volume, config)
         assert status.active is True
 
     def test_remote_volume_inactive(
         self,
         docker_container: dict[str, Any],
+        rsync_server: RsyncServer,
         remote_volume: RemoteVolume,
     ) -> None:
         # No marker created
-        status = check_volume(remote_volume)
+        config = Config(
+            rsync_servers={"test-server": rsync_server},
+            volumes={"test-remote": remote_volume},
+        )
+        status = check_volume(remote_volume, config)
         assert status.active is False
 
 
@@ -67,6 +84,7 @@ class TestSyncStatus:
         self,
         tmp_path: Path,
         docker_container: dict[str, Any],
+        rsync_server: RsyncServer,
         remote_volume: RemoteVolume,
     ) -> None:
         # Set up local source volume
@@ -81,16 +99,17 @@ class TestSyncStatus:
         src_vol = LocalVolume(name="src", path=str(src_path))
         sync = SyncConfig(
             name="test-sync",
-            source=SyncEndpoint(volume_name="src"),
-            destination=DestinationSyncEndpoint(volume_name="dst"),
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
         )
         config = Config(
+            rsync_servers={"test-server": rsync_server},
             volumes={"src": src_vol, "dst": remote_volume},
             syncs={"test-sync": sync},
         )
 
-        src_status = check_volume(src_vol)
-        dst_status = check_volume(remote_volume)
+        src_status = check_volume(src_vol, config)
+        dst_status = check_volume(remote_volume, config)
         volume_statuses = {
             "src": src_status,
             "dst": dst_status,

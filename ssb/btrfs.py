@@ -11,7 +11,7 @@ from .ssh import run_remote_command
 
 def _resolve_dest_path(sync: SyncConfig, config: Config) -> str:
     """Resolve the destination path for a sync."""
-    vol = config.volumes[sync.destination.volume_name]
+    vol = config.volumes[sync.destination.volume]
     if sync.destination.subdir:
         return f"{vol.path}/{sync.destination.subdir}"
     return vol.path
@@ -37,10 +37,11 @@ def create_snapshot(
 
     cmd = f"btrfs subvolume snapshot -r {latest_path} {snapshot_path}"
 
-    dst_vol = config.volumes[sync.destination.volume_name]
+    dst_vol = config.volumes[sync.destination.volume]
     match dst_vol:
         case RemoteVolume():
-            result = run_remote_command(dst_vol, cmd)
+            server = config.rsync_servers[dst_vol.rsync_server]
+            result = run_remote_command(server, cmd)
         case LocalVolume():
             result = subprocess.run(
                 cmd.split(),
@@ -59,10 +60,11 @@ def get_latest_snapshot(sync: SyncConfig, config: Config) -> str | None:
     dest_path = _resolve_dest_path(sync, config)
     snapshots_dir = f"{dest_path}/snapshots"
 
-    dst_vol = config.volumes[sync.destination.volume_name]
+    dst_vol = config.volumes[sync.destination.volume]
     match dst_vol:
         case RemoteVolume():
-            result = run_remote_command(dst_vol, f"ls {snapshots_dir}")
+            server = config.rsync_servers[dst_vol.rsync_server]
+            result = run_remote_command(server, f"ls {snapshots_dir}")
         case LocalVolume():
             result = subprocess.run(
                 ["ls", snapshots_dir],

@@ -14,6 +14,7 @@ from ssb.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
+    RsyncServer,
     SyncConfig,
     SyncEndpoint,
 )
@@ -36,17 +37,19 @@ def _setup_btrfs_latest(docker_container: dict[str, Any]) -> None:
 def _make_btrfs_config(
     src_path: str,
     remote_btrfs_volume: RemoteVolume,
+    rsync_server: RsyncServer,
 ) -> tuple[SyncConfig, Config]:
     src_vol = LocalVolume(name="src", path=src_path)
     sync = SyncConfig(
         name="test-sync",
-        source=SyncEndpoint(volume_name="src"),
+        source=SyncEndpoint(volume="src"),
         destination=DestinationSyncEndpoint(
-            volume_name="dst",
+            volume="dst",
             btrfs_snapshots=True,
         ),
     )
     config = Config(
+        rsync_servers={"test-server": rsync_server},
         volumes={"src": src_vol, "dst": remote_btrfs_volume},
         syncs={"test-sync": sync},
     )
@@ -58,6 +61,7 @@ class TestBtrfsSnapshots:
         self,
         tmp_path: Path,
         docker_container: dict[str, Any],
+        rsync_server: RsyncServer,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         _setup_btrfs_latest(docker_container)
@@ -66,7 +70,9 @@ class TestBtrfsSnapshots:
         src.mkdir()
         (src / "data.txt").write_text("snapshot me")
 
-        sync, config = _make_btrfs_config(str(src), remote_btrfs_volume)
+        sync, config = _make_btrfs_config(
+            str(src), remote_btrfs_volume, rsync_server
+        )
 
         # Rsync into latest
         result = run_rsync(sync, config)
@@ -83,6 +89,7 @@ class TestBtrfsSnapshots:
         self,
         tmp_path: Path,
         docker_container: dict[str, Any],
+        rsync_server: RsyncServer,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         _setup_btrfs_latest(docker_container)
@@ -91,7 +98,9 @@ class TestBtrfsSnapshots:
         src.mkdir()
         (src / "data.txt").write_text("readonly test")
 
-        sync, config = _make_btrfs_config(str(src), remote_btrfs_volume)
+        sync, config = _make_btrfs_config(
+            str(src), remote_btrfs_volume, rsync_server
+        )
         run_rsync(sync, config)
         snapshot_path = create_snapshot(sync, config)
 
@@ -107,6 +116,7 @@ class TestBtrfsSnapshots:
         self,
         tmp_path: Path,
         docker_container: dict[str, Any],
+        rsync_server: RsyncServer,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         _setup_btrfs_latest(docker_container)
@@ -115,7 +125,9 @@ class TestBtrfsSnapshots:
         src.mkdir()
         (src / "file.txt").write_text("v1")
 
-        sync, config = _make_btrfs_config(str(src), remote_btrfs_volume)
+        sync, config = _make_btrfs_config(
+            str(src), remote_btrfs_volume, rsync_server
+        )
 
         # First sync + snapshot
         run_rsync(sync, config)
@@ -141,6 +153,7 @@ class TestBtrfsSnapshots:
         self,
         tmp_path: Path,
         docker_container: dict[str, Any],
+        rsync_server: RsyncServer,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         _setup_btrfs_latest(docker_container)
@@ -158,7 +171,9 @@ class TestBtrfsSnapshots:
         src.mkdir()
         (src / "data.txt").write_text("dry run")
 
-        sync, config = _make_btrfs_config(str(src), remote_btrfs_volume)
+        sync, config = _make_btrfs_config(
+            str(src), remote_btrfs_volume, rsync_server
+        )
 
         # Dry-run rsync
         result = run_rsync(sync, config, dry_run=True)

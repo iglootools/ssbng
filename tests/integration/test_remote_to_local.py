@@ -12,6 +12,7 @@ from ssb.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
+    RsyncServer,
     SyncConfig,
     SyncEndpoint,
 )
@@ -27,7 +28,7 @@ class TestRemoteToLocal:
         self,
         tmp_path: Path,
         docker_container: dict[str, Any],
-        remote_volume: RemoteVolume,
+        rsync_server: RsyncServer,
     ) -> None:
         # Create test files on container
         ssh_exec(
@@ -40,25 +41,18 @@ class TestRemoteToLocal:
         (dst_dir / "latest").mkdir(parents=True)
 
         dst_vol = LocalVolume(name="dst", path=str(dst_dir))
-        # Use a RemoteVolume for src pointing at /data/src
         src_vol = RemoteVolume(
             name="src-remote",
-            host=docker_container["host"],
+            rsync_server="test-server",
             path="/data/src",
-            port=docker_container["port"],
-            user=docker_container["user"],
-            ssh_key=docker_container["private_key"],
-            ssh_options=[
-                "StrictHostKeyChecking=no",
-                "UserKnownHostsFile=/dev/null",
-            ],
         )
         sync = SyncConfig(
             name="test-sync",
-            source=SyncEndpoint(volume_name="src"),
-            destination=DestinationSyncEndpoint(volume_name="dst"),
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
         )
         config = Config(
+            rsync_servers={"test-server": rsync_server},
             volumes={"src": src_vol, "dst": dst_vol},
             syncs={"test-sync": sync},
         )

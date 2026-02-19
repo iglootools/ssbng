@@ -25,9 +25,9 @@ def _make_local_config(
     dst_vol = LocalVolume(name="dst", path=dst_path)
     sync = SyncConfig(
         name="test-sync",
-        source=SyncEndpoint(volume_name="src", subdir=src_subdir),
+        source=SyncEndpoint(volume="src", subdir=src_subdir),
         destination=DestinationSyncEndpoint(
-            volume_name="dst",
+            volume="dst",
             subdir=dst_subdir,
             btrfs_snapshots=btrfs_snapshots,
         ),

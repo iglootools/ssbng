@@ -12,6 +12,7 @@ from ssb.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
+    RsyncServer,
     SyncConfig,
     SyncEndpoint,
 )
@@ -27,6 +28,7 @@ class TestLocalToRemote:
         self,
         tmp_path: Path,
         docker_container: dict[str, Any],
+        rsync_server: RsyncServer,
         remote_volume: RemoteVolume,
     ) -> None:
         # Create markers on remote
@@ -40,10 +42,11 @@ class TestLocalToRemote:
         src_vol = LocalVolume(name="src", path=str(src_dir))
         sync = SyncConfig(
             name="test-sync",
-            source=SyncEndpoint(volume_name="src"),
-            destination=DestinationSyncEndpoint(volume_name="dst"),
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
         )
         config = Config(
+            rsync_servers={"test-server": rsync_server},
             volumes={"src": src_vol, "dst": remote_volume},
             syncs={"test-sync": sync},
         )
@@ -60,6 +63,7 @@ class TestLocalToRemote:
         self,
         tmp_path: Path,
         docker_container: dict[str, Any],
+        rsync_server: RsyncServer,
         remote_volume: RemoteVolume,
     ) -> None:
         # Create remote subdir structure and markers
@@ -75,12 +79,13 @@ class TestLocalToRemote:
         src_vol = LocalVolume(name="src", path=str(tmp_path / "src"))
         sync = SyncConfig(
             name="test-sync",
-            source=SyncEndpoint(volume_name="src", subdir="photos"),
+            source=SyncEndpoint(volume="src", subdir="photos"),
             destination=DestinationSyncEndpoint(
-                volume_name="dst", subdir="photos-backup"
+                volume="dst", subdir="photos-backup"
             ),
         )
         config = Config(
+            rsync_servers={"test-server": rsync_server},
             volumes={"src": src_vol, "dst": remote_volume},
             syncs={"test-sync": sync},
         )

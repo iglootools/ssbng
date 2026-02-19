@@ -12,6 +12,7 @@ from ssb.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
+    RsyncServer,
     SyncConfig,
     SyncEndpoint,
 )
@@ -22,9 +23,9 @@ def _local_config() -> tuple[Config, SyncConfig]:
     dst = LocalVolume(name="dst", path="/mnt/dst")
     sync = SyncConfig(
         name="s1",
-        source=SyncEndpoint(volume_name="src"),
+        source=SyncEndpoint(volume="src"),
         destination=DestinationSyncEndpoint(
-            volume_name="dst",
+            volume="dst",
             subdir="backup",
             btrfs_snapshots=True,
         ),
@@ -38,22 +39,27 @@ def _local_config() -> tuple[Config, SyncConfig]:
 
 def _remote_config() -> tuple[Config, SyncConfig]:
     src = LocalVolume(name="src", path="/mnt/src")
+    dst_server = RsyncServer(
+        name="nas-server",
+        host="nas.local",
+        user="admin",
+    )
     dst = RemoteVolume(
         name="dst",
-        host="nas.local",
+        rsync_server="nas-server",
         path="/backup",
-        user="admin",
     )
     sync = SyncConfig(
         name="s1",
-        source=SyncEndpoint(volume_name="src"),
+        source=SyncEndpoint(volume="src"),
         destination=DestinationSyncEndpoint(
-            volume_name="dst",
+            volume="dst",
             subdir="data",
             btrfs_snapshots=True,
         ),
     )
     config = Config(
+        rsync_servers={"nas-server": dst_server},
         volumes={"src": src, "dst": dst},
         syncs={"s1": sync},
     )
@@ -101,7 +107,7 @@ class TestCreateSnapshotRemote:
         assert path == ("/backup/data/snapshots/2024-01-15T12:00:00.000Z")
         mock_run.assert_called_once()
         call_args = mock_run.call_args
-        assert call_args[0][0] == config.volumes["dst"]
+        assert call_args[0][0] == config.rsync_servers["nas-server"]
         assert "btrfs subvolume snapshot -r" in call_args[0][1]
 
 
@@ -115,7 +121,7 @@ class TestGetLatestSnapshotLocal:
         config, sync = _local_config()
 
         result = get_latest_snapshot(sync, config)
-        assert result == "/mnt/dst/backup/snapshots/20240115T120000Z"
+        assert result == ("/mnt/dst/backup/snapshots/20240115T120000Z")
 
     @patch("ssb.btrfs.subprocess.run")
     def test_empty(self, mock_run: MagicMock) -> None:
@@ -144,8 +150,8 @@ class TestGetLatestSnapshotRemote:
         config, sync = _remote_config()
 
         result = get_latest_snapshot(sync, config)
-        assert result == "/backup/data/snapshots/20240115T120000Z"
+        assert result == ("/backup/data/snapshots/20240115T120000Z")
         mock_run.assert_called_once_with(
-            config.volumes["dst"],
+            config.rsync_servers["nas-server"],
             "ls /backup/data/snapshots",
         )

@@ -40,30 +40,14 @@ class TestFindConfigFile:
 
 class TestLoadConfig:
     def test_full_config(self, sample_config_file: Path) -> None:
-        try:
-            cfg = load_config(str(sample_config_file))
-        except ConfigError as e:
-            cause = e.__cause__
-            assert cause is not None
-            errors = cause.errors()
-            assert any(
-                err["loc"] == ("syncs", "photos-to-nas", "name")
-                and err["type"] == "missing"
-                for err in errors
-            )
-            assert any(
-                err["loc"]
-                == ("syncs", "photos-to-nas", "source", "volume_name")
-                and err["type"] == "missing"
-                for err in errors
-            )
-            assert any(
-                err["loc"]
-                == ("syncs", "photos-to-nas", "destination", "volume_name")
-                and err["type"] == "missing"
-                for err in errors
-            )
-            return
+        cfg = load_config(str(sample_config_file))
+        assert "nas-server" in cfg.rsync_servers
+        server = cfg.rsync_servers["nas-server"]
+        assert server.name == "nas-server"
+        assert server.host == "nas.example.com"
+        assert server.port == 5022
+        assert server.user == "backup"
+        assert server.ssh_key == "~/.ssh/key"
         assert "local-data" in cfg.volumes
         assert "nas" in cfg.volumes
         assert "photos-to-nas" in cfg.syncs
@@ -72,41 +56,17 @@ class TestLoadConfig:
         assert local.path == "/mnt/data"
         remote = cfg.volumes["nas"]
         assert isinstance(remote, RemoteVolume)
-        assert remote.host == "nas.example.com"
-        assert remote.port == 5022
-        assert remote.user == "backup"
-        assert remote.ssh_key == "~/.ssh/key"
+        assert remote.rsync_server == "nas-server"
         sync = cfg.syncs["photos-to-nas"]
-        assert sync.source.volume_name == "local-data"
+        assert sync.source.volume == "local-data"
         assert sync.source.subdir == "photos"
-        assert sync.destination.volume_name == "nas"
+        assert sync.destination.volume == "nas"
         assert sync.destination.subdir == "photos-backup"
         assert sync.enabled is True
         assert sync.destination.btrfs_snapshots is False
 
     def test_minimal_config(self, sample_minimal_config_file: Path) -> None:
-        try:
-            cfg = load_config(str(sample_minimal_config_file))
-        except ConfigError as e:
-            cause = e.__cause__
-            assert cause is not None
-            errors = cause.errors()
-            assert any(
-                err["loc"] == ("syncs", "s1", "name")
-                and err["type"] == "missing"
-                for err in errors
-            )
-            assert any(
-                err["loc"] == ("syncs", "s1", "source", "volume_name")
-                and err["type"] == "missing"
-                for err in errors
-            )
-            assert any(
-                err["loc"] == ("syncs", "s1", "destination", "volume_name")
-                and err["type"] == "missing"
-                for err in errors
-            )
-            return
+        cfg = load_config(str(sample_minimal_config_file))
         sync = cfg.syncs["s1"]
         assert sync.enabled is True
         assert sync.destination.btrfs_snapshots is False
@@ -152,7 +112,11 @@ class TestLoadConfig:
     def test_missing_remote_host(self, tmp_path: Path) -> None:
         p = tmp_path / "no_host.yaml"
         p.write_text(
-            "volumes:\n  v:\n    type: remote\n    path: /x\n" "syncs: {}\n"
+            "rsync-servers:\n  s:\n    port: 22\n"
+            "volumes:\n  v:\n    type: remote\n"
+            "    rsync-server: s\n"
+            "    path: /x\n"
+            "syncs: {}\n"
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
@@ -160,10 +124,24 @@ class TestLoadConfig:
         assert cause is not None
         errors = cause.errors()
         assert any(
-            err["loc"] == ("volumes", "v", "remote", "host")
-            and err["type"] == "missing"
+            "host" in str(err["loc"]) and err["type"] == "missing"
             for err in errors
         )
+
+    def test_unknown_rsync_server_reference(self, tmp_path: Path) -> None:
+        p = tmp_path / "bad_server_ref.yaml"
+        p.write_text(
+            "rsync-servers: {}\n"
+            "volumes:\n  v:\n    type: remote\n"
+            "    rsync-server: missing\n"
+            "    path: /x\n"
+            "syncs: {}\n"
+        )
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        cause = excinfo.value.__cause__
+        assert cause is not None
+        assert "unknown rsync-server 'missing'" in str(cause)
 
     def test_unknown_volume_reference(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_ref.yaml"
@@ -176,12 +154,7 @@ class TestLoadConfig:
             load_config(str(p))
         cause = excinfo.value.__cause__
         assert cause is not None
-        errors = cause.errors()
-        assert any(
-            err["loc"] == ("syncs", "s", "destination", "volume_name")
-            and err["type"] == "missing"
-            for err in errors
-        )
+        assert "unknown destination volume" in str(cause)
 
     def test_missing_source_volume(self, tmp_path: Path) -> None:
         p = tmp_path / "no_src_vol.yaml"
@@ -194,12 +167,7 @@ class TestLoadConfig:
             load_config(str(p))
         cause = excinfo.value.__cause__
         assert cause is not None
-        errors = cause.errors()
-        assert any(
-            err["loc"] == ("syncs", "s", "source", "volume_name")
-            and err["type"] == "missing"
-            for err in errors
-        )
+        assert "unknown source volume" in str(cause)
 
     def test_sync_missing_source(self, tmp_path: Path) -> None:
         p = tmp_path / "no_src.yaml"

@@ -58,7 +58,7 @@ def status(
             }
             typer.echo(json.dumps(data, indent=2))
         case OutputFormat.HUMAN:
-            print_human_status(vol_statuses, sync_statuses)
+            print_human_status(vol_statuses, sync_statuses, cfg)
 
 
 @app.command()

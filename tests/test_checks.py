@@ -16,6 +16,7 @@ from ssb.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
+    RsyncServer,
     SyncConfig,
     SyncEndpoint,
 )
@@ -26,17 +27,38 @@ from ssb.status import (
 )
 
 
+def _remote_config(
+    vol_name: str = "nas",
+    server_name: str = "nas-server",
+    host: str = "nas.local",
+    path: str = "/backup",
+) -> tuple[RemoteVolume, Config]:
+    server = RsyncServer(name=server_name, host=host)
+    vol = RemoteVolume(
+        name=vol_name,
+        rsync_server=server_name,
+        path=path,
+    )
+    config = Config(
+        rsync_servers={server_name: server},
+        volumes={vol_name: vol},
+    )
+    return vol, config
+
+
 class TestCheckLocalVolume:
     def test_active(self, tmp_path: Path) -> None:
         vol = LocalVolume(name="data", path=str(tmp_path))
         (tmp_path / ".ssb-vol").touch()
-        status = check_volume(vol)
+        config = Config(volumes={"data": vol})
+        status = check_volume(vol, config)
         assert status.active is True
         assert status.reasons == []
 
     def test_inactive(self, tmp_path: Path) -> None:
         vol = LocalVolume(name="data", path=str(tmp_path))
-        status = check_volume(vol)
+        config = Config(volumes={"data": vol})
+        status = check_volume(vol, config)
         assert status.active is False
         assert status.reasons == [VolumeReason.MARKER_NOT_FOUND]
 
@@ -45,17 +67,18 @@ class TestCheckRemoteVolume:
     @patch("ssb.checks.run_remote_command")
     def test_active(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0)
-        vol = RemoteVolume(name="nas", host="nas.local", path="/backup")
-        status = check_volume(vol)
+        vol, config = _remote_config()
+        status = check_volume(vol, config)
         assert status.active is True
         assert status.reasons == []
-        mock_run.assert_called_once_with(vol, "test -f /backup/.ssb-vol")
+        server = config.rsync_servers["nas-server"]
+        mock_run.assert_called_once_with(server, "test -f /backup/.ssb-vol")
 
     @patch("ssb.checks.run_remote_command")
     def test_inactive(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1)
-        vol = RemoteVolume(name="nas", host="nas.local", path="/backup")
-        status = check_volume(vol)
+        vol, config = _remote_config()
+        status = check_volume(vol, config)
         assert status.active is False
         assert status.reasons == [VolumeReason.UNREACHABLE]
 
@@ -65,14 +88,16 @@ class TestCheckCommandAvailableLocal:
     def test_command_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = "/usr/bin/rsync"
         vol = LocalVolume(name="data", path="/mnt/data")
-        assert _check_command_available(vol, "rsync") is True
+        config = Config(volumes={"data": vol})
+        assert _check_command_available(vol, "rsync", config) is True
         mock_which.assert_called_once_with("rsync")
 
     @patch("ssb.checks.shutil.which")
     def test_command_not_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = None
         vol = LocalVolume(name="data", path="/mnt/data")
-        assert _check_command_available(vol, "rsync") is False
+        config = Config(volumes={"data": vol})
+        assert _check_command_available(vol, "rsync", config) is False
         mock_which.assert_called_once_with("rsync")
 
 
@@ -80,16 +105,18 @@ class TestCheckCommandAvailableRemote:
     @patch("ssb.checks.run_remote_command")
     def test_command_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0)
-        vol = RemoteVolume(name="nas", host="nas.local", path="/backup")
-        assert _check_command_available(vol, "rsync") is True
-        mock_run.assert_called_once_with(vol, "which rsync")
+        vol, config = _remote_config()
+        assert _check_command_available(vol, "rsync", config) is True
+        server = config.rsync_servers["nas-server"]
+        mock_run.assert_called_once_with(server, "which rsync")
 
     @patch("ssb.checks.run_remote_command")
     def test_command_not_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1)
-        vol = RemoteVolume(name="nas", host="nas.local", path="/backup")
-        assert _check_command_available(vol, "btrfs") is False
-        mock_run.assert_called_once_with(vol, "which btrfs")
+        vol, config = _remote_config()
+        assert _check_command_available(vol, "btrfs", config) is False
+        server = config.rsync_servers["nas-server"]
+        mock_run.assert_called_once_with(server, "which btrfs")
 
 
 class TestCheckSync:
@@ -100,10 +127,8 @@ class TestCheckSync:
         dst_vol = LocalVolume(name="dst", path=str(tmp_dst))
         sync = SyncConfig(
             name="s1",
-            source=SyncEndpoint(volume_name="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume_name="dst", subdir="backup"
-            ),
+            source=SyncEndpoint(volume="src", subdir="data"),
+            destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
@@ -111,7 +136,10 @@ class TestCheckSync:
         )
         return config, sync
 
-    @patch("ssb.checks.shutil.which", return_value="/usr/bin/rsync")
+    @patch(
+        "ssb.checks.shutil.which",
+        return_value="/usr/bin/rsync",
+    )
     def test_active_sync(self, mock_which: MagicMock, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
@@ -152,10 +180,8 @@ class TestCheckSync:
         config, _ = self._make_config(src, dst)
         sync = SyncConfig(
             name="s1",
-            source=SyncEndpoint(volume_name="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume_name="dst", subdir="backup"
-            ),
+            source=SyncEndpoint(volume="src", subdir="data"),
+            destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
             enabled=False,
         )
         vol_statuses = {
@@ -285,9 +311,9 @@ class TestCheckSync:
         dst_vol = LocalVolume(name="dst", path=str(dst))
         sync = SyncConfig(
             name="s1",
-            source=SyncEndpoint(volume_name="src", subdir="data"),
+            source=SyncEndpoint(volume="src", subdir="data"),
             destination=DestinationSyncEndpoint(
-                volume_name="dst",
+                volume="dst",
                 subdir="backup",
                 btrfs_snapshots=True,
             ),
@@ -302,7 +328,10 @@ class TestCheckSync:
         assert status.active is False
         assert SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION in status.reasons
 
-    @patch("ssb.checks.shutil.which", return_value="/usr/bin/rsync")
+    @patch(
+        "ssb.checks.shutil.which",
+        return_value="/usr/bin/rsync",
+    )
     def test_btrfs_check_skipped_when_not_enabled(
         self, mock_which: MagicMock, tmp_path: Path
     ) -> None:
@@ -382,16 +411,20 @@ class TestCheckSyncRemoteCommands:
         (dst / "backup").mkdir()
         (dst / "backup" / ".ssb-dst").touch()
 
-        src_vol = RemoteVolume(name="src", host="src.local", path="/data")
+        src_server = RsyncServer(name="src-server", host="src.local")
+        src_vol = RemoteVolume(
+            name="src",
+            rsync_server="src-server",
+            path="/data",
+        )
         dst_vol = LocalVolume(name="dst", path=str(dst))
         sync = SyncConfig(
             name="s1",
-            source=SyncEndpoint(volume_name="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume_name="dst", subdir="backup"
-            ),
+            source=SyncEndpoint(volume="src", subdir="data"),
+            destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
         )
         config = Config(
+            rsync_servers={"src-server": src_server},
             volumes={"src": src_vol, "dst": dst_vol},
             syncs={"s1": sync},
         )
@@ -408,7 +441,7 @@ class TestCheckSyncRemoteCommands:
             ),
         }
 
-        def remote_side_effect(vol: RemoteVolume, cmd: str) -> MagicMock:
+        def remote_side_effect(server: RsyncServer, cmd: str) -> MagicMock:
             if cmd == "test -f /data/data/.ssb-src":
                 return MagicMock(returncode=0)
             if cmd == "which rsync":
@@ -422,7 +455,10 @@ class TestCheckSyncRemoteCommands:
         assert SyncReason.RSYNC_NOT_FOUND_ON_SOURCE in status.reasons
 
     @patch("ssb.checks.run_remote_command")
-    @patch("ssb.checks.shutil.which", return_value="/usr/bin/rsync")
+    @patch(
+        "ssb.checks.shutil.which",
+        return_value="/usr/bin/rsync",
+    )
     def test_rsync_not_found_on_remote_destination(
         self,
         mock_which: MagicMock,
@@ -435,16 +471,20 @@ class TestCheckSyncRemoteCommands:
         (src / "data").mkdir()
         (src / "data" / ".ssb-src").touch()
 
+        dst_server = RsyncServer(name="dst-server", host="dst.local")
         src_vol = LocalVolume(name="src", path=str(src))
-        dst_vol = RemoteVolume(name="dst", host="dst.local", path="/backup")
+        dst_vol = RemoteVolume(
+            name="dst",
+            rsync_server="dst-server",
+            path="/backup",
+        )
         sync = SyncConfig(
             name="s1",
-            source=SyncEndpoint(volume_name="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume_name="dst", subdir="backup"
-            ),
+            source=SyncEndpoint(volume="src", subdir="data"),
+            destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
         )
         config = Config(
+            rsync_servers={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
             syncs={"s1": sync},
         )
@@ -461,7 +501,7 @@ class TestCheckSyncRemoteCommands:
             ),
         }
 
-        def remote_side_effect(vol: RemoteVolume, cmd: str) -> MagicMock:
+        def remote_side_effect(server: RsyncServer, cmd: str) -> MagicMock:
             if cmd == "test -f /backup/backup/.ssb-dst":
                 return MagicMock(returncode=0)
             if cmd == "which rsync":
@@ -475,7 +515,10 @@ class TestCheckSyncRemoteCommands:
         assert SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION in status.reasons
 
     @patch("ssb.checks.run_remote_command")
-    @patch("ssb.checks.shutil.which", return_value="/usr/bin/rsync")
+    @patch(
+        "ssb.checks.shutil.which",
+        return_value="/usr/bin/rsync",
+    )
     def test_btrfs_not_found_on_remote_destination(
         self,
         mock_which: MagicMock,
@@ -488,18 +531,24 @@ class TestCheckSyncRemoteCommands:
         (src / "data").mkdir()
         (src / "data" / ".ssb-src").touch()
 
+        dst_server = RsyncServer(name="dst-server", host="dst.local")
         src_vol = LocalVolume(name="src", path=str(src))
-        dst_vol = RemoteVolume(name="dst", host="dst.local", path="/backup")
+        dst_vol = RemoteVolume(
+            name="dst",
+            rsync_server="dst-server",
+            path="/backup",
+        )
         sync = SyncConfig(
             name="s1",
-            source=SyncEndpoint(volume_name="src", subdir="data"),
+            source=SyncEndpoint(volume="src", subdir="data"),
             destination=DestinationSyncEndpoint(
-                volume_name="dst",
+                volume="dst",
                 subdir="backup",
                 btrfs_snapshots=True,
             ),
         )
         config = Config(
+            rsync_servers={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
             syncs={"s1": sync},
         )
@@ -516,7 +565,7 @@ class TestCheckSyncRemoteCommands:
             ),
         }
 
-        def remote_side_effect(vol: RemoteVolume, cmd: str) -> MagicMock:
+        def remote_side_effect(server: RsyncServer, cmd: str) -> MagicMock:
             if cmd == "test -f /backup/backup/.ssb-dst":
                 return MagicMock(returncode=0)
             if cmd == "which rsync":
@@ -533,7 +582,10 @@ class TestCheckSyncRemoteCommands:
 
 
 class TestCheckAllSyncs:
-    @patch("ssb.checks.shutil.which", return_value="/usr/bin/rsync")
+    @patch(
+        "ssb.checks.shutil.which",
+        return_value="/usr/bin/rsync",
+    )
     def test_check_all(self, mock_which: MagicMock, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
@@ -548,8 +600,8 @@ class TestCheckAllSyncs:
         dst_vol = LocalVolume(name="dst", path=str(dst))
         sync = SyncConfig(
             name="s1",
-            source=SyncEndpoint(volume_name="src"),
-            destination=DestinationSyncEndpoint(volume_name="dst"),
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},

@@ -13,6 +13,7 @@ from ssb.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
+    RsyncServer,
     SyncConfig,
     SyncEndpoint,
 )
@@ -29,21 +30,26 @@ runner = CliRunner()
 
 def _sample_config() -> Config:
     src = LocalVolume(name="local-data", path="/mnt/data")
-    dst = RemoteVolume(
-        name="nas",
+    nas_server = RsyncServer(
+        name="nas-server",
         host="nas.example.com",
-        path="/volume1/backups",
         port=5022,
         user="backup",
     )
+    dst = RemoteVolume(
+        name="nas",
+        rsync_server="nas-server",
+        path="/volume1/backups",
+    )
     sync = SyncConfig(
         name="photos-to-nas",
-        source=SyncEndpoint(volume_name="local-data", subdir="photos"),
+        source=SyncEndpoint(volume="local-data", subdir="photos"),
         destination=DestinationSyncEndpoint(
-            volume_name="nas", subdir="photos-backup"
+            volume="nas", subdir="photos-backup"
         ),
     )
     return Config(
+        rsync_servers={"nas-server": nas_server},
         volumes={"local-data": src, "nas": dst},
         syncs={"photos-to-nas": sync},
     )
@@ -114,7 +120,13 @@ class TestStatusCommand:
 
         result = runner.invoke(
             app,
-            ["status", "--config", "/fake.yaml", "--output", "json"],
+            [
+                "status",
+                "--config",
+                "/fake.yaml",
+                "--output",
+                "json",
+            ],
         )
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -191,7 +203,8 @@ class TestRunCommand:
         )
 
         result = runner.invoke(
-            app, ["run", "--config", "/fake.yaml", "--dry-run"]
+            app,
+            ["run", "--config", "/fake.yaml", "--dry-run"],
         )
         assert result.exit_code == 0
         assert "dry run" in result.output

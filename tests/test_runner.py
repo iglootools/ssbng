@@ -9,6 +9,7 @@ from ssb.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
+    RsyncServer,
     SyncConfig,
     SyncEndpoint,
 )
@@ -26,8 +27,8 @@ def _make_local_config() -> Config:
     dst = LocalVolume(name="dst", path="/dst")
     sync = SyncConfig(
         name="s1",
-        source=SyncEndpoint(volume_name="src"),
-        destination=DestinationSyncEndpoint(volume_name="dst"),
+        source=SyncEndpoint(volume="src"),
+        destination=DestinationSyncEndpoint(volume="dst"),
     )
     return Config(
         volumes={"src": src, "dst": dst},
@@ -40,9 +41,9 @@ def _make_btrfs_config() -> Config:
     dst = LocalVolume(name="dst", path="/dst")
     sync = SyncConfig(
         name="s1",
-        source=SyncEndpoint(volume_name="src"),
+        source=SyncEndpoint(volume="src"),
         destination=DestinationSyncEndpoint(
-            volume_name="dst",
+            volume="dst",
             btrfs_snapshots=True,
         ),
     )
@@ -53,21 +54,35 @@ def _make_btrfs_config() -> Config:
 
 
 def _make_remote_to_remote_config() -> Config:
+    src_server = RsyncServer(
+        name="src-server", host="src.local", user="srcuser"
+    )
+    dst_server = RsyncServer(
+        name="dst-server", host="dst.local", user="dstuser"
+    )
     src = RemoteVolume(
-        name="src", host="src.local", path="/data", user="srcuser"
+        name="src",
+        rsync_server="src-server",
+        path="/data",
     )
     dst = RemoteVolume(
-        name="dst", host="dst.local", path="/backup", user="dstuser"
+        name="dst",
+        rsync_server="dst-server",
+        path="/backup",
     )
     sync = SyncConfig(
         name="s1",
-        source=SyncEndpoint(volume_name="src"),
+        source=SyncEndpoint(volume="src"),
         destination=DestinationSyncEndpoint(
-            volume_name="dst",
+            volume="dst",
             btrfs_snapshots=True,
         ),
     )
     return Config(
+        rsync_servers={
+            "src-server": src_server,
+            "dst-server": dst_server,
+        },
         volumes={"src": src, "dst": dst},
         syncs={"s1": sync},
     )
@@ -88,8 +103,8 @@ def _active_statuses(
         name: SyncStatus(
             name=name,
             config=sync,
-            source_status=vol_statuses[sync.source.volume_name],
-            destination_status=vol_statuses[sync.destination.volume_name],
+            source_status=vol_statuses[sync.source.volume],
+            destination_status=vol_statuses[sync.destination.volume],
             reasons=[],
         )
         for name, sync in config.syncs.items()
@@ -112,8 +127,8 @@ def _inactive_statuses(
         name: SyncStatus(
             name=name,
             config=sync,
-            source_status=vol_statuses[sync.source.volume_name],
-            destination_status=vol_statuses[sync.destination.volume_name],
+            source_status=vol_statuses[sync.source.volume],
+            destination_status=vol_statuses[sync.destination.volume],
             reasons=[SyncReason.SOURCE_UNAVAILABLE],
         )
         for name, sync in config.syncs.items()

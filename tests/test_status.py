@@ -5,6 +5,7 @@ from ssb.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
+    RsyncServer,
     SyncConfig,
     SyncEndpoint,
 )
@@ -35,36 +36,50 @@ class TestLocalVolume:
             pass
 
 
-class TestRemoteVolume:
+class TestRsyncServer:
     def test_construction_defaults(self) -> None:
-        vol = RemoteVolume(name="nas", host="nas.local", path="/backup")
-        assert vol.name == "nas"
-        assert vol.host == "nas.local"
-        assert vol.path == "/backup"
-        assert vol.port == 22
-        assert vol.user is None
-        assert vol.ssh_key is None
-        assert vol.ssh_options == []
+        server = RsyncServer(name="nas-server", host="nas.local")
+        assert server.name == "nas-server"
+        assert server.host == "nas.local"
+        assert server.port == 22
+        assert server.user is None
+        assert server.ssh_key is None
+        assert server.ssh_options == []
 
     def test_construction_full(self) -> None:
-        vol = RemoteVolume(
-            name="nas",
+        server = RsyncServer(
+            name="nas-server",
             host="nas.local",
-            path="/backup",
             port=2222,
             user="backup",
             ssh_key="~/.ssh/id_rsa",
         )
-        assert vol.port == 2222
-        assert vol.user == "backup"
-        assert vol.ssh_key == "~/.ssh/id_rsa"
+        assert server.port == 2222
+        assert server.user == "backup"
+        assert server.ssh_key == "~/.ssh/id_rsa"
+
+
+class TestRemoteVolume:
+    def test_construction(self) -> None:
+        vol = RemoteVolume(
+            name="nas",
+            rsync_server="nas-server",
+            path="/backup",
+        )
+        assert vol.name == "nas"
+        assert vol.rsync_server == "nas-server"
+        assert vol.path == "/backup"
 
     def test_frozen(self) -> None:
         import pydantic
 
-        vol = RemoteVolume(name="nas", host="nas.local", path="/backup")
+        vol = RemoteVolume(
+            name="nas",
+            rsync_server="nas-server",
+            path="/backup",
+        )
         try:
-            vol.host = "other"  # type: ignore[misc]
+            vol.path = "other"  # type: ignore[misc]
             assert False, "Should be frozen"
         except AttributeError, pydantic.ValidationError:
             pass
@@ -72,12 +87,12 @@ class TestRemoteVolume:
 
 class TestSyncEndpoint:
     def test_construction_defaults(self) -> None:
-        ep = SyncEndpoint(volume_name="data")
-        assert ep.volume_name == "data"
+        ep = SyncEndpoint(volume="data")
+        assert ep.volume == "data"
         assert ep.subdir is None
 
     def test_construction_with_subdir(self) -> None:
-        ep = SyncEndpoint(volume_name="data", subdir="photos")
+        ep = SyncEndpoint(volume="data", subdir="photos")
         assert ep.subdir == "photos"
 
 
@@ -85,8 +100,8 @@ class TestSyncConfig:
     def test_construction_defaults(self) -> None:
         sc = SyncConfig(
             name="sync1",
-            source=SyncEndpoint(volume_name="src"),
-            destination=DestinationSyncEndpoint(volume_name="dst"),
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
         )
         assert sc.name == "sync1"
         assert sc.enabled is True
@@ -95,9 +110,9 @@ class TestSyncConfig:
     def test_construction_full(self) -> None:
         sc = SyncConfig(
             name="sync1",
-            source=SyncEndpoint(volume_name="src", subdir="a"),
+            source=SyncEndpoint(volume="src", subdir="a"),
             destination=DestinationSyncEndpoint(
-                volume_name="dst",
+                volume="dst",
                 subdir="b",
                 btrfs_snapshots=True,
             ),
@@ -117,8 +132,8 @@ class TestConfig:
         vol = LocalVolume(name="data", path="/mnt/data")
         sync = SyncConfig(
             name="s1",
-            source=SyncEndpoint(volume_name="data"),
-            destination=DestinationSyncEndpoint(volume_name="data"),
+            source=SyncEndpoint(volume="data"),
+            destination=DestinationSyncEndpoint(volume="data"),
         )
         cfg = Config(
             volumes={"data": vol},
@@ -158,8 +173,8 @@ class TestSyncStatus:
         )
         sc = SyncConfig(
             name="s1",
-            source=SyncEndpoint(volume_name="data"),
-            destination=DestinationSyncEndpoint(volume_name="data"),
+            source=SyncEndpoint(volume="data"),
+            destination=DestinationSyncEndpoint(volume="data"),
         )
         ss = SyncStatus(
             name="s1",
@@ -179,8 +194,8 @@ class TestSyncStatus:
         )
         sc = SyncConfig(
             name="s1",
-            source=SyncEndpoint(volume_name="data"),
-            destination=DestinationSyncEndpoint(volume_name="data"),
+            source=SyncEndpoint(volume="data"),
+            destination=DestinationSyncEndpoint(volume="data"),
         )
         ss = SyncStatus(
             name="s1",

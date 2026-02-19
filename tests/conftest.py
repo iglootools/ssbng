@@ -11,11 +11,19 @@ from ssb.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
+    RsyncServer,
     SyncConfig,
     SyncEndpoint,
 )
 
 SAMPLE_YAML = """\
+rsync-servers:
+  nas-server:
+    host: nas.example.com
+    port: 5022
+    user: backup
+    ssh-key: ~/.ssh/key
+
 volumes:
   local-data:
     type: local
@@ -23,10 +31,7 @@ volumes:
 
   nas:
     type: remote
-    host: nas.example.com
-    port: 5022
-    user: backup
-    ssh_key: ~/.ssh/key
+    rsync-server: nas-server
     path: /volume1/backups
 
 syncs:
@@ -38,7 +43,7 @@ syncs:
     destination:
       volume: nas
       subdir: photos-backup
-      btrfs_snapshots: false
+      btrfs-snapshots: false
 """
 
 SAMPLE_YAML_MINIMAL = """\
@@ -82,11 +87,10 @@ def local_volume() -> LocalVolume:
 
 
 @pytest.fixture()
-def remote_volume() -> RemoteVolume:
-    return RemoteVolume(
-        name="nas",
+def rsync_server() -> RsyncServer:
+    return RsyncServer(
+        name="nas-server",
         host="nas.example.com",
-        path="/volume1/backups",
         port=5022,
         user="backup",
         ssh_key="~/.ssh/key",
@@ -94,19 +98,41 @@ def remote_volume() -> RemoteVolume:
 
 
 @pytest.fixture()
+def rsync_server_minimal() -> RsyncServer:
+    return RsyncServer(
+        name="nas2-server",
+        host="nas2.example.com",
+    )
+
+
+@pytest.fixture()
+def remote_volume() -> RemoteVolume:
+    return RemoteVolume(
+        name="nas",
+        rsync_server="nas-server",
+        path="/volume1/backups",
+    )
+
+
+@pytest.fixture()
 def remote_volume_minimal() -> RemoteVolume:
     return RemoteVolume(
         name="nas2",
-        host="nas2.example.com",
+        rsync_server="nas2-server",
         path="/backups",
     )
 
 
 @pytest.fixture()
 def sample_config(
-    local_volume: LocalVolume, remote_volume: RemoteVolume
+    local_volume: LocalVolume,
+    remote_volume: RemoteVolume,
+    rsync_server: RsyncServer,
 ) -> Config:
     return Config(
+        rsync_servers={
+            "nas-server": rsync_server,
+        },
         volumes={
             "local-data": local_volume,
             "nas": remote_volume,
@@ -114,9 +140,9 @@ def sample_config(
         syncs={
             "photos-to-nas": SyncConfig(
                 name="photos-to-nas",
-                source=SyncEndpoint(volume_name="local-data", subdir="photos"),
+                source=SyncEndpoint(volume="local-data", subdir="photos"),
                 destination=DestinationSyncEndpoint(
-                    volume_name="nas",
+                    volume="nas",
                     subdir="photos-backup",
                     btrfs_snapshots=False,
                 ),

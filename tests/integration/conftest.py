@@ -12,7 +12,7 @@ from typing import Any, Generator
 
 import pytest
 
-from ssb.config import RemoteVolume
+from ssb.config import RemoteVolume, RsyncServer
 
 DOCKER_COMPOSE_DIR = Path(__file__).parent / "docker"
 
@@ -82,7 +82,14 @@ def docker_container(
 
     # Build and start the container
     subprocess.run(
-        ["docker", "compose", "up", "-d", "--build", "--wait"],
+        [
+            "docker",
+            "compose",
+            "up",
+            "-d",
+            "--build",
+            "--wait",
+        ],
         cwd=str(DOCKER_COMPOSE_DIR),
         env=env,
         capture_output=True,
@@ -162,12 +169,13 @@ def _wait_for_ssh(info: dict[str, Any], timeout: int = 30) -> None:
 
 
 @pytest.fixture(scope="session")
-def remote_volume(docker_container: dict[str, Any]) -> RemoteVolume:
-    """RemoteVolume pointing at /data on the container."""
-    return RemoteVolume(
-        name="test-remote",
+def rsync_server(
+    docker_container: dict[str, Any],
+) -> RsyncServer:
+    """RsyncServer pointing at the Docker container."""
+    return RsyncServer(
+        name="test-server",
         host=docker_container["host"],
-        path="/data",
         port=docker_container["port"],
         user=docker_container["user"],
         ssh_key=docker_container["private_key"],
@@ -179,19 +187,22 @@ def remote_volume(docker_container: dict[str, Any]) -> RemoteVolume:
 
 
 @pytest.fixture(scope="session")
-def remote_btrfs_volume(docker_container: dict[str, Any]) -> RemoteVolume:
+def remote_volume() -> RemoteVolume:
+    """RemoteVolume pointing at /data on the container."""
+    return RemoteVolume(
+        name="test-remote",
+        rsync_server="test-server",
+        path="/data",
+    )
+
+
+@pytest.fixture(scope="session")
+def remote_btrfs_volume() -> RemoteVolume:
     """RemoteVolume pointing at /mnt/btrfs on the container."""
     return RemoteVolume(
         name="test-btrfs",
-        host=docker_container["host"],
+        rsync_server="test-server",
         path="/mnt/btrfs",
-        port=docker_container["port"],
-        user=docker_container["user"],
-        ssh_key=docker_container["private_key"],
-        ssh_options=[
-            "StrictHostKeyChecking=no",
-            "UserKnownHostsFile=/dev/null",
-        ],
     )
 
 
@@ -223,7 +234,9 @@ def ssh_exec(
 
 
 def create_markers(
-    docker_info: dict[str, Any], path: str, markers: list[str]
+    docker_info: dict[str, Any],
+    path: str,
+    markers: list[str],
 ) -> None:
     """Create marker files on the container via SSH."""
     for marker in markers:
@@ -248,7 +261,10 @@ def _cleanup_remote(
 
     # Clean /data paths
     ssh_exec(docker_container, "rm -rf /data/src/* /data/latest/*")
-    ssh_exec(docker_container, "find /data -name '.ssb-*' -delete")
+    ssh_exec(
+        docker_container,
+        "find /data -name '.ssb-*' -delete",
+    )
     # Recreate latest in case it was removed
     ssh_exec(docker_container, "mkdir -p /data/latest")
     # Remove any subdir structures created by tests
@@ -258,7 +274,8 @@ def _cleanup_remote(
         " ! -name src ! -name latest -exec rm -rf {} +",
     )
 
-    # Clean btrfs paths — delete snapshot subvolumes first, then latest
+    # Clean btrfs paths — delete snapshot subvolumes first,
+    # then latest
     snapshots_result = ssh_exec(
         docker_container,
         "ls /mnt/btrfs/snapshots 2>/dev/null || true",
