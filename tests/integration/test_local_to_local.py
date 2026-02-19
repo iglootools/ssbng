@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ssb.model import (
+from ssb.config import (
     Config,
     LocalVolume,
     SyncConfig,

@@ -4,14 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .model import (
+from .config import (
     Config,
     LocalVolume,
     RemoteVolume,
     SyncConfig,
+    Volume,
+)
+from .model import (
     SyncReason,
     SyncStatus,
-    Volume,
     VolumeReason,
     VolumeStatus,
 )

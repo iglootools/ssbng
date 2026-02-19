@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from ssb.model import RemoteVolume
+from ssb.config import RemoteVolume
 from ssb.ssh import (
     build_ssh_base_args,
     build_ssh_e_option,

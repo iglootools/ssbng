@@ -1,12 +1,14 @@
 """Tests for ssb.model."""
 
-from ssb.model import (
+from ssb.config import (
     Config,
     LocalVolume,
-    OutputFormat,
     RemoteVolume,
     SyncConfig,
     SyncEndpoint,
+)
+from ssb.model import (
+    OutputFormat,
     SyncReason,
     SyncResult,
     SyncStatus,

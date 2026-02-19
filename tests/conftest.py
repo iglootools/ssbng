@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from ssb.model import (
+from ssb.config import (
     Config,
     LocalVolume,
     RemoteVolume,

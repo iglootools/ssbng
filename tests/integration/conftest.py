@@ -12,7 +12,7 @@ from typing import Any, Generator
 
 import pytest
 
-from ssb.model import RemoteVolume
+from ssb.config import RemoteVolume
 
 DOCKER_COMPOSE_DIR = Path(__file__).parent / "docker"
 

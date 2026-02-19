@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 
-from .model import (
+from .config import (
     Config,
     LocalVolume,
     RemoteVolume,

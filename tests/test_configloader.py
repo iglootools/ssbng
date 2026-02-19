@@ -1,4 +1,4 @@
-"""Tests for ssb.config."""
+"""Tests for ssb.configloader."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from ssb.config import ConfigError, find_config_file, load_config
-from ssb.model import LocalVolume, RemoteVolume
+from ssb.config import LocalVolume, RemoteVolume
+from ssb.configloader import ConfigError, find_config_file, load_config
 
 
 class TestFindConfigFile:

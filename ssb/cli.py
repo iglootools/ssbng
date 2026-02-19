@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-import dataclasses
 import json
 from typing import Annotated, Optional
 
 import typer
 
 from .checks import check_all_syncs
-from .config import ConfigError, load_config
+from .config import LocalVolume, RemoteVolume
+from .configloader import ConfigError, load_config
 from .model import (
-    LocalVolume,
     OutputFormat,
-    RemoteVolume,
     SyncResult,
     SyncStatus,
     VolumeStatus,
@@ -63,7 +61,7 @@ def status(
 ) -> None:
     """Show status of volumes and syncs."""
     cfg = _load_or_exit(config)
-    from .model import Config
+    from .config import Config
 
     assert isinstance(cfg, Config)
     vol_statuses, sync_statuses = check_all_syncs(cfg)
@@ -133,7 +131,7 @@ def run(
 ) -> None:
     """Run backup syncs."""
     cfg = _load_or_exit(config)
-    from .model import Config
+    from .config import Config
 
     assert isinstance(cfg, Config)
 

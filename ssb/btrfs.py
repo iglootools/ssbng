@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from datetime import datetime, timezone
 
-from .model import Config, RemoteVolume, SyncConfig
+from .config import Config, RemoteVolume, SyncConfig
 from .ssh import run_remote_command
 
 
@@ -17,7 +17,12 @@ def _resolve_dest_path(sync: SyncConfig, config: Config) -> str:
     return vol.path
 
 
-def create_snapshot(sync: SyncConfig, config: Config, *, now=None) -> str:
+def create_snapshot(
+    sync: SyncConfig,
+    config: Config,
+    *,
+    now: datetime | None = None,
+) -> str:
     """Create a read-only btrfs snapshot of latest/ into snapshots/.
 
     Returns the snapshot path.

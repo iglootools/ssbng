@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from ssb.model import (
+from ssb.config import (
     Config,
     LocalVolume,
     RemoteVolume,

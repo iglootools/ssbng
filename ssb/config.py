@@ -1,56 +1,93 @@
-"""YAML configuration loading, parsing, and validation."""
-
 from __future__ import annotations
 
-import os
-from pathlib import Path
-from typing import Any
+from typing import Any, Annotated, Dict, List, Literal, Optional, Union
 
-import yaml
-
-from .model import Config
-
-
-class ConfigError(Exception):
-    """Raised when configuration is invalid."""
+from pydantic import (
+    BaseModel,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 
-def find_config_file(config_path: str | None = None) -> Path:
-    """Find the configuration file using search order.
-
-    Order: explicit path > XDG_CONFIG_HOME > /etc/ssb/
-    """
-    if config_path is not None:
-        p = Path(config_path)
-        if not p.is_file():
-            raise ConfigError(f"Config file not found: {config_path}")
-        return p
-
-    xdg = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
-    xdg_path = Path(xdg) / "ssb" / "config.yaml"
-    if xdg_path.is_file():
-        return xdg_path
-
-    etc_path = Path("/etc/ssb/config.yaml")
-    if etc_path.is_file():
-        return etc_path
-
-    raise ConfigError(
-        "No config file found. Searched: " f"{xdg_path}, /etc/ssb/config.yaml"
-    )
+class LocalVolume(BaseModel):
+    model_config = {"frozen": True}
+    type: Literal["local"] = "local"
+    """A local filesystem volume."""
+    name: str = Field(..., min_length=1)
+    path: str = Field(..., min_length=1)
 
 
-def load_config(config_path: str | None = None) -> Config:
-    """Load and validate configuration from a YAML file."""
-    path = find_config_file(config_path)
-    with open(path) as f:
-        raw = yaml.safe_load(f)
+class RemoteVolume(BaseModel):
+    model_config = {"frozen": True}
+    type: Literal["remote"] = "remote"
+    """A remote volume accessible via SSH."""
+    name: str = Field(..., min_length=1)
+    host: str = Field(..., min_length=1)
+    path: str = Field(..., min_length=1)
+    port: int = Field(22, ge=1, le=65535)
+    user: Optional[str] = None
+    ssh_key: Optional[str] = None
+    ssh_options: List[str] = Field(default_factory=list)
 
-    if not isinstance(raw, dict):
-        raise ConfigError("Config file must be a YAML mapping")
 
-    try:
-        config = Config.model_validate(raw)
-    except Exception as e:
-        raise ConfigError(f"Config validation error") from e
-    return config
+Volume = Annotated[
+    Union[LocalVolume, RemoteVolume], Field(discriminator="type")
+]
+
+
+class SyncEndpoint(BaseModel):
+    """A sync endpoint referencing a volume by name."""
+
+    volume_name: str = Field(..., min_length=1)
+    subdir: Optional[str] = None
+
+
+class SyncConfig(BaseModel):
+    """Configuration for a single sync operation."""
+
+    name: str = Field(..., min_length=1)
+    source: SyncEndpoint
+    destination: SyncEndpoint
+    enabled: bool = True
+    btrfs_snapshots: bool = False
+
+
+class Config(BaseModel):
+    """Top-level SSB configuration."""
+
+    volumes: Dict[str, Volume] = Field(default_factory=dict)
+
+    # The volume name is the key in the volumes dict,
+    # but we also want it as a field in the Volume objects.
+    @field_validator("volumes", mode="before")
+    @classmethod
+    def inject_volume_names(cls, v: Any, info: ValidationInfo) -> Any:
+        result = {}
+        for volume_name, volume_data in v.items():
+            # Inject the name if not present
+            if "name" not in volume_data:
+                volume_data = dict(volume_data)
+                volume_data["name"] = volume_name
+            result[volume_name] = volume_data
+        return result
+
+    syncs: Dict[str, SyncConfig] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_cross_references(self) -> Config:
+        for sync_name, sync in self.syncs.items():
+            if sync.source.volume_name not in self.volumes:
+                src = sync.source.volume_name
+                raise ValueError(
+                    f"Sync '{sync_name}' references "
+                    f"unknown source volume '{src}'"
+                )
+            if sync.destination.volume_name not in self.volumes:
+                dst = sync.destination.volume_name
+                raise ValueError(
+                    f"Sync '{sync_name}' references "
+                    f"unknown destination volume '{dst}'"
+                )
+        return self

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 
-from .model import RemoteVolume
+from .config import RemoteVolume
 
 
 def build_ssh_base_args(volume: RemoteVolume) -> list[str]:

@@ -8,12 +8,14 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from ssb.cli import app
-from ssb.model import (
+from ssb.config import (
     Config,
     LocalVolume,
     RemoteVolume,
     SyncConfig,
     SyncEndpoint,
+)
+from ssb.model import (
     SyncReason,
     SyncResult,
     SyncStatus,
@@ -269,7 +271,7 @@ class TestConfigError:
     @patch(
         "ssb.cli.load_config",
         side_effect=__import__(
-            "ssb.config", fromlist=["ConfigError"]
+            "ssb.configloader", fromlist=["ConfigError"]
         ).ConfigError("bad config"),
     )
     def test_status_config_error(self, mock_load: MagicMock) -> None:
@@ -279,7 +281,7 @@ class TestConfigError:
     @patch(
         "ssb.cli.load_config",
         side_effect=__import__(
-            "ssb.config", fromlist=["ConfigError"]
+            "ssb.configloader", fromlist=["ConfigError"]
         ).ConfigError("bad config"),
     )
     def test_run_config_error(self, mock_load: MagicMock) -> None:

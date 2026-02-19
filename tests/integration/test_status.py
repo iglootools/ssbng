@@ -8,14 +8,14 @@ from typing import Any
 import pytest
 
 from ssb.checks import check_sync, check_volume
-from ssb.model import (
+from ssb.config import (
     Config,
     LocalVolume,
     RemoteVolume,
     SyncConfig,
     SyncEndpoint,
-    SyncReason,
 )
+from ssb.model import SyncReason
 
 from .conftest import create_markers
 

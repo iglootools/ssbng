@@ -10,12 +10,14 @@ from ssb.checks import (
     check_sync,
     check_volume,
 )
-from ssb.model import (
+from ssb.config import (
     Config,
     LocalVolume,
     RemoteVolume,
     SyncConfig,
     SyncEndpoint,
+)
+from ssb.model import (
     SyncReason,
     VolumeReason,
     VolumeStatus,
