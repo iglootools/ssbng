@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from ssb.checks import check_sync, check_volume
+from ssb.status import check_sync, check_volume
 from ssb.config import (
     Config,
     DestinationSyncEndpoint,

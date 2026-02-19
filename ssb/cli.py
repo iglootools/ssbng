@@ -7,7 +7,7 @@ from typing import Annotated, Optional
 
 import typer
 
-from .checks import check_all_syncs
+from .status import check_all_syncs
 from .configloader import ConfigError, load_config
 from .output import (
     OutputFormat,

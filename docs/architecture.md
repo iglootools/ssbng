@@ -3,7 +3,7 @@
 SSB is an rsync-based backup tool. The execution flow is:
 
 ```
-CLI (cli.py) → Runner (runner.py) → Checks (checks.py) + Rsync (rsync.py) + Btrfs (btrfs.py)
+CLI (cli.py) → Runner (runner.py) → Status (status.py) + Rsync (rsync.py) + Btrfs (btrfs.py)
                                          ↓                    ↓                    ↓
                                     SSH (ssh.py)          SSH (ssh.py)         SSH (ssh.py)
 

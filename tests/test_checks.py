@@ -1,16 +1,10 @@
-"""Tests for ssb.checks."""
+"""Tests for ssb.status check functions."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from ssb.checks import (
-    check_all_syncs,
-    check_sync,
-    check_volume,
-    _check_command_available,
-)
 from ssb.config import (
     Config,
     DestinationSyncEndpoint,
@@ -24,6 +18,10 @@ from ssb.status import (
     SyncReason,
     VolumeReason,
     VolumeStatus,
+    _check_command_available,
+    check_all_syncs,
+    check_sync,
+    check_volume,
 )
 
 
@@ -64,7 +62,7 @@ class TestCheckLocalVolume:
 
 
 class TestCheckRemoteVolume:
-    @patch("ssb.checks.run_remote_command")
+    @patch("ssb.status.run_remote_command")
     def test_active(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0)
         vol, config = _remote_config()
@@ -76,7 +74,7 @@ class TestCheckRemoteVolume:
             server, ["test", "-f", "/backup/.ssb-vol"]
         )
 
-    @patch("ssb.checks.run_remote_command")
+    @patch("ssb.status.run_remote_command")
     def test_inactive(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1)
         vol, config = _remote_config()
@@ -86,7 +84,7 @@ class TestCheckRemoteVolume:
 
 
 class TestCheckCommandAvailableLocal:
-    @patch("ssb.checks.shutil.which")
+    @patch("ssb.status.shutil.which")
     def test_command_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = "/usr/bin/rsync"
         vol = LocalVolume(name="data", path="/mnt/data")
@@ -94,7 +92,7 @@ class TestCheckCommandAvailableLocal:
         assert _check_command_available(vol, "rsync", config) is True
         mock_which.assert_called_once_with("rsync")
 
-    @patch("ssb.checks.shutil.which")
+    @patch("ssb.status.shutil.which")
     def test_command_not_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = None
         vol = LocalVolume(name="data", path="/mnt/data")
@@ -104,7 +102,7 @@ class TestCheckCommandAvailableLocal:
 
 
 class TestCheckCommandAvailableRemote:
-    @patch("ssb.checks.run_remote_command")
+    @patch("ssb.status.run_remote_command")
     def test_command_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0)
         vol, config = _remote_config()
@@ -112,7 +110,7 @@ class TestCheckCommandAvailableRemote:
         server = config.rsync_servers["nas-server"]
         mock_run.assert_called_once_with(server, ["which", "rsync"])
 
-    @patch("ssb.checks.run_remote_command")
+    @patch("ssb.status.run_remote_command")
     def test_command_not_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1)
         vol, config = _remote_config()
@@ -139,7 +137,7 @@ class TestCheckSync:
         return config, sync
 
     @patch(
-        "ssb.checks.shutil.which",
+        "ssb.status.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_active_sync(self, mock_which: MagicMock, tmp_path: Path) -> None:
@@ -278,7 +276,7 @@ class TestCheckSync:
             ),
         }
 
-    @patch("ssb.checks.shutil.which", return_value=None)
+    @patch("ssb.status.shutil.which", return_value=None)
     def test_rsync_not_found_on_source(
         self, mock_which: MagicMock, tmp_path: Path
     ) -> None:
@@ -297,7 +295,7 @@ class TestCheckSync:
         assert SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION in status.reasons
 
     @patch(
-        "ssb.checks.shutil.which",
+        "ssb.status.shutil.which",
         side_effect=lambda cmd: ("/usr/bin/rsync" if cmd == "rsync" else None),
     )
     def test_rsync_found_btrfs_not_found_on_destination(
@@ -331,7 +329,7 @@ class TestCheckSync:
         assert SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION in status.reasons
 
     @patch(
-        "ssb.checks.shutil.which",
+        "ssb.status.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_btrfs_check_skipped_when_not_enabled(
@@ -350,7 +348,7 @@ class TestCheckSync:
         assert status.active is True
         assert status.reasons == []
 
-    @patch("ssb.checks.shutil.which", return_value=None)
+    @patch("ssb.status.shutil.which", return_value=None)
     def test_multiple_failures_accumulated(
         self, mock_which: MagicMock, tmp_path: Path
     ) -> None:
@@ -403,7 +401,7 @@ class TestCheckSync:
 
 
 class TestCheckSyncRemoteCommands:
-    @patch("ssb.checks.run_remote_command")
+    @patch("ssb.status.run_remote_command")
     def test_rsync_not_found_on_remote_source(
         self, mock_run: MagicMock, tmp_path: Path
     ) -> None:
@@ -458,9 +456,9 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.RSYNC_NOT_FOUND_ON_SOURCE in status.reasons
 
-    @patch("ssb.checks.run_remote_command")
+    @patch("ssb.status.run_remote_command")
     @patch(
-        "ssb.checks.shutil.which",
+        "ssb.status.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_rsync_not_found_on_remote_destination(
@@ -520,9 +518,9 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION in status.reasons
 
-    @patch("ssb.checks.run_remote_command")
+    @patch("ssb.status.run_remote_command")
     @patch(
-        "ssb.checks.shutil.which",
+        "ssb.status.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_btrfs_not_found_on_remote_destination(
@@ -591,7 +589,7 @@ class TestCheckSyncRemoteCommands:
 
 class TestCheckAllSyncs:
     @patch(
-        "ssb.checks.shutil.which",
+        "ssb.status.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_check_all(self, mock_which: MagicMock, tmp_path: Path) -> None:
@@ -623,7 +621,7 @@ class TestCheckAllSyncs:
 
 
 class TestCheckRemoteVolumeSpaces:
-    @patch("ssb.checks.run_remote_command")
+    @patch("ssb.status.run_remote_command")
     def test_active(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0)
         vol, config = _remote_config(path="/my backup")
