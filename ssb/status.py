@@ -5,8 +5,6 @@ from __future__ import annotations
 import enum
 import shutil
 from pathlib import Path
-from typing import Optional
-
 from pydantic import BaseModel, computed_field
 
 from .config import (
@@ -61,18 +59,6 @@ class SyncStatus(BaseModel):
     @property
     def active(self) -> bool:
         return len(self.reasons) == 0
-
-
-class SyncResult(BaseModel):
-    """Result of running a sync."""
-
-    sync_name: str
-    success: bool
-    dry_run: bool
-    rsync_exit_code: int
-    output: str
-    snapshot_path: Optional[str] = None
-    error: Optional[str] = None
 
 
 def check_volume(volume: Volume, config: Config) -> VolumeStatus:

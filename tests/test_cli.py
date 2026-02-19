@@ -17,9 +17,9 @@ from ssb.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from ssb.runner import SyncResult
 from ssb.status import (
     SyncReason,
-    SyncResult,
     SyncStatus,
     VolumeReason,
     VolumeStatus,

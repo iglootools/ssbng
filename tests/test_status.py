@@ -10,9 +10,9 @@ from ssb.config import (
     SyncEndpoint,
 )
 from ssb.output import OutputFormat
+from ssb.runner import SyncResult
 from ssb.status import (
     SyncReason,
-    SyncResult,
     SyncStatus,
     VolumeReason,
     VolumeStatus,

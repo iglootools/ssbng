@@ -2,13 +2,27 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, Optional
+
+from pydantic import BaseModel
 
 from .btrfs import create_snapshot, get_latest_snapshot
 from .status import check_all_syncs
 from .config import Config
-from .status import SyncResult, SyncStatus
+from .status import SyncStatus
 from .rsync import run_rsync
+
+
+class SyncResult(BaseModel):
+    """Result of running a sync."""
+
+    sync_name: str
+    success: bool
+    dry_run: bool
+    rsync_exit_code: int
+    output: str
+    snapshot_path: Optional[str] = None
+    error: Optional[str] = None
 
 
 def run_all_syncs(

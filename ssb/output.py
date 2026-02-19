@@ -7,7 +7,8 @@ import enum
 import typer
 
 from .config import Config, LocalVolume, RemoteVolume
-from .status import SyncResult, SyncStatus, VolumeStatus
+from .runner import SyncResult
+from .status import SyncStatus, VolumeStatus
 
 
 class OutputFormat(str, enum.Enum):
