@@ -44,6 +44,36 @@ References an rsync server by name and provides the path to the remote volume.
 
 To be considered active, a remote volume must have a `.ssb-vol` file in the root of the volume, and the server must be reachable.
 
+### Filters
+
+A sync can optionally define rsync filters to control which files are included or excluded during the backup. There are three complementary mechanisms:
+
+**Structured rules** — `include` / `exclude` dictionaries that are normalized into rsync filter syntax:
+
+```yaml
+filters:
+  - include: "*.jpg"    # becomes "+ *.jpg"
+  - exclude: "*.tmp"    # becomes "- *.tmp"
+```
+
+**Raw rsync filter strings** — passed directly to rsync's `--filter` option, supporting the full rsync filter syntax:
+
+```yaml
+filters:
+  - "H .git"            # hide .git
+  - "- __pycache__/"    # exclude __pycache__
+```
+
+Structured and raw filters can be mixed freely in the same list. They are applied in order as `--filter=RULE` arguments.
+
+**External filter file** — a path to a file containing rsync filter rules in native rsync syntax, applied via `--filter=merge FILE`:
+
+```yaml
+filter-file: ~/.config/ssb/filters/photos.rules
+```
+
+When both inline `filters` and `filter-file` are present, inline filters are applied first, followed by the filter file.
+
 ### Example Config
 
 ```yaml
@@ -80,7 +110,7 @@ volumes:
     path: /volume2/photos
 
 syncs:
-  # Simple local-to-remote sync
+  # Local-to-remote sync with filters
   photos-to-nas:
     source:
       volume: laptop
@@ -89,6 +119,12 @@ syncs:
       volume: nas-photos
       subdir: photos-backup
     enabled: true               # optional, defaults to true
+    filters:                    # optional rsync filters
+      - include: "*.jpg"        # structured include rule
+      - include: "*.png"
+      - exclude: "*.tmp"        # structured exclude rule
+      - "H .git"                # raw rsync filter string
+    filter-file: ~/.config/ssb/filters/photos.rules  # optional
 
   # Local-to-local sync with btrfs snapshots
   documents-to-usb:

@@ -233,6 +233,134 @@ class TestBuildRsyncCommandRemoteToRemote:
         assert "--dry-run" in inner
 
 
+class TestBuildRsyncCommandFilters:
+    def test_inline_filters(self) -> None:
+        src = LocalVolume(name="src", path="/mnt/src")
+        dst = LocalVolume(name="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+            filters=["+ *.jpg", "- *.tmp"],
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        assert cmd == [
+            "rsync",
+            "-av",
+            "--delete",
+            "--filter=+ *.jpg",
+            "--filter=- *.tmp",
+            "/mnt/src/",
+            "/mnt/dst/latest/",
+        ]
+
+    def test_filter_file(self) -> None:
+        src = LocalVolume(name="src", path="/mnt/src")
+        dst = LocalVolume(name="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+            filter_file="/etc/ssb/filters.rules",
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        assert cmd == [
+            "rsync",
+            "-av",
+            "--delete",
+            "--filter=merge /etc/ssb/filters.rules",
+            "/mnt/src/",
+            "/mnt/dst/latest/",
+        ]
+
+    def test_filters_and_filter_file(self) -> None:
+        src = LocalVolume(name="src", path="/mnt/src")
+        dst = LocalVolume(name="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+            filters=["+ *.jpg"],
+            filter_file="/etc/ssb/filters.rules",
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        assert cmd == [
+            "rsync",
+            "-av",
+            "--delete",
+            "--filter=+ *.jpg",
+            "--filter=merge /etc/ssb/filters.rules",
+            "/mnt/src/",
+            "/mnt/dst/latest/",
+        ]
+
+    def test_remote_to_remote_filters(self) -> None:
+        src_server = RsyncServer(name="src-server", host="src.local")
+        dst_server = RsyncServer(name="dst-server", host="dst.local")
+        src = RemoteVolume(
+            name="src",
+            rsync_server="src-server",
+            path="/data",
+        )
+        dst = RemoteVolume(
+            name="dst",
+            rsync_server="dst-server",
+            path="/backup",
+        )
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+            filters=["+ *.jpg", "- *.tmp"],
+            filter_file="/etc/ssb/filters.rules",
+        )
+        config = Config(
+            rsync_servers={
+                "src-server": src_server,
+                "dst-server": dst_server,
+            },
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        inner = cmd[-1]
+        assert "--filter='+ *.jpg'" in inner
+        assert "--filter='- *.tmp'" in inner
+        assert "--filter='merge /etc/ssb/filters.rules'" in inner
+
+    def test_no_filters(self) -> None:
+        src = LocalVolume(name="src", path="/mnt/src")
+        dst = LocalVolume(name="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        assert not any("--filter" in arg for arg in cmd)
+
+
 class TestRunRsync:
     @patch("ssb.rsync.subprocess.run")
     def test_run_rsync(self, mock_run: MagicMock) -> None:

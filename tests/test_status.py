@@ -106,6 +106,8 @@ class TestSyncConfig:
         assert sc.name == "sync1"
         assert sc.enabled is True
         assert sc.destination.btrfs_snapshots is False
+        assert sc.filters == []
+        assert sc.filter_file is None
 
     def test_construction_full(self) -> None:
         sc = SyncConfig(
@@ -117,9 +119,13 @@ class TestSyncConfig:
                 btrfs_snapshots=True,
             ),
             enabled=False,
+            filters=["+ *.jpg", "- *.tmp"],
+            filter_file="/etc/ssb/filters.rules",
         )
         assert sc.enabled is False
         assert sc.destination.btrfs_snapshots is True
+        assert sc.filters == ["+ *.jpg", "- *.tmp"]
+        assert sc.filter_file == "/etc/ssb/filters.rules"
 
 
 class TestConfig:

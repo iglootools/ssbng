@@ -37,6 +37,26 @@ def _base_rsync_args(dry_run: bool, link_dest: str | None) -> list[str]:
     return args
 
 
+def _filter_args(sync: SyncConfig) -> list[str]:
+    """Build rsync --filter arguments."""
+    args: list[str] = []
+    for rule in sync.filters:
+        args.append(f"--filter={rule}")
+    if sync.filter_file:
+        args.append(f"--filter=merge {sync.filter_file}")
+    return args
+
+
+def _filter_args_inner(sync: SyncConfig) -> list[str]:
+    """Build quoted --filter args for remote-to-remote inner command."""
+    args: list[str] = []
+    for rule in sync.filters:
+        args.append(f"--filter='{rule}'")
+    if sync.filter_file:
+        args.append(f"--filter='merge {sync.filter_file}'")
+    return args
+
+
 def build_rsync_command(
     sync: SyncConfig,
     config: Config,
@@ -70,6 +90,7 @@ def build_rsync_command(
         case (RemoteVolume() as sv, LocalVolume()):
             src_server = config.rsync_servers[sv.rsync_server]
             rsync_args = _base_rsync_args(dry_run, link_dest)
+            rsync_args.extend(_filter_args(sync))
             rsync_args.extend(build_ssh_e_option(src_server))
             rsync_args.append(format_remote_path(src_server, src_path) + "/")
             rsync_args.append(f"{dst_path}/latest/")
@@ -77,6 +98,7 @@ def build_rsync_command(
         case (LocalVolume(), RemoteVolume() as dv):
             dst_server = config.rsync_servers[dv.rsync_server]
             rsync_args = _base_rsync_args(dry_run, link_dest)
+            rsync_args.extend(_filter_args(sync))
             rsync_args.extend(build_ssh_e_option(dst_server))
             rsync_args.append(f"{src_path}/")
             rsync_args.append(
@@ -85,6 +107,7 @@ def build_rsync_command(
             return rsync_args
         case _:
             rsync_args = _base_rsync_args(dry_run, link_dest)
+            rsync_args.extend(_filter_args(sync))
             rsync_args.append(f"{src_path}/")
             rsync_args.append(f"{dst_path}/latest/")
             return rsync_args
@@ -105,6 +128,7 @@ def _build_remote_to_remote(
         inner_rsync_parts.append("--dry-run")
     if link_dest:
         inner_rsync_parts.append(f"--link-dest={link_dest}")
+    inner_rsync_parts.extend(_filter_args_inner(sync))
 
     # SSH options for source host (from destination's perspective)
     src_ssh_parts = ["ssh"]

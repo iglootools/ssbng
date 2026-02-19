@@ -44,6 +44,10 @@ syncs:
       volume: nas
       subdir: photos-backup
       btrfs-snapshots: false
+    filters:
+      - include: "*.jpg"
+      - "- *.tmp"
+    filter-file: ~/.config/ssb/filters/photos.rules
 """
 
 SAMPLE_YAML_MINIMAL = """\
@@ -147,6 +151,8 @@ def sample_config(
                     btrfs_snapshots=False,
                 ),
                 enabled=True,
+                filters=["+ *.jpg", "- *.tmp"],
+                filter_file="~/.config/ssb/filters/photos.rules",
             ),
         },
     )

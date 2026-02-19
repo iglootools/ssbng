@@ -64,6 +64,8 @@ class TestLoadConfig:
         assert sync.destination.subdir == "photos-backup"
         assert sync.enabled is True
         assert sync.destination.btrfs_snapshots is False
+        assert sync.filters == ["+ *.jpg", "- *.tmp"]
+        assert sync.filter_file == "~/.config/ssb/filters/photos.rules"
 
     def test_minimal_config(self, sample_minimal_config_file: Path) -> None:
         cfg = load_config(str(sample_minimal_config_file))
@@ -71,6 +73,8 @@ class TestLoadConfig:
         assert sync.enabled is True
         assert sync.destination.btrfs_snapshots is False
         assert sync.source.subdir is None
+        assert sync.filters == []
+        assert sync.filter_file is None
 
     def test_invalid_yaml(self, tmp_path: Path) -> None:
         p = tmp_path / "bad.yaml"
@@ -184,3 +188,39 @@ class TestLoadConfig:
             err["loc"] == ("syncs", "s", "source") and err["type"] == "missing"
             for err in errors
         )
+
+    def test_filter_normalization(self, tmp_path: Path) -> None:
+        p = tmp_path / "filters.yaml"
+        p.write_text(
+            "volumes:\n"
+            "  v:\n    type: local\n    path: /x\n"
+            "syncs:\n"
+            "  s:\n"
+            "    source:\n      volume: v\n"
+            "    destination:\n      volume: v\n"
+            "    filters:\n"
+            '      - include: "*.jpg"\n'
+            '      - exclude: "*.tmp"\n'
+            '      - "H .git"\n'
+        )
+        cfg = load_config(str(p))
+        sync = cfg.syncs["s"]
+        assert sync.filters == ["+ *.jpg", "- *.tmp", "H .git"]
+
+    def test_invalid_filter_entry(self, tmp_path: Path) -> None:
+        p = tmp_path / "bad_filter.yaml"
+        p.write_text(
+            "volumes:\n"
+            "  v:\n    type: local\n    path: /x\n"
+            "syncs:\n"
+            "  s:\n"
+            "    source:\n      volume: v\n"
+            "    destination:\n      volume: v\n"
+            "    filters:\n"
+            "      - badkey: value\n"
+        )
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        cause = excinfo.value.__cause__
+        assert cause is not None
+        assert "include" in str(cause) or "exclude" in str(cause)
