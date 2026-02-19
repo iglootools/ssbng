@@ -33,7 +33,8 @@ def _resolve_path(
     """Resolve the full path for a volume with optional subdir."""
     if subdir:
         return f"{volume.path}/{subdir}"
-    return volume.path
+    else:
+        return volume.path
 
 
 def _base_rsync_args(
@@ -188,32 +189,32 @@ def run_rsync(
             capture_output=True,
             text=True,
         )
+    else:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
 
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-    )
+        assert proc.stdout is not None
+        output_chunks: list[str] = []
 
-    assert proc.stdout is not None
-    output_chunks: list[str] = []
+        # Stream one character at a time so rsync progress
+        # updates that rely on carriage returns are visible
+        # immediately.
+        while True:
+            ch = proc.stdout.read(1)
+            if ch:
+                output_chunks.append(ch)
+                on_output(ch)
+            elif proc.poll() is not None:
+                break
 
-    # Stream one character at a time so rsync progress updates that rely
-    # on carriage returns are visible immediately.
-    while True:
-        ch = proc.stdout.read(1)
-        if ch:
-            output_chunks.append(ch)
-            on_output(ch)
-            continue
-        if proc.poll() is not None:
-            break
-
-    return subprocess.CompletedProcess(
-        cmd,
-        proc.wait(),
-        stdout="".join(output_chunks),
-        stderr="",
-    )
+        return subprocess.CompletedProcess(
+            cmd,
+            proc.wait(),
+            stdout="".join(output_chunks),
+            stderr="",
+        )

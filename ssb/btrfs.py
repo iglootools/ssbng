@@ -14,7 +14,8 @@ def _resolve_dest_path(sync: SyncConfig, config: Config) -> str:
     vol = config.volumes[sync.destination.volume]
     if sync.destination.subdir:
         return f"{vol.path}/{sync.destination.subdir}"
-    return vol.path
+    else:
+        return vol.path
 
 
 def create_snapshot(
@@ -58,8 +59,8 @@ def create_snapshot(
 
     if result.returncode != 0:
         raise RuntimeError(f"btrfs snapshot failed: {result.stderr}")
-
-    return snapshot_path
+    else:
+        return snapshot_path
 
 
 def get_latest_snapshot(sync: SyncConfig, config: Config) -> str | None:
@@ -81,7 +82,7 @@ def get_latest_snapshot(sync: SyncConfig, config: Config) -> str | None:
 
     if result.returncode != 0 or not result.stdout.strip():
         return None
-
-    entries = sorted(result.stdout.strip().split("\n"))
-    latest = entries[-1]
-    return f"{snapshots_dir}/{latest}"
+    else:
+        entries = sorted(result.stdout.strip().split("\n"))
+        latest = entries[-1]
+        return f"{snapshots_dir}/{latest}"

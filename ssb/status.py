@@ -198,53 +198,58 @@ def check_sync(
             destination_status=dst_status,
             reasons=[SyncReason.DISABLED],
         )
+    else:
+        reasons: list[SyncReason] = []
 
-    reasons: list[SyncReason] = []
+        src_vol = config.volumes[src_vol_name]
+        dst_vol = config.volumes[dst_vol_name]
 
-    src_vol = config.volumes[src_vol_name]
-    dst_vol = config.volumes[dst_vol_name]
+        # Volume availability
+        if not src_status.active:
+            reasons.append(SyncReason.SOURCE_UNAVAILABLE)
 
-    # Volume availability
-    if not src_status.active:
-        reasons.append(SyncReason.SOURCE_UNAVAILABLE)
+        if not dst_status.active:
+            reasons.append(SyncReason.DESTINATION_UNAVAILABLE)
 
-    if not dst_status.active:
-        reasons.append(SyncReason.DESTINATION_UNAVAILABLE)
-
-    # Source checks (only if source volume is active)
-    if src_status.active:
-        if not _check_endpoint_marker(
-            src_vol, sync.source.subdir, ".ssb-src", config
-        ):
-            reasons.append(SyncReason.SOURCE_MARKER_NOT_FOUND)
-        if not _check_command_available(src_vol, "rsync", config):
-            reasons.append(SyncReason.RSYNC_NOT_FOUND_ON_SOURCE)
-
-    # Destination checks (only if destination volume is active)
-    if dst_status.active:
-        if not _check_endpoint_marker(
-            dst_vol, sync.destination.subdir, ".ssb-dst", config
-        ):
-            reasons.append(SyncReason.DESTINATION_MARKER_NOT_FOUND)
-        if not _check_command_available(dst_vol, "rsync", config):
-            reasons.append(SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION)
-        if sync.destination.btrfs_snapshots:
-            if not _check_command_available(dst_vol, "btrfs", config):
-                reasons.append(SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION)
-            elif not _check_btrfs_filesystem(dst_vol, config):
-                reasons.append(SyncReason.DESTINATION_NOT_BTRFS)
-            elif not _check_btrfs_subvolume(
-                dst_vol, sync.destination.subdir, config
+        # Source checks (only if source volume is active)
+        if src_status.active:
+            if not _check_endpoint_marker(
+                src_vol, sync.source.subdir, ".ssb-src", config
             ):
-                reasons.append(SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME)
+                reasons.append(SyncReason.SOURCE_MARKER_NOT_FOUND)
+            if not _check_command_available(src_vol, "rsync", config):
+                reasons.append(SyncReason.RSYNC_NOT_FOUND_ON_SOURCE)
 
-    return SyncStatus(
-        slug=sync.slug,
-        config=sync,
-        source_status=src_status,
-        destination_status=dst_status,
-        reasons=reasons,
-    )
+        # Destination checks (only if destination volume is active)
+        if dst_status.active:
+            if not _check_endpoint_marker(
+                dst_vol,
+                sync.destination.subdir,
+                ".ssb-dst",
+                config,
+            ):
+                reasons.append(SyncReason.DESTINATION_MARKER_NOT_FOUND)
+            if not _check_command_available(dst_vol, "rsync", config):
+                reasons.append(SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION)
+            if sync.destination.btrfs_snapshots:
+                if not _check_command_available(dst_vol, "btrfs", config):
+                    reasons.append(SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION)
+                elif not _check_btrfs_filesystem(dst_vol, config):
+                    reasons.append(SyncReason.DESTINATION_NOT_BTRFS)
+                elif not _check_btrfs_subvolume(
+                    dst_vol,
+                    sync.destination.subdir,
+                    config,
+                ):
+                    reasons.append(SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME)
+
+        return SyncStatus(
+            slug=sync.slug,
+            config=sync,
+            source_status=src_status,
+            destination_status=dst_status,
+            reasons=reasons,
+        )
 
 
 def check_all_syncs(

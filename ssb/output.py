@@ -27,8 +27,9 @@ def _status_text(
     """Format status with optional reasons as styled text."""
     if active:
         return Text("active", style="green")
-    reason_str = ", ".join(r.value for r in reasons)
-    return Text(f"inactive ({reason_str})", style="red")
+    else:
+        reason_str = ", ".join(r.value for r in reasons)
+        return Text(f"inactive ({reason_str})", style="red")
 
 
 def format_volume_display(

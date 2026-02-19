@@ -23,20 +23,24 @@ def find_config_file(config_path: str | None = None) -> Path:
         p = Path(config_path)
         if not p.is_file():
             raise ConfigError(f"Config file not found: {config_path}")
-        return p
-
-    xdg = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
-    xdg_path = Path(xdg) / "ssb" / "config.yaml"
-    if xdg_path.is_file():
-        return xdg_path
-
-    etc_path = Path("/etc/ssb/config.yaml")
-    if etc_path.is_file():
-        return etc_path
-
-    raise ConfigError(
-        "No config file found. Searched: " f"{xdg_path}, /etc/ssb/config.yaml"
-    )
+        else:
+            return p
+    else:
+        xdg = os.environ.get(
+            "XDG_CONFIG_HOME",
+            os.path.expanduser("~/.config"),
+        )
+        xdg_path = Path(xdg) / "ssb" / "config.yaml"
+        etc_path = Path("/etc/ssb/config.yaml")
+        if xdg_path.is_file():
+            return xdg_path
+        elif etc_path.is_file():
+            return etc_path
+        else:
+            raise ConfigError(
+                "No config file found. Searched: "
+                f"{xdg_path}, /etc/ssb/config.yaml"
+            )
 
 
 def load_config(config_path: str | None = None) -> Config:
@@ -47,9 +51,9 @@ def load_config(config_path: str | None = None) -> Config:
 
     if not isinstance(raw, dict):
         raise ConfigError("Config file must be a YAML mapping")
-
-    try:
-        config = Config.model_validate(raw)
-    except Exception as e:
-        raise ConfigError("Config validation error") from e
-    return config
+    else:
+        try:
+            config = Config.model_validate(raw)
+        except Exception as e:
+            raise ConfigError("Config validation error") from e
+        return config

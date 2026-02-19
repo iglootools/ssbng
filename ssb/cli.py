@@ -122,37 +122,37 @@ def run(
             }
             typer.echo(json.dumps(data, indent=2))
         raise typer.Exit(1)
+    else:
+        if output_format is OutputFormat.HUMAN:
+            typer.echo("")
 
-    if output_format is OutputFormat.HUMAN:
-        typer.echo("")
+        stream_output = (
+            (lambda chunk: typer.echo(chunk, nl=False))
+            if output_format is OutputFormat.HUMAN
+            else None
+        )
+        results = run_all_syncs(
+            cfg,
+            sync_statuses,
+            dry_run=dry_run,
+            sync_slugs=sync,
+            verbose=verbose,
+            on_rsync_output=stream_output,
+        )
 
-    stream_output = (
-        (lambda chunk: typer.echo(chunk, nl=False))
-        if output_format is OutputFormat.HUMAN
-        else None
-    )
-    results = run_all_syncs(
-        cfg,
-        sync_statuses,
-        dry_run=dry_run,
-        sync_slugs=sync,
-        verbose=verbose,
-        on_rsync_output=stream_output,
-    )
+        match output_format:
+            case OutputFormat.JSON:
+                data = {
+                    "volumes": [v.model_dump() for v in vol_statuses.values()],
+                    "syncs": [s.model_dump() for s in sync_statuses.values()],
+                    "results": [r.model_dump() for r in results],
+                }
+                typer.echo(json.dumps(data, indent=2))
+            case OutputFormat.HUMAN:
+                print_human_results(results, dry_run)
 
-    match output_format:
-        case OutputFormat.JSON:
-            data = {
-                "volumes": [v.model_dump() for v in vol_statuses.values()],
-                "syncs": [s.model_dump() for s in sync_statuses.values()],
-                "results": [r.model_dump() for r in results],
-            }
-            typer.echo(json.dumps(data, indent=2))
-        case OutputFormat.HUMAN:
-            print_human_results(results, dry_run)
-
-    if any(not r.success for r in results):
-        raise typer.Exit(1)
+        if any(not r.success for r in results):
+            raise typer.Exit(1)
 
 
 def _load_config_or_exit(config_path: str | None) -> Config:

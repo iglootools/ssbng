@@ -42,8 +42,7 @@ def run_all_syncs(
     for slug, status in sync_statuses.items():
         if sync_slugs and slug not in sync_slugs:
             continue
-
-        if not status.active:
+        elif not status.active:
             results.append(
                 SyncResult(
                     sync_slug=slug,
@@ -57,17 +56,16 @@ def run_all_syncs(
                     ),
                 )
             )
-            continue
-
-        result = _run_single_sync(
-            slug,
-            status,
-            config,
-            dry_run,
-            verbose,
-            on_rsync_output,
-        )
-        results.append(result)
+        else:
+            result = _run_single_sync(
+                slug,
+                status,
+                config,
+                dry_run,
+                verbose,
+                on_rsync_output,
+            )
+            results.append(result)
 
     return results
 
@@ -118,27 +116,27 @@ def _run_single_sync(
             output=proc.stdout + proc.stderr,
             error=f"rsync exited with code {proc.returncode}",
         )
+    else:
+        # Create btrfs snapshot if configured and not dry run
+        snapshot_path: str | None = None
+        if sync.destination.btrfs_snapshots and not dry_run:
+            try:
+                snapshot_path = create_snapshot(sync, config)
+            except RuntimeError as e:
+                return SyncResult(
+                    sync_slug=slug,
+                    success=False,
+                    dry_run=dry_run,
+                    rsync_exit_code=proc.returncode,
+                    output=proc.stdout,
+                    error=f"Snapshot failed: {e}",
+                )
 
-    # Create btrfs snapshot if configured and not dry run
-    snapshot_path: str | None = None
-    if sync.destination.btrfs_snapshots and not dry_run:
-        try:
-            snapshot_path = create_snapshot(sync, config)
-        except RuntimeError as e:
-            return SyncResult(
-                sync_slug=slug,
-                success=False,
-                dry_run=dry_run,
-                rsync_exit_code=proc.returncode,
-                output=proc.stdout,
-                error=f"Snapshot failed: {e}",
-            )
-
-    return SyncResult(
-        sync_slug=slug,
-        success=True,
-        dry_run=dry_run,
-        rsync_exit_code=proc.returncode,
-        output=proc.stdout,
-        snapshot_path=snapshot_path,
-    )
+        return SyncResult(
+            sync_slug=slug,
+            success=True,
+            dry_run=dry_run,
+            rsync_exit_code=proc.returncode,
+            output=proc.stdout,
+            snapshot_path=snapshot_path,
+        )
