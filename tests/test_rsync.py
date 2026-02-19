@@ -33,7 +33,7 @@ class TestBuildRsyncCommandLocalToLocal:
         cmd = build_rsync_command(sync, config)
         assert cmd == [
             "rsync",
-            "-av",
+            "-a",
             "--delete",
             "--delete-excluded",
             "--safe-links",
@@ -107,7 +107,7 @@ class TestBuildRsyncCommandLocalToRemote:
         cmd = build_rsync_command(sync, config)
         assert cmd == [
             "rsync",
-            "-av",
+            "-a",
             "--delete",
             "--delete-excluded",
             "--safe-links",
@@ -145,7 +145,7 @@ class TestBuildRsyncCommandRemoteToLocal:
         cmd = build_rsync_command(sync, config)
         assert cmd == [
             "rsync",
-            "-av",
+            "-a",
             "--delete",
             "--delete-excluded",
             "--safe-links",
@@ -202,7 +202,7 @@ class TestBuildRsyncCommandRemoteToRemote:
 
         # Inner command should be the last arg
         inner = cmd[-1]
-        assert inner.startswith("rsync -av --delete")
+        assert inner.startswith("rsync -a --delete")
         assert "--delete-excluded" in inner
         assert "--safe-links" in inner
         assert "-e 'ssh -p 2222'" in inner
@@ -259,7 +259,7 @@ class TestBuildRsyncCommandFilters:
         cmd = build_rsync_command(sync, config)
         assert cmd == [
             "rsync",
-            "-av",
+            "-a",
             "--delete",
             "--delete-excluded",
             "--safe-links",
@@ -286,7 +286,7 @@ class TestBuildRsyncCommandFilters:
         cmd = build_rsync_command(sync, config)
         assert cmd == [
             "rsync",
-            "-av",
+            "-a",
             "--delete",
             "--delete-excluded",
             "--safe-links",
@@ -313,7 +313,7 @@ class TestBuildRsyncCommandFilters:
         cmd = build_rsync_command(sync, config)
         assert cmd == [
             "rsync",
-            "-av",
+            "-a",
             "--delete",
             "--delete-excluded",
             "--safe-links",
@@ -415,7 +415,7 @@ class TestBuildRsyncCommandOptions:
         cmd = build_rsync_command(sync, config)
         assert cmd == [
             "rsync",
-            "-av",
+            "-a",
             "--delete",
             "--delete-excluded",
             "--safe-links",
@@ -514,7 +514,7 @@ class TestBuildRsyncCommandOptions:
         inner = cmd[-1]
         assert "--compress" in inner
         assert inner.startswith(
-            "rsync -av --delete --delete-excluded --safe-links" " --compress"
+            "rsync -a --delete --delete-excluded --safe-links" " --compress"
         )
 
 
@@ -537,7 +537,7 @@ class TestBuildRsyncCommandSpacesInPaths:
         cmd = build_rsync_command(sync, config)
         assert cmd == [
             "rsync",
-            "-av",
+            "-a",
             "--delete",
             "--delete-excluded",
             "--safe-links",
@@ -588,6 +588,80 @@ class TestBuildRsyncCommandSpacesInPaths:
         # Paths with spaces must be shlex-quoted
         assert "'srcuser@src.local:/my data/my photos/'" in inner
         assert "'/my backup/my dest/latest/'" in inner
+
+
+class TestBuildRsyncCommandVerbose:
+    def _simple_config(self) -> tuple[SyncConfig, Config]:
+        src = LocalVolume(name="src", path="/mnt/src")
+        dst = LocalVolume(name="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+        return sync, config
+
+    def test_no_verbose(self) -> None:
+        sync, config = self._simple_config()
+        cmd = build_rsync_command(sync, config)
+        assert "-v" not in cmd
+        assert "-vv" not in cmd
+        assert "-vvv" not in cmd
+
+    def test_verbose_1(self) -> None:
+        sync, config = self._simple_config()
+        cmd = build_rsync_command(sync, config, verbose=1)
+        assert "-v" in cmd
+
+    def test_verbose_2(self) -> None:
+        sync, config = self._simple_config()
+        cmd = build_rsync_command(sync, config, verbose=2)
+        assert "-vv" in cmd
+
+    def test_verbose_3(self) -> None:
+        sync, config = self._simple_config()
+        cmd = build_rsync_command(sync, config, verbose=3)
+        assert "-vvv" in cmd
+
+    def test_verbose_clamped_to_3(self) -> None:
+        sync, config = self._simple_config()
+        cmd = build_rsync_command(sync, config, verbose=5)
+        assert "-vvv" in cmd
+
+    def test_remote_to_remote_verbose(self) -> None:
+        src_server = RsyncServer(name="src-server", host="src.local")
+        dst_server = RsyncServer(name="dst-server", host="dst.local")
+        src = RemoteVolume(
+            name="src",
+            rsync_server="src-server",
+            path="/data",
+        )
+        dst = RemoteVolume(
+            name="dst",
+            rsync_server="dst-server",
+            path="/backup",
+        )
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            rsync_servers={
+                "src-server": src_server,
+                "dst-server": dst_server,
+            },
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config, verbose=2)
+        inner = cmd[-1]
+        assert "-vv" in inner
 
 
 class TestRunRsync:

@@ -79,6 +79,15 @@ def run(
         str,
         typer.Option("--output", help="Output format: human or json"),
     ] = "human",
+    verbose: Annotated[
+        int,
+        typer.Option(
+            "--verbose",
+            "-v",
+            count=True,
+            help="Increase rsync verbosity (-v, -vv, -vvv)",
+        ),
+    ] = 0,
 ) -> None:
     """Run backup syncs."""
     cfg = _load_or_exit(config)
@@ -87,7 +96,7 @@ def run(
     assert isinstance(cfg, Config)
 
     sync_statuses, results = run_all_syncs(
-        cfg, dry_run=dry_run, sync_names=sync
+        cfg, dry_run=dry_run, sync_names=sync, verbose=verbose
     )
 
     match OutputFormat(output):

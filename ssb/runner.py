@@ -13,6 +13,7 @@ def run_all_syncs(
     config: Config,
     dry_run: bool = False,
     sync_names: list[str] | None = None,
+    verbose: int = 0,
 ) -> tuple[dict[str, SyncStatus], list[SyncResult]]:
     """Run all (or selected) syncs.
 
@@ -42,7 +43,7 @@ def run_all_syncs(
             )
             continue
 
-        result = _run_single_sync(name, status, config, dry_run)
+        result = _run_single_sync(name, status, config, dry_run, verbose)
         results.append(result)
 
     return sync_statuses, results
@@ -53,6 +54,7 @@ def _run_single_sync(
     status: SyncStatus,
     config: Config,
     dry_run: bool,
+    verbose: int = 0,
 ) -> SyncResult:
     """Run a single sync operation."""
     sync = status.config
@@ -65,7 +67,13 @@ def _run_single_sync(
             link_dest = f"../../snapshots/{latest.rsplit('/', 1)[-1]}"
 
     try:
-        proc = run_rsync(sync, config, dry_run=dry_run, link_dest=link_dest)
+        proc = run_rsync(
+            sync,
+            config,
+            dry_run=dry_run,
+            link_dest=link_dest,
+            verbose=verbose,
+        )
     except Exception as e:
         return SyncResult(
             sync_name=name,

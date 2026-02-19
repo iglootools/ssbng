@@ -279,6 +279,32 @@ class TestRunCommand:
         call_kwargs = mock_run.call_args
         assert call_kwargs.kwargs.get("sync_names") == ["photos-to-nas"]
 
+    @patch("ssb.cli.run_all_syncs")
+    @patch("ssb.cli.load_config")
+    def test_verbose(self, mock_load: MagicMock, mock_run: MagicMock) -> None:
+        config = _sample_config()
+        mock_load.return_value = config
+        mock_run.return_value = (
+            {},
+            [
+                SyncResult(
+                    sync_name="photos-to-nas",
+                    success=True,
+                    dry_run=False,
+                    rsync_exit_code=0,
+                    output="",
+                )
+            ],
+        )
+
+        result = runner.invoke(
+            app,
+            ["run", "--config", "/fake.yaml", "-v", "-v"],
+        )
+        assert result.exit_code == 0
+        call_kwargs = mock_run.call_args
+        assert call_kwargs.kwargs.get("verbose") == 2
+
 
 class TestConfigError:
     @patch(
