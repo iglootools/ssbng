@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 from unittest.mock import MagicMock, patch
 
 from ssb.config import (
@@ -685,3 +686,34 @@ class TestRunRsync:
         result = run_rsync(sync, config)
         assert result.returncode == 0
         mock_run.assert_called_once()
+
+    @patch("ssb.rsync.subprocess.Popen")
+    def test_run_rsync_streams_output(self, mock_popen: MagicMock) -> None:
+        src = LocalVolume(name="src", path="/src")
+        dst = LocalVolume(name="dst", path="/dst")
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        streamed = "sending incremental file list\r\nfile.txt\n"
+        proc = MagicMock()
+        proc.stdout = io.StringIO(streamed)
+        proc.poll.side_effect = lambda: (
+            0 if proc.stdout.tell() == len(streamed) else None
+        )
+        proc.wait.return_value = 0
+        mock_popen.return_value = proc
+
+        chunks: list[str] = []
+        result = run_rsync(sync, config, on_output=chunks.append)
+
+        assert result.returncode == 0
+        assert result.stdout == streamed
+        assert "".join(chunks) == streamed
+        mock_popen.assert_called_once()

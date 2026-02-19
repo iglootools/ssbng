@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shlex
 import subprocess
+from typing import Callable
 
 from .config import (
     Config,
@@ -177,11 +178,42 @@ def run_rsync(
     dry_run: bool = False,
     link_dest: str | None = None,
     verbose: int = 0,
+    on_output: Callable[[str], None] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Build and execute the rsync command for a sync."""
     cmd = build_rsync_command(sync, config, dry_run, link_dest, verbose)
-    return subprocess.run(
+    if on_output is None:
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+        )
+
+    proc = subprocess.Popen(
         cmd,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
+        bufsize=1,
+    )
+
+    assert proc.stdout is not None
+    output_chunks: list[str] = []
+
+    # Stream one character at a time so rsync progress updates that rely
+    # on carriage returns are visible immediately.
+    while True:
+        ch = proc.stdout.read(1)
+        if ch:
+            output_chunks.append(ch)
+            on_output(ch)
+            continue
+        if proc.poll() is not None:
+            break
+
+    return subprocess.CompletedProcess(
+        cmd,
+        proc.wait(),
+        stdout="".join(output_chunks),
+        stderr="",
     )

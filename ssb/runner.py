@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Callable
+
 from .btrfs import create_snapshot, get_latest_snapshot
 from .status import check_all_syncs
 from .config import Config
@@ -14,6 +16,7 @@ def run_all_syncs(
     dry_run: bool = False,
     sync_names: list[str] | None = None,
     verbose: int = 0,
+    on_rsync_output: Callable[[str], None] | None = None,
 ) -> tuple[dict[str, SyncStatus], list[SyncResult]]:
     """Run all (or selected) syncs.
 
@@ -43,7 +46,14 @@ def run_all_syncs(
             )
             continue
 
-        result = _run_single_sync(name, status, config, dry_run, verbose)
+        result = _run_single_sync(
+            name,
+            status,
+            config,
+            dry_run,
+            verbose,
+            on_rsync_output,
+        )
         results.append(result)
 
     return sync_statuses, results
@@ -55,6 +65,7 @@ def _run_single_sync(
     config: Config,
     dry_run: bool,
     verbose: int = 0,
+    on_rsync_output: Callable[[str], None] | None = None,
 ) -> SyncResult:
     """Run a single sync operation."""
     sync = status.config
@@ -73,6 +84,7 @@ def _run_single_sync(
             dry_run=dry_run,
             link_dest=link_dest,
             verbose=verbose,
+            on_output=on_rsync_output,
         )
     except Exception as e:
         return SyncResult(

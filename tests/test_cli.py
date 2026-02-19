@@ -158,6 +158,8 @@ class TestRunCommand:
         result = runner.invoke(app, ["run", "--config", "/fake.yaml"])
         assert result.exit_code == 0
         assert "OK" in result.output
+        call_kwargs = mock_run.call_args
+        assert callable(call_kwargs.kwargs.get("on_rsync_output"))
 
     @patch("ssb.cli.run_all_syncs")
     @patch("ssb.cli.load_config")
@@ -243,6 +245,8 @@ class TestRunCommand:
         data = json.loads(result.output)
         assert isinstance(data, list)
         assert data[0]["sync_name"] == "photos-to-nas"
+        call_kwargs = mock_run.call_args
+        assert call_kwargs.kwargs.get("on_rsync_output") is None
 
     @patch("ssb.cli.run_all_syncs")
     @patch("ssb.cli.load_config")

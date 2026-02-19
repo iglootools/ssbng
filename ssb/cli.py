@@ -95,11 +95,21 @@ def run(
 
     assert isinstance(cfg, Config)
 
+    output_format = OutputFormat(output)
+    stream_output = (
+        (lambda chunk: typer.echo(chunk, nl=False))
+        if output_format is OutputFormat.HUMAN
+        else None
+    )
     sync_statuses, results = run_all_syncs(
-        cfg, dry_run=dry_run, sync_names=sync, verbose=verbose
+        cfg,
+        dry_run=dry_run,
+        sync_names=sync,
+        verbose=verbose,
+        on_rsync_output=stream_output,
     )
 
-    match OutputFormat(output):
+    match output_format:
         case OutputFormat.JSON:
             data = [r.model_dump() for r in results]
             typer.echo(json.dumps(data, indent=2))
