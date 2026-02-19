@@ -7,7 +7,7 @@ from typing import Annotated, Optional
 
 import typer
 
-from .status import check_all_syncs
+from .status import SyncReason, check_all_syncs
 from .configloader import ConfigError, load_config
 from .output import (
     OutputFormat,
@@ -15,6 +15,11 @@ from .output import (
     print_human_status,
 )
 from .runner import run_all_syncs
+
+_REMOVABLE_DEVICE_REASONS = {
+    SyncReason.SOURCE_MARKER_NOT_FOUND,
+    SyncReason.DESTINATION_MARKER_NOT_FOUND,
+}
 
 app = typer.Typer(
     name="ssb",
@@ -31,7 +36,6 @@ def _load_or_exit(config_path: str | None) -> object:
         typer.echo(f"Config error: {e}", err=True)
         raise typer.Exit(2)
 
-
 @app.command()
 def status(
     config: Annotated[
@@ -42,6 +46,16 @@ def status(
         str,
         typer.Option("--output", help="Output format: human or json"),
     ] = "human",
+    allow_removable_devices: Annotated[
+        bool,
+        typer.Option(
+            "--allow-removable-devices/--no-allow-removable-devices",
+            help=(
+                "Treat missing .ssb-src/.ssb-dst markers"
+                " as non-fatal for exit code"
+            ),
+        ),
+    ] = True,
 ) -> None:
     """Show status of volumes and syncs."""
     cfg = _load_or_exit(config)
@@ -59,6 +73,17 @@ def status(
             typer.echo(json.dumps(data, indent=2))
         case OutputFormat.HUMAN:
             print_human_status(vol_statuses, sync_statuses, cfg)
+
+    if allow_removable_devices:
+        has_errors = any(
+            set(s.reasons) - _REMOVABLE_DEVICE_REASONS
+            for s in sync_statuses.values()
+        )
+    else:
+        has_errors = any(not s.active for s in sync_statuses.values())
+
+    if has_errors:
+        raise typer.Exit(1)
 
 
 @app.command()

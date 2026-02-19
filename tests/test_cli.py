@@ -87,10 +87,60 @@ def _sample_sync_statuses(
     }
 
 
+def _sample_marker_only_sync_statuses(
+    config: Config,
+    vol_statuses: dict[str, VolumeStatus],
+) -> dict[str, SyncStatus]:
+    return {
+        "photos-to-nas": SyncStatus(
+            name="photos-to-nas",
+            config=config.syncs["photos-to-nas"],
+            source_status=vol_statuses["local-data"],
+            destination_status=vol_statuses["nas"],
+            reasons=[
+                SyncReason.SOURCE_MARKER_NOT_FOUND,
+                SyncReason.DESTINATION_MARKER_NOT_FOUND,
+            ],
+        ),
+    }
+
+
+def _sample_all_active_vol_statuses(
+    config: Config,
+) -> dict[str, VolumeStatus]:
+    return {
+        "local-data": VolumeStatus(
+            name="local-data",
+            config=config.volumes["local-data"],
+            reasons=[],
+        ),
+        "nas": VolumeStatus(
+            name="nas",
+            config=config.volumes["nas"],
+            reasons=[],
+        ),
+    }
+
+
+def _sample_all_active_sync_statuses(
+    config: Config,
+    vol_statuses: dict[str, VolumeStatus],
+) -> dict[str, SyncStatus]:
+    return {
+        "photos-to-nas": SyncStatus(
+            name="photos-to-nas",
+            config=config.syncs["photos-to-nas"],
+            source_status=vol_statuses["local-data"],
+            destination_status=vol_statuses["nas"],
+            reasons=[],
+        ),
+    }
+
+
 class TestStatusCommand:
     @patch("ssb.cli.check_all_syncs")
     @patch("ssb.cli.load_config")
-    def test_human_output(
+    def test_human_output_inactive(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
         config = _sample_config()
@@ -100,7 +150,7 @@ class TestStatusCommand:
         mock_checks.return_value = (vol_s, sync_s)
 
         result = runner.invoke(app, ["status", "--config", "/fake.yaml"])
-        assert result.exit_code == 0
+        assert result.exit_code == 1
         assert "local-data" in result.output
         assert "nas" in result.output
         assert "active" in result.output
@@ -109,7 +159,21 @@ class TestStatusCommand:
 
     @patch("ssb.cli.check_all_syncs")
     @patch("ssb.cli.load_config")
-    def test_json_output(
+    def test_human_output_all_active(
+        self, mock_load: MagicMock, mock_checks: MagicMock
+    ) -> None:
+        config = _sample_config()
+        mock_load.return_value = config
+        vol_s = _sample_all_active_vol_statuses(config)
+        sync_s = _sample_all_active_sync_statuses(config, vol_s)
+        mock_checks.return_value = (vol_s, sync_s)
+
+        result = runner.invoke(app, ["status", "--config", "/fake.yaml"])
+        assert result.exit_code == 0
+
+    @patch("ssb.cli.check_all_syncs")
+    @patch("ssb.cli.load_config")
+    def test_json_output_inactive(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
         config = _sample_config()
@@ -128,10 +192,72 @@ class TestStatusCommand:
                 "json",
             ],
         )
+        assert result.exit_code == 1
+        data = json.loads(result.output)
+        assert "volumes" in data
+        assert "syncs" in data
+
+    @patch("ssb.cli.check_all_syncs")
+    @patch("ssb.cli.load_config")
+    def test_json_output_all_active(
+        self, mock_load: MagicMock, mock_checks: MagicMock
+    ) -> None:
+        config = _sample_config()
+        mock_load.return_value = config
+        vol_s = _sample_all_active_vol_statuses(config)
+        sync_s = _sample_all_active_sync_statuses(config, vol_s)
+        mock_checks.return_value = (vol_s, sync_s)
+
+        result = runner.invoke(
+            app,
+            [
+                "status",
+                "--config",
+                "/fake.yaml",
+                "--output",
+                "json",
+            ],
+        )
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert "volumes" in data
         assert "syncs" in data
+
+    @patch("ssb.cli.check_all_syncs")
+    @patch("ssb.cli.load_config")
+    def test_marker_only_exit_0_by_default(
+        self, mock_load: MagicMock, mock_checks: MagicMock
+    ) -> None:
+        config = _sample_config()
+        mock_load.return_value = config
+        vol_s = _sample_all_active_vol_statuses(config)
+        sync_s = _sample_marker_only_sync_statuses(config, vol_s)
+        mock_checks.return_value = (vol_s, sync_s)
+
+        result = runner.invoke(app, ["status", "--config", "/fake.yaml"])
+        assert result.exit_code == 0
+
+    @patch("ssb.cli.check_all_syncs")
+    @patch("ssb.cli.load_config")
+    def test_marker_only_exit_1_when_no_allow_removable(
+        self, mock_load: MagicMock, mock_checks: MagicMock
+    ) -> None:
+        config = _sample_config()
+        mock_load.return_value = config
+        vol_s = _sample_all_active_vol_statuses(config)
+        sync_s = _sample_marker_only_sync_statuses(config, vol_s)
+        mock_checks.return_value = (vol_s, sync_s)
+
+        result = runner.invoke(
+            app,
+            [
+                "status",
+                "--config",
+                "/fake.yaml",
+                "--no-allow-removable-devices",
+            ],
+        )
+        assert result.exit_code == 1
 
 
 class TestRunCommand:
