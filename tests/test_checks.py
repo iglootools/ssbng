@@ -18,6 +18,8 @@ from ssb.status import (
     SyncReason,
     VolumeReason,
     VolumeStatus,
+    _check_btrfs_filesystem,
+    _check_btrfs_subvolume,
     _check_command_available,
     check_all_syncs,
     check_sync,
@@ -117,6 +119,123 @@ class TestCheckCommandAvailableRemote:
         assert _check_command_available(vol, "btrfs", config) is False
         server = config.rsync_servers["nas-server"]
         mock_run.assert_called_once_with(server, ["which", "btrfs"])
+
+
+class TestCheckBtrfsFilesystemLocal:
+    @patch("ssb.status.subprocess.run")
+    def test_btrfs(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
+        vol = LocalVolume(name="data", path="/mnt/data")
+        config = Config(volumes={"data": vol})
+        assert _check_btrfs_filesystem(vol, config) is True
+        mock_run.assert_called_once_with(
+            ["stat", "-f", "-c", "%T", "/mnt/data"],
+            capture_output=True,
+            text=True,
+        )
+
+    @patch("ssb.status.subprocess.run")
+    def test_not_btrfs(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
+        vol = LocalVolume(name="data", path="/mnt/data")
+        config = Config(volumes={"data": vol})
+        assert _check_btrfs_filesystem(vol, config) is False
+
+    @patch("ssb.status.subprocess.run")
+    def test_stat_failure(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=1, stdout="")
+        vol = LocalVolume(name="data", path="/mnt/data")
+        config = Config(volumes={"data": vol})
+        assert _check_btrfs_filesystem(vol, config) is False
+
+
+class TestCheckBtrfsFilesystemRemote:
+    @patch("ssb.status.run_remote_command")
+    def test_btrfs(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
+        vol, config = _remote_config()
+        assert _check_btrfs_filesystem(vol, config) is True
+        server = config.rsync_servers["nas-server"]
+        mock_run.assert_called_once_with(
+            server,
+            ["stat", "-f", "-c", "%T", "/backup"],
+        )
+
+    @patch("ssb.status.run_remote_command")
+    def test_not_btrfs(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
+        vol, config = _remote_config()
+        assert _check_btrfs_filesystem(vol, config) is False
+
+
+class TestCheckBtrfsSubvolumeLocal:
+    @patch("ssb.status.subprocess.run")
+    def test_is_subvolume(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
+        vol = LocalVolume(name="data", path="/mnt/data")
+        config = Config(volumes={"data": vol})
+        assert _check_btrfs_subvolume(vol, None, config) is True
+        mock_run.assert_called_once_with(
+            ["stat", "-c", "%i", "/mnt/data"],
+            capture_output=True,
+            text=True,
+        )
+
+    @patch("ssb.status.subprocess.run")
+    def test_is_subvolume_with_subdir(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
+        vol = LocalVolume(name="data", path="/mnt/data")
+        config = Config(volumes={"data": vol})
+        assert _check_btrfs_subvolume(vol, "backup", config) is True
+        mock_run.assert_called_once_with(
+            ["stat", "-c", "%i", "/mnt/data/backup"],
+            capture_output=True,
+            text=True,
+        )
+
+    @patch("ssb.status.subprocess.run")
+    def test_not_subvolume(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout="1234\n")
+        vol = LocalVolume(name="data", path="/mnt/data")
+        config = Config(volumes={"data": vol})
+        assert _check_btrfs_subvolume(vol, None, config) is False
+
+    @patch("ssb.status.subprocess.run")
+    def test_stat_failure(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=1, stdout="")
+        vol = LocalVolume(name="data", path="/mnt/data")
+        config = Config(volumes={"data": vol})
+        assert _check_btrfs_subvolume(vol, None, config) is False
+
+
+class TestCheckBtrfsSubvolumeRemote:
+    @patch("ssb.status.run_remote_command")
+    def test_is_subvolume(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
+        vol, config = _remote_config()
+        assert _check_btrfs_subvolume(vol, None, config) is True
+        server = config.rsync_servers["nas-server"]
+        mock_run.assert_called_once_with(
+            server,
+            ["stat", "-c", "%i", "/backup"],
+        )
+
+    @patch("ssb.status.run_remote_command")
+    def test_is_subvolume_with_subdir(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
+        vol, config = _remote_config()
+        assert _check_btrfs_subvolume(vol, "data", config) is True
+        server = config.rsync_servers["nas-server"]
+        mock_run.assert_called_once_with(
+            server,
+            ["stat", "-c", "%i", "/backup/data"],
+        )
+
+    @patch("ssb.status.run_remote_command")
+    def test_not_subvolume(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout="1234\n")
+        vol, config = _remote_config()
+        assert _check_btrfs_subvolume(vol, None, config) is False
 
 
 class TestCheckSync:
@@ -327,6 +446,97 @@ class TestCheckSync:
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
         assert SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION in status.reasons
+
+    @patch("ssb.status.subprocess.run")
+    @patch(
+        "ssb.status.shutil.which",
+        return_value="/usr/bin/fake",
+    )
+    def test_destination_not_btrfs_filesystem(
+        self,
+        mock_which: MagicMock,
+        mock_subprocess: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_active_markers(src, dst)
+
+        src_vol = LocalVolume(name="src", path=str(src))
+        dst_vol = LocalVolume(name="dst", path=str(dst))
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src", subdir="data"),
+            destination=DestinationSyncEndpoint(
+                volume="dst",
+                subdir="backup",
+                btrfs_snapshots=True,
+            ),
+        )
+        config = Config(
+            volumes={"src": src_vol, "dst": dst_vol},
+            syncs={"s1": sync},
+        )
+        vol_statuses = self._make_active_vol_statuses(config)
+
+        mock_subprocess.return_value = MagicMock(
+            returncode=0, stdout="ext2/ext3\n"
+        )
+
+        status = check_sync(sync, config, vol_statuses)
+        assert status.active is False
+        assert SyncReason.DESTINATION_NOT_BTRFS in status.reasons
+
+    @patch("ssb.status.subprocess.run")
+    @patch(
+        "ssb.status.shutil.which",
+        return_value="/usr/bin/fake",
+    )
+    def test_destination_not_btrfs_subvolume(
+        self,
+        mock_which: MagicMock,
+        mock_subprocess: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_active_markers(src, dst)
+
+        src_vol = LocalVolume(name="src", path=str(src))
+        dst_vol = LocalVolume(name="dst", path=str(dst))
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src", subdir="data"),
+            destination=DestinationSyncEndpoint(
+                volume="dst",
+                subdir="backup",
+                btrfs_snapshots=True,
+            ),
+        )
+        config = Config(
+            volumes={"src": src_vol, "dst": dst_vol},
+            syncs={"s1": sync},
+        )
+        vol_statuses = self._make_active_vol_statuses(config)
+
+        def subprocess_side_effect(
+            cmd: list[str], **kwargs: object
+        ) -> MagicMock:
+            if cmd[:4] == ["stat", "-f", "-c", "%T"]:
+                return MagicMock(returncode=0, stdout="btrfs\n")
+            if cmd[:3] == ["stat", "-c", "%i"]:
+                return MagicMock(returncode=0, stdout="1234\n")
+            return MagicMock(returncode=0)
+
+        mock_subprocess.side_effect = subprocess_side_effect
+
+        status = check_sync(sync, config, vol_statuses)
+        assert status.active is False
+        assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME in status.reasons
 
     @patch(
         "ssb.status.shutil.which",
@@ -585,6 +795,153 @@ class TestCheckSyncRemoteCommands:
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
         assert SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION in status.reasons
+
+    @patch("ssb.status.run_remote_command")
+    @patch(
+        "ssb.status.shutil.which",
+        return_value="/usr/bin/rsync",
+    )
+    def test_destination_not_btrfs_on_remote(
+        self,
+        mock_which: MagicMock,
+        mock_run: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / ".ssb-vol").touch()
+        (src / "data").mkdir()
+        (src / "data" / ".ssb-src").touch()
+
+        dst_server = RsyncServer(name="dst-server", host="dst.local")
+        src_vol = LocalVolume(name="src", path=str(src))
+        dst_vol = RemoteVolume(
+            name="dst",
+            rsync_server="dst-server",
+            path="/backup",
+        )
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src", subdir="data"),
+            destination=DestinationSyncEndpoint(
+                volume="dst",
+                subdir="backup",
+                btrfs_snapshots=True,
+            ),
+        )
+        config = Config(
+            rsync_servers={"dst-server": dst_server},
+            volumes={"src": src_vol, "dst": dst_vol},
+            syncs={"s1": sync},
+        )
+        vol_statuses = {
+            "src": VolumeStatus(
+                name="src",
+                config=src_vol,
+                reasons=[],
+            ),
+            "dst": VolumeStatus(
+                name="dst",
+                config=dst_vol,
+                reasons=[],
+            ),
+        }
+
+        def remote_side_effect(
+            server: RsyncServer, cmd: list[str]
+        ) -> MagicMock:
+            if cmd == ["test", "-f", "/backup/backup/.ssb-dst"]:
+                return MagicMock(returncode=0)
+            if cmd == ["which", "rsync"]:
+                return MagicMock(returncode=0)
+            if cmd == ["which", "btrfs"]:
+                return MagicMock(returncode=0)
+            if cmd == ["stat", "-f", "-c", "%T", "/backup"]:
+                return MagicMock(returncode=0, stdout="ext2/ext3\n")
+            return MagicMock(returncode=0)
+
+        mock_run.side_effect = remote_side_effect
+
+        status = check_sync(sync, config, vol_statuses)
+        assert status.active is False
+        assert SyncReason.DESTINATION_NOT_BTRFS in status.reasons
+
+    @patch("ssb.status.run_remote_command")
+    @patch(
+        "ssb.status.shutil.which",
+        return_value="/usr/bin/rsync",
+    )
+    def test_destination_not_subvolume_on_remote(
+        self,
+        mock_which: MagicMock,
+        mock_run: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / ".ssb-vol").touch()
+        (src / "data").mkdir()
+        (src / "data" / ".ssb-src").touch()
+
+        dst_server = RsyncServer(name="dst-server", host="dst.local")
+        src_vol = LocalVolume(name="src", path=str(src))
+        dst_vol = RemoteVolume(
+            name="dst",
+            rsync_server="dst-server",
+            path="/backup",
+        )
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src", subdir="backup"),
+            destination=DestinationSyncEndpoint(
+                volume="dst",
+                subdir="backup",
+                btrfs_snapshots=True,
+            ),
+        )
+        config = Config(
+            rsync_servers={"dst-server": dst_server},
+            volumes={"src": src_vol, "dst": dst_vol},
+            syncs={"s1": sync},
+        )
+        vol_statuses = {
+            "src": VolumeStatus(
+                name="src",
+                config=src_vol,
+                reasons=[],
+            ),
+            "dst": VolumeStatus(
+                name="dst",
+                config=dst_vol,
+                reasons=[],
+            ),
+        }
+
+        def remote_side_effect(
+            server: RsyncServer, cmd: list[str]
+        ) -> MagicMock:
+            if cmd == ["test", "-f", "/backup/backup/.ssb-dst"]:
+                return MagicMock(returncode=0)
+            if cmd == ["which", "rsync"]:
+                return MagicMock(returncode=0)
+            if cmd == ["which", "btrfs"]:
+                return MagicMock(returncode=0)
+            if cmd == ["stat", "-f", "-c", "%T", "/backup"]:
+                return MagicMock(returncode=0, stdout="btrfs\n")
+            if cmd == [
+                "stat",
+                "-c",
+                "%i",
+                "/backup/backup",
+            ]:
+                return MagicMock(returncode=0, stdout="1234\n")
+            return MagicMock(returncode=0)
+
+        mock_run.side_effect = remote_side_effect
+
+        status = check_sync(sync, config, vol_statuses)
+        assert status.active is False
+        assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME in status.reasons
 
 
 class TestCheckAllSyncs:

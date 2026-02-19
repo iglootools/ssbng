@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import enum
 import shutil
+import subprocess
 from pathlib import Path
+
 from pydantic import BaseModel, computed_field
 
 from .config import (
@@ -31,6 +33,10 @@ class SyncReason(str, enum.Enum):
     RSYNC_NOT_FOUND_ON_SOURCE = "rsync not found on source"
     RSYNC_NOT_FOUND_ON_DESTINATION = "rsync not found on destination"
     BTRFS_NOT_FOUND_ON_DESTINATION = "btrfs not found on destination"
+    DESTINATION_NOT_BTRFS = "destination not on btrfs filesystem"
+    DESTINATION_NOT_BTRFS_SUBVOLUME = (
+        "destination endpoint is not a btrfs subvolume"
+    )
 
 
 class VolumeStatus(BaseModel):
@@ -132,6 +138,46 @@ def _check_command_available(
             return result.returncode == 0
 
 
+def _check_btrfs_filesystem(volume: Volume, config: Config) -> bool:
+    """Check if the volume path is on a btrfs filesystem."""
+    cmd = ["stat", "-f", "-c", "%T", volume.path]
+    match volume:
+        case LocalVolume():
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+            )
+        case RemoteVolume():
+            server = config.rsync_servers[volume.rsync_server]
+            result = run_remote_command(server, cmd)
+    return result.returncode == 0 and result.stdout.strip() == "btrfs"
+
+
+def _check_btrfs_subvolume(
+    volume: Volume,
+    subdir: str | None,
+    config: Config,
+) -> bool:
+    """Check if the endpoint path is a btrfs subvolume.
+
+    On btrfs, subvolumes always have inode number 256.
+    """
+    path = f"{volume.path}/{subdir}" if subdir else volume.path
+    cmd = ["stat", "-c", "%i", path]
+    match volume:
+        case LocalVolume():
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+            )
+        case RemoteVolume():
+            server = config.rsync_servers[volume.rsync_server]
+            result = run_remote_command(server, cmd)
+    return result.returncode == 0 and result.stdout.strip() == "256"
+
+
 def check_sync(
     sync: SyncConfig,
     config: Config,
@@ -182,10 +228,15 @@ def check_sync(
             reasons.append(SyncReason.DESTINATION_MARKER_NOT_FOUND)
         if not _check_command_available(dst_vol, "rsync", config):
             reasons.append(SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION)
-        if sync.destination.btrfs_snapshots and (
-            not _check_command_available(dst_vol, "btrfs", config)
-        ):
-            reasons.append(SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION)
+        if sync.destination.btrfs_snapshots:
+            if not _check_command_available(dst_vol, "btrfs", config):
+                reasons.append(SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION)
+            elif not _check_btrfs_filesystem(dst_vol, config):
+                reasons.append(SyncReason.DESTINATION_NOT_BTRFS)
+            elif not _check_btrfs_subvolume(
+                dst_vol, sync.destination.subdir, config
+            ):
+                reasons.append(SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME)
 
     return SyncStatus(
         name=sync.name,
