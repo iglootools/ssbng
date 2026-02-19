@@ -63,6 +63,22 @@ class TestBuildSshBaseArgs:
             "host.example.com",
         ]
 
+    def test_custom_connect_timeout(self) -> None:
+        server = RsyncServer(
+            name="slow-server",
+            host="slow.example.com",
+            connect_timeout=30,
+        )
+        args = build_ssh_base_args(server)
+        assert args == [
+            "ssh",
+            "-o",
+            "ConnectTimeout=30",
+            "-o",
+            "BatchMode=yes",
+            "slow.example.com",
+        ]
+
 
 class TestBuildSshEOption:
     def test_minimal(self, rsync_server_minimal: RsyncServer) -> None:

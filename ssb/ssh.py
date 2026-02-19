@@ -17,7 +17,7 @@ def build_ssh_base_args(server: RsyncServer) -> list[str]:
     args = [
         "ssh",
         "-o",
-        "ConnectTimeout=10",
+        f"ConnectTimeout={server.connect_timeout}",
         "-o",
         "BatchMode=yes",
     ]

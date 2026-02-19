@@ -45,6 +45,7 @@ class TestRsyncServer:
         assert server.user is None
         assert server.ssh_key is None
         assert server.ssh_options == []
+        assert server.connect_timeout == 10
 
     def test_construction_full(self) -> None:
         server = RsyncServer(
@@ -53,10 +54,12 @@ class TestRsyncServer:
             port=2222,
             user="backup",
             ssh_key="~/.ssh/id_rsa",
+            connect_timeout=30,
         )
         assert server.port == 2222
         assert server.user == "backup"
         assert server.ssh_key == "~/.ssh/id_rsa"
+        assert server.connect_timeout == 30
 
 
 class TestRemoteVolume:

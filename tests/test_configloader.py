@@ -48,6 +48,7 @@ class TestLoadConfig:
         assert server.port == 5022
         assert server.user == "backup"
         assert server.ssh_key == "~/.ssh/key"
+        assert server.connect_timeout == 10
         assert "local-data" in cfg.volumes
         assert "nas" in cfg.volumes
         assert "photos-to-nas" in cfg.syncs
@@ -246,6 +247,19 @@ class TestLoadConfig:
         sync = cfg.syncs["s"]
         assert sync.rsync_options is None
         assert sync.extra_rsync_options == ["--compress", "--progress"]
+
+    def test_connect_timeout(self, tmp_path: Path) -> None:
+        p = tmp_path / "timeout.yaml"
+        p.write_text(
+            "rsync-servers:\n"
+            "  slow:\n"
+            "    host: slow.example.com\n"
+            "    connect-timeout: 30\n"
+            "volumes: {}\n"
+            "syncs: {}\n"
+        )
+        cfg = load_config(str(p))
+        assert cfg.rsync_servers["slow"].connect_timeout == 30
 
     def test_invalid_filter_entry(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_filter.yaml"

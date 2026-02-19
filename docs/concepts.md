@@ -35,7 +35,9 @@ To be considered active, a local volume must have a `.ssb-vol` file in the root 
 ### Rsync Server
 
 A reusable configuration for an SSH server that can be shared between multiple remote volumes.
-Provides the host, port, user, ssh key, and ssh options.
+Provides the host, port, user, ssh key, ssh options, and connect timeout.
+
+The `connect-timeout` field controls the SSH connection timeout in seconds (default: `10`).
 
 ### Rsync Remote Volume
 
@@ -110,6 +112,7 @@ rsync-servers:
     port: 5022                  # optional, defaults to 22
     user: backup                # optional
     ssh-key: ~/.ssh/nas_ed25519 # optional
+    connect-timeout: 30         # optional, defaults to 10 (seconds)
     ssh-options:                # optional
       - StrictHostKeyChecking=no
 

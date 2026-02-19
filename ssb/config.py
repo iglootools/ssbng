@@ -39,6 +39,7 @@ class RsyncServer(_BaseModel):
     user: Optional[str] = None
     ssh_key: Optional[str] = None
     ssh_options: List[str] = Field(default_factory=list)
+    connect_timeout: int = Field(10, ge=1)
 
 
 class RemoteVolume(_BaseModel):
