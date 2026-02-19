@@ -64,14 +64,14 @@ class Config(BaseModel):
     @field_validator("volumes", mode="before")
     @classmethod
     def inject_volume_names(cls, v: Any, info: ValidationInfo) -> Any:
-        result = {}
-        for volume_name, volume_data in v.items():
-            # Inject the name if not present
-            if "name" not in volume_data:
-                volume_data = dict(volume_data)
-                volume_data["name"] = volume_name
-            result[volume_name] = volume_data
-        return result
+        return {
+            name: (
+                {**data, "name": name}
+                if isinstance(data, dict) and "name" not in data
+                else data
+            )
+            for name, data in v.items()
+        }
 
     syncs: Dict[str, SyncConfig] = Field(default_factory=dict)
 

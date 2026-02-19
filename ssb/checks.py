@@ -166,12 +166,11 @@ def check_all_syncs(
     config: Config,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     """Check all volumes and syncs, caching volume checks."""
-    volume_statuses: dict[str, VolumeStatus] = {}
-    for name, volume in config.volumes.items():
-        volume_statuses[name] = check_volume(volume)
-
-    sync_statuses: dict[str, SyncStatus] = {}
-    for name, sync in config.syncs.items():
-        sync_statuses[name] = check_sync(sync, config, volume_statuses)
-
+    volume_statuses = {
+        name: check_volume(volume) for name, volume in config.volumes.items()
+    }
+    sync_statuses = {
+        name: check_sync(sync, config, volume_statuses)
+        for name, sync in config.syncs.items()
+    }
     return volume_statuses, sync_statuses
