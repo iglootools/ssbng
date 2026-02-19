@@ -7,7 +7,6 @@ from typing import Callable, Optional
 from pydantic import BaseModel
 
 from .btrfs import create_snapshot, get_latest_snapshot
-from .status import check_all_syncs
 from .config import Config
 from .status import SyncStatus
 from .rsync import run_rsync
@@ -27,16 +26,16 @@ class SyncResult(BaseModel):
 
 def run_all_syncs(
     config: Config,
+    sync_statuses: dict[str, SyncStatus],
     dry_run: bool = False,
     sync_names: list[str] | None = None,
     verbose: int = 0,
     on_rsync_output: Callable[[str], None] | None = None,
-) -> tuple[dict[str, SyncStatus], list[SyncResult]]:
+) -> list[SyncResult]:
     """Run all (or selected) syncs.
 
-    Returns sync statuses and a list of results.
+    Expects pre-computed sync statuses from ``check_all_syncs``.
     """
-    _, sync_statuses = check_all_syncs(config)
 
     results: list[SyncResult] = []
 
@@ -70,7 +69,7 @@ def run_all_syncs(
         )
         results.append(result)
 
-    return sync_statuses, results
+    return results
 
 
 def _run_single_sync(

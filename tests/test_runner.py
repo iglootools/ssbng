@@ -138,124 +138,110 @@ def _inactive_statuses(
 
 class TestRunAllSyncs:
     @patch("ssb.runner.run_rsync")
-    @patch("ssb.runner.check_all_syncs")
-    def test_successful_sync(
-        self, mock_checks: MagicMock, mock_rsync: MagicMock
-    ) -> None:
+    def test_successful_sync(self, mock_rsync: MagicMock) -> None:
         config = _make_local_config()
-        mock_checks.return_value = _active_statuses(config)
+        _, sync_statuses = _active_statuses(config)
         mock_rsync.return_value = MagicMock(
             returncode=0, stdout="done\n", stderr=""
         )
 
-        statuses, results = run_all_syncs(config)
+        results = run_all_syncs(config, sync_statuses)
         assert len(results) == 1
         assert results[0].success is True
         assert results[0].rsync_exit_code == 0
 
-    @patch("ssb.runner.check_all_syncs")
-    def test_inactive_sync(self, mock_checks: MagicMock) -> None:
+    def test_inactive_sync(self) -> None:
         config = _make_local_config()
-        mock_checks.return_value = _inactive_statuses(config)
+        _, sync_statuses = _inactive_statuses(config)
 
-        statuses, results = run_all_syncs(config)
+        results = run_all_syncs(config, sync_statuses)
         assert len(results) == 1
         assert results[0].success is False
         assert "not active" in (results[0].error or "")
 
     @patch("ssb.runner.run_rsync")
-    @patch("ssb.runner.check_all_syncs")
-    def test_rsync_failure(
-        self, mock_checks: MagicMock, mock_rsync: MagicMock
-    ) -> None:
+    def test_rsync_failure(self, mock_rsync: MagicMock) -> None:
         config = _make_local_config()
-        mock_checks.return_value = _active_statuses(config)
+        _, sync_statuses = _active_statuses(config)
         mock_rsync.return_value = MagicMock(
             returncode=23, stdout="", stderr="error"
         )
 
-        statuses, results = run_all_syncs(config)
+        results = run_all_syncs(config, sync_statuses)
         assert results[0].success is False
         assert results[0].rsync_exit_code == 23
 
     @patch("ssb.runner.run_rsync")
-    @patch("ssb.runner.check_all_syncs")
-    def test_filter_by_sync_name(
-        self, mock_checks: MagicMock, mock_rsync: MagicMock
-    ) -> None:
+    def test_filter_by_sync_name(self, mock_rsync: MagicMock) -> None:
         config = _make_local_config()
-        mock_checks.return_value = _active_statuses(config)
+        _, sync_statuses = _active_statuses(config)
         mock_rsync.return_value = MagicMock(
             returncode=0, stdout="done\n", stderr=""
         )
 
-        statuses, results = run_all_syncs(config, sync_names=["nonexistent"])
+        results = run_all_syncs(
+            config, sync_statuses, sync_names=["nonexistent"]
+        )
         assert len(results) == 0
 
     @patch("ssb.runner.create_snapshot")
     @patch("ssb.runner.get_latest_snapshot")
     @patch("ssb.runner.run_rsync")
-    @patch("ssb.runner.check_all_syncs")
     def test_btrfs_snapshot_after_sync(
         self,
-        mock_checks: MagicMock,
         mock_rsync: MagicMock,
         mock_latest: MagicMock,
         mock_snap: MagicMock,
     ) -> None:
         config = _make_btrfs_config()
-        mock_checks.return_value = _active_statuses(config)
+        _, sync_statuses = _active_statuses(config)
         mock_rsync.return_value = MagicMock(
             returncode=0, stdout="done\n", stderr=""
         )
         mock_latest.return_value = None
         mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
 
-        statuses, results = run_all_syncs(config)
+        results = run_all_syncs(config, sync_statuses)
         assert results[0].success is True
         assert results[0].snapshot_path == "/dst/snapshots/20240115T120000Z"
         mock_snap.assert_called_once()
 
     @patch("ssb.runner.get_latest_snapshot")
     @patch("ssb.runner.run_rsync")
-    @patch("ssb.runner.check_all_syncs")
     def test_btrfs_snapshot_skipped_on_dry_run(
         self,
-        mock_checks: MagicMock,
         mock_rsync: MagicMock,
         mock_latest: MagicMock,
     ) -> None:
         config = _make_btrfs_config()
-        mock_checks.return_value = _active_statuses(config)
+        _, sync_statuses = _active_statuses(config)
         mock_rsync.return_value = MagicMock(
             returncode=0, stdout="done\n", stderr=""
         )
         mock_latest.return_value = None
 
-        statuses, results = run_all_syncs(config, dry_run=True)
+        results = run_all_syncs(config, sync_statuses, dry_run=True)
         assert results[0].success is True
         assert results[0].snapshot_path is None
 
     @patch("ssb.runner.create_snapshot")
     @patch("ssb.runner.get_latest_snapshot")
     @patch("ssb.runner.run_rsync")
-    @patch("ssb.runner.check_all_syncs")
     def test_link_dest_from_latest_snapshot(
         self,
-        mock_checks: MagicMock,
         mock_rsync: MagicMock,
         mock_latest: MagicMock,
         mock_snap: MagicMock,
     ) -> None:
         config = _make_btrfs_config()
-        mock_checks.return_value = _active_statuses(config)
+        _, sync_statuses = _active_statuses(config)
         mock_rsync.return_value = MagicMock(
             returncode=0, stdout="done\n", stderr=""
         )
         mock_latest.return_value = "/dst/snapshots/20240101T000000Z"
         mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
 
-        statuses, results = run_all_syncs(config)
+        run_all_syncs(config, sync_statuses)
 
         # Verify link_dest was passed to run_rsync
         call_kwargs = mock_rsync.call_args
@@ -267,23 +253,21 @@ class TestRunAllSyncs:
     @patch("ssb.runner.create_snapshot")
     @patch("ssb.runner.get_latest_snapshot")
     @patch("ssb.runner.run_rsync")
-    @patch("ssb.runner.check_all_syncs")
     def test_remote_to_remote_with_btrfs(
         self,
-        mock_checks: MagicMock,
         mock_rsync: MagicMock,
         mock_latest: MagicMock,
         mock_snap: MagicMock,
     ) -> None:
         config = _make_remote_to_remote_config()
-        mock_checks.return_value = _active_statuses(config)
+        _, sync_statuses = _active_statuses(config)
         mock_rsync.return_value = MagicMock(
             returncode=0, stdout="done\n", stderr=""
         )
         mock_latest.return_value = None
         mock_snap.return_value = "/backup/snapshots/20240115T120000Z"
 
-        statuses, results = run_all_syncs(config)
+        results = run_all_syncs(config, sync_statuses)
         assert results[0].success is True
         assert results[0].snapshot_path is not None
         mock_snap.assert_called_once()
@@ -291,22 +275,20 @@ class TestRunAllSyncs:
     @patch("ssb.runner.create_snapshot")
     @patch("ssb.runner.get_latest_snapshot")
     @patch("ssb.runner.run_rsync")
-    @patch("ssb.runner.check_all_syncs")
     def test_snapshot_failure(
         self,
-        mock_checks: MagicMock,
         mock_rsync: MagicMock,
         mock_latest: MagicMock,
         mock_snap: MagicMock,
     ) -> None:
         config = _make_btrfs_config()
-        mock_checks.return_value = _active_statuses(config)
+        _, sync_statuses = _active_statuses(config)
         mock_rsync.return_value = MagicMock(
             returncode=0, stdout="done\n", stderr=""
         )
         mock_latest.return_value = None
         mock_snap.side_effect = RuntimeError("btrfs failed")
 
-        statuses, results = run_all_syncs(config)
+        results = run_all_syncs(config, sync_statuses)
         assert results[0].success is False
         assert "Snapshot failed" in (results[0].error or "")

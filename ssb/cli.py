@@ -8,7 +8,7 @@ from typing import Annotated, Optional
 import typer
 
 from .config import Config
-from .status import SyncReason, check_all_syncs
+from .status import SyncReason, SyncStatus, VolumeStatus, check_all_syncs
 from .configloader import ConfigError, load_config
 from .output import (
     OutputFormat,
@@ -27,6 +27,7 @@ app = typer.Typer(
     help="Simple Safe Backup - An rsync-based backup tool",
     no_args_is_help=True,
 )
+
 
 @app.command()
 def status(
@@ -51,25 +52,17 @@ def status(
 ) -> None:
     """Show status of volumes and syncs."""
     cfg = _load_config_or_exit(config)
-    vol_statuses, sync_statuses = check_all_syncs(cfg)
+    output_format = OutputFormat(output)
+    vol_statuses, sync_statuses, has_errors = _check_and_display_status(
+        cfg, output_format, allow_removable_devices
+    )
 
-    match OutputFormat(output):
-        case OutputFormat.JSON:
-            data = {
-                "volumes": [v.model_dump() for v in vol_statuses.values()],
-                "syncs": [s.model_dump() for s in sync_statuses.values()],
-            }
-            typer.echo(json.dumps(data, indent=2))
-        case OutputFormat.HUMAN:
-            print_human_status(vol_statuses, sync_statuses, cfg)
-
-    if allow_removable_devices:
-        has_errors = any(
-            set(s.reasons) - _REMOVABLE_DEVICE_REASONS
-            for s in sync_statuses.values()
-        )
-    else:
-        has_errors = any(not s.active for s in sync_statuses.values())
+    if output_format is OutputFormat.JSON:
+        data = {
+            "volumes": [v.model_dump() for v in vol_statuses.values()],
+            "syncs": [s.model_dump() for s in sync_statuses.values()],
+        }
+        typer.echo(json.dumps(data, indent=2))
 
     if has_errors:
         raise typer.Exit(1)
@@ -102,18 +95,45 @@ def run(
             help="Increase rsync verbosity (-v, -vv, -vvv)",
         ),
     ] = 0,
+    allow_removable_devices: Annotated[
+        bool,
+        typer.Option(
+            "--allow-removable-devices/--no-allow-removable-devices",
+            help=(
+                "Treat missing .ssb-src/.ssb-dst markers"
+                " as non-fatal for exit code"
+            ),
+        ),
+    ] = True,
 ) -> None:
     """Run backup syncs."""
     cfg = _load_config_or_exit(config)
-
     output_format = OutputFormat(output)
+    vol_statuses, sync_statuses, has_errors = _check_and_display_status(
+        cfg, output_format, allow_removable_devices
+    )
+
+    if has_errors:
+        if output_format is OutputFormat.JSON:
+            data = {
+                "volumes": [v.model_dump() for v in vol_statuses.values()],
+                "syncs": [s.model_dump() for s in sync_statuses.values()],
+                "results": [],
+            }
+            typer.echo(json.dumps(data, indent=2))
+        raise typer.Exit(1)
+
+    if output_format is OutputFormat.HUMAN:
+        typer.echo("")
+
     stream_output = (
         (lambda chunk: typer.echo(chunk, nl=False))
         if output_format is OutputFormat.HUMAN
         else None
     )
-    sync_statuses, results = run_all_syncs(
+    results = run_all_syncs(
         cfg,
+        sync_statuses,
         dry_run=dry_run,
         sync_names=sync,
         verbose=verbose,
@@ -122,7 +142,11 @@ def run(
 
     match output_format:
         case OutputFormat.JSON:
-            data = [r.model_dump() for r in results]
+            data = {
+                "volumes": [v.model_dump() for v in vol_statuses.values()],
+                "syncs": [s.model_dump() for s in sync_statuses.values()],
+                "results": [r.model_dump() for r in results],
+            }
             typer.echo(json.dumps(data, indent=2))
         case OutputFormat.HUMAN:
             print_human_results(results, dry_run)
@@ -138,7 +162,38 @@ def _load_config_or_exit(config_path: str | None) -> Config:
     except ConfigError as e:
         typer.echo(f"Config error: {e}", err=True)
         raise typer.Exit(2)
-    
+
+
+def _check_and_display_status(
+    cfg: Config,
+    output_format: OutputFormat,
+    allow_removable_devices: bool,
+) -> tuple[
+    dict[str, VolumeStatus],
+    dict[str, SyncStatus],
+    bool,
+]:
+    """Compute statuses, display human output, and check for errors.
+
+    Returns volume statuses, sync statuses, and whether there are
+    fatal errors.
+    """
+    vol_statuses, sync_statuses = check_all_syncs(cfg)
+
+    if output_format is OutputFormat.HUMAN:
+        print_human_status(vol_statuses, sync_statuses, cfg)
+
+    if allow_removable_devices:
+        has_errors = any(
+            set(s.reasons) - _REMOVABLE_DEVICE_REASONS
+            for s in sync_statuses.values()
+        )
+    else:
+        has_errors = any(not s.active for s in sync_statuses.values())
+
+    return vol_statuses, sync_statuses, has_errors
+
+
 def main() -> None:
     """Main CLI entry point."""
     app()
