@@ -72,7 +72,9 @@ class TestCheckRemoteVolume:
         assert status.active is True
         assert status.reasons == []
         server = config.rsync_servers["nas-server"]
-        mock_run.assert_called_once_with(server, "test -f /backup/.ssb-vol")
+        mock_run.assert_called_once_with(
+            server, ["test", "-f", "/backup/.ssb-vol"]
+        )
 
     @patch("ssb.checks.run_remote_command")
     def test_inactive(self, mock_run: MagicMock) -> None:
@@ -108,7 +110,7 @@ class TestCheckCommandAvailableRemote:
         vol, config = _remote_config()
         assert _check_command_available(vol, "rsync", config) is True
         server = config.rsync_servers["nas-server"]
-        mock_run.assert_called_once_with(server, "which rsync")
+        mock_run.assert_called_once_with(server, ["which", "rsync"])
 
     @patch("ssb.checks.run_remote_command")
     def test_command_not_found(self, mock_run: MagicMock) -> None:
@@ -116,7 +118,7 @@ class TestCheckCommandAvailableRemote:
         vol, config = _remote_config()
         assert _check_command_available(vol, "btrfs", config) is False
         server = config.rsync_servers["nas-server"]
-        mock_run.assert_called_once_with(server, "which btrfs")
+        mock_run.assert_called_once_with(server, ["which", "btrfs"])
 
 
 class TestCheckSync:
@@ -441,10 +443,12 @@ class TestCheckSyncRemoteCommands:
             ),
         }
 
-        def remote_side_effect(server: RsyncServer, cmd: str) -> MagicMock:
-            if cmd == "test -f /data/data/.ssb-src":
+        def remote_side_effect(
+            server: RsyncServer, cmd: list[str]
+        ) -> MagicMock:
+            if cmd == ["test", "-f", "/data/data/.ssb-src"]:
                 return MagicMock(returncode=0)
-            if cmd == "which rsync":
+            if cmd == ["which", "rsync"]:
                 return MagicMock(returncode=1)
             return MagicMock(returncode=0)
 
@@ -501,10 +505,12 @@ class TestCheckSyncRemoteCommands:
             ),
         }
 
-        def remote_side_effect(server: RsyncServer, cmd: str) -> MagicMock:
-            if cmd == "test -f /backup/backup/.ssb-dst":
+        def remote_side_effect(
+            server: RsyncServer, cmd: list[str]
+        ) -> MagicMock:
+            if cmd == ["test", "-f", "/backup/backup/.ssb-dst"]:
                 return MagicMock(returncode=0)
-            if cmd == "which rsync":
+            if cmd == ["which", "rsync"]:
                 return MagicMock(returncode=1)
             return MagicMock(returncode=0)
 
@@ -565,12 +571,14 @@ class TestCheckSyncRemoteCommands:
             ),
         }
 
-        def remote_side_effect(server: RsyncServer, cmd: str) -> MagicMock:
-            if cmd == "test -f /backup/backup/.ssb-dst":
+        def remote_side_effect(
+            server: RsyncServer, cmd: list[str]
+        ) -> MagicMock:
+            if cmd == ["test", "-f", "/backup/backup/.ssb-dst"]:
                 return MagicMock(returncode=0)
-            if cmd == "which rsync":
+            if cmd == ["which", "rsync"]:
                 return MagicMock(returncode=0)
-            if cmd == "which btrfs":
+            if cmd == ["which", "btrfs"]:
                 return MagicMock(returncode=1)
             return MagicMock(returncode=0)
 
@@ -612,3 +620,17 @@ class TestCheckAllSyncs:
         assert vol_statuses["src"].active is True
         assert vol_statuses["dst"].active is True
         assert sync_statuses["s1"].active is True
+
+
+class TestCheckRemoteVolumeSpaces:
+    @patch("ssb.checks.run_remote_command")
+    def test_active(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0)
+        vol, config = _remote_config(path="/my backup")
+        status = check_volume(vol, config)
+        assert status.active is True
+        server = config.rsync_servers["nas-server"]
+        mock_run.assert_called_once_with(
+            server,
+            ["test", "-f", "/my backup/.ssb-vol"],
+        )

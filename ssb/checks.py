@@ -47,7 +47,7 @@ def _check_remote_volume(volume: RemoteVolume, config: Config) -> VolumeStatus:
     """Check if a remote volume is active (SSH + .ssb-vol marker)."""
     server = config.rsync_servers[volume.rsync_server]
     marker_path = f"{volume.path}/.ssb-vol"
-    result = run_remote_command(server, f"test -f {marker_path}")
+    result = run_remote_command(server, ["test", "-f", marker_path])
     reasons: list[VolumeReason] = (
         [] if result.returncode == 0 else [VolumeReason.UNREACHABLE]
     )
@@ -75,7 +75,7 @@ def _check_endpoint_marker(
             return Path(rel_path).exists()
         case RemoteVolume():
             server = config.rsync_servers[volume.rsync_server]
-            result = run_remote_command(server, f"test -f {rel_path}")
+            result = run_remote_command(server, ["test", "-f", rel_path])
             return result.returncode == 0
 
 
@@ -88,7 +88,7 @@ def _check_command_available(
             return shutil.which(command) is not None
         case RemoteVolume():
             server = config.rsync_servers[volume.rsync_server]
-            result = run_remote_command(server, f"which {command}")
+            result = run_remote_command(server, ["which", command])
             return result.returncode == 0
 
 

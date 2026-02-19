@@ -98,7 +98,7 @@ class TestRunRemoteCommand:
     def test_run_remote_command(
         self, mock_run: object, rsync_server: RsyncServer
     ) -> None:
-        run_remote_command(rsync_server, "ls /tmp")
+        run_remote_command(rsync_server, ["ls", "/tmp"])
         from unittest.mock import call
 
         expected_args = [

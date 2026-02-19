@@ -202,7 +202,9 @@ class TestBuildRsyncCommandRemoteToRemote:
 
         # Inner command should be the last arg
         inner = cmd[-1]
-        assert "rsync -av --delete --delete-excluded --safe-links" in inner
+        assert inner.startswith("rsync -av --delete")
+        assert "--delete-excluded" in inner
+        assert "--safe-links" in inner
         assert "-e 'ssh -p 2222'" in inner
         assert "srcuser@src.local:/data/photos/" in inner
         assert "/backup/photos/latest/" in inner
@@ -352,9 +354,9 @@ class TestBuildRsyncCommandFilters:
 
         cmd = build_rsync_command(sync, config)
         inner = cmd[-1]
-        assert "--filter='+ *.jpg'" in inner
-        assert "--filter='- *.tmp'" in inner
-        assert "--filter='merge /etc/ssb/filters.rules'" in inner
+        assert "'--filter=+ *.jpg'" in inner
+        assert "'--filter=- *.tmp'" in inner
+        assert "'--filter=merge /etc/ssb/filters.rules'" in inner
 
     def test_no_filters(self) -> None:
         src = LocalVolume(name="src", path="/mnt/src")
@@ -477,7 +479,7 @@ class TestBuildRsyncCommandOptions:
 
         cmd = build_rsync_command(sync, config)
         inner = cmd[-1]
-        assert inner.startswith("rsync -a ")
+        assert inner.startswith("rsync -a")
         assert "--delete" not in inner
 
     def test_remote_to_remote_extra(self) -> None:
@@ -511,10 +513,81 @@ class TestBuildRsyncCommandOptions:
         cmd = build_rsync_command(sync, config)
         inner = cmd[-1]
         assert "--compress" in inner
-        assert (
-            "rsync -av --delete --delete-excluded --safe-links"
-            " --compress" in inner
+        assert inner.startswith(
+            "rsync -av --delete --delete-excluded --safe-links" " --compress"
         )
+
+
+class TestBuildRsyncCommandSpacesInPaths:
+    def test_local_to_local_spaces(self) -> None:
+        src = LocalVolume(name="src", path="/mnt/my src")
+        dst = LocalVolume(name="dst", path="/mnt/my dst")
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src", subdir="my photos"),
+            destination=DestinationSyncEndpoint(
+                volume="dst", subdir="my backup"
+            ),
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        assert cmd == [
+            "rsync",
+            "-av",
+            "--delete",
+            "--delete-excluded",
+            "--safe-links",
+            "/mnt/my src/my photos/",
+            "/mnt/my dst/my backup/latest/",
+        ]
+
+    def test_remote_to_remote_spaces(self) -> None:
+        src_server = RsyncServer(
+            name="src-server",
+            host="src.local",
+            port=2222,
+            user="srcuser",
+        )
+        dst_server = RsyncServer(
+            name="dst-server",
+            host="dst.local",
+            user="dstuser",
+        )
+        src = RemoteVolume(
+            name="src",
+            rsync_server="src-server",
+            path="/my data",
+        )
+        dst = RemoteVolume(
+            name="dst",
+            rsync_server="dst-server",
+            path="/my backup",
+        )
+        sync = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume="src", subdir="my photos"),
+            destination=DestinationSyncEndpoint(
+                volume="dst", subdir="my dest"
+            ),
+        )
+        config = Config(
+            rsync_servers={
+                "src-server": src_server,
+                "dst-server": dst_server,
+            },
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        inner = cmd[-1]
+        # Paths with spaces must be shlex-quoted
+        assert "'srcuser@src.local:/my data/my photos/'" in inner
+        assert "'/my backup/my dest/latest/'" in inner
 
 
 class TestRunRsync:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 
 from .config import (
@@ -58,16 +59,6 @@ def _filter_args(sync: SyncConfig) -> list[str]:
         args.append(f"--filter={rule}")
     if sync.filter_file:
         args.append(f"--filter=merge {sync.filter_file}")
-    return args
-
-
-def _filter_args_inner(sync: SyncConfig) -> list[str]:
-    """Build quoted --filter args for remote-to-remote inner command."""
-    args: list[str] = []
-    for rule in sync.filters:
-        args.append(f"--filter='{rule}'")
-    if sync.filter_file:
-        args.append(f"--filter='merge {sync.filter_file}'")
     return args
 
 
@@ -149,7 +140,7 @@ def _build_remote_to_remote(
         inner_rsync_parts.append("--dry-run")
     if link_dest:
         inner_rsync_parts.append(f"--link-dest={link_dest}")
-    inner_rsync_parts.extend(_filter_args_inner(sync))
+    inner_rsync_parts.extend(_filter_args(sync))
 
     # SSH options for source host (from destination's perspective)
     src_ssh_parts = ["ssh"]
@@ -159,13 +150,13 @@ def _build_remote_to_remote(
         src_ssh_parts.extend(["-i", src_server.ssh_key])
 
     if len(src_ssh_parts) > 1:
-        inner_rsync_parts.extend(["-e", "'" + " ".join(src_ssh_parts) + "'"])
+        inner_rsync_parts.extend(["-e", " ".join(src_ssh_parts)])
 
     src_remote = format_remote_path(src_server, src_path)
     inner_rsync_parts.append(f"{src_remote}/")
     inner_rsync_parts.append(f"{dst_path}/latest/")
 
-    inner_command = " ".join(inner_rsync_parts)
+    inner_command = " ".join(shlex.quote(p) for p in inner_rsync_parts)
 
     return build_ssh_base_args(dst_server) + [inner_command]
 

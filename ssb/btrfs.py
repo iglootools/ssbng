@@ -35,7 +35,14 @@ def create_snapshot(
     snapshot_path = f"{dest_path}/snapshots/{timestamp}"
     latest_path = f"{dest_path}/latest"
 
-    cmd = f"btrfs subvolume snapshot -r {latest_path} {snapshot_path}"
+    cmd = [
+        "btrfs",
+        "subvolume",
+        "snapshot",
+        "-r",
+        latest_path,
+        snapshot_path,
+    ]
 
     dst_vol = config.volumes[sync.destination.volume]
     match dst_vol:
@@ -44,7 +51,7 @@ def create_snapshot(
             result = run_remote_command(server, cmd)
         case LocalVolume():
             result = subprocess.run(
-                cmd.split(),
+                cmd,
                 capture_output=True,
                 text=True,
             )
@@ -64,7 +71,7 @@ def get_latest_snapshot(sync: SyncConfig, config: Config) -> str | None:
     match dst_vol:
         case RemoteVolume():
             server = config.rsync_servers[dst_vol.rsync_server]
-            result = run_remote_command(server, f"ls {snapshots_dir}")
+            result = run_remote_command(server, ["ls", snapshots_dir])
         case LocalVolume():
             result = subprocess.run(
                 ["ls", snapshots_dir],

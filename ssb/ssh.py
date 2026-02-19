@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 
 from .config import RsyncServer
@@ -33,10 +34,11 @@ def build_ssh_base_args(server: RsyncServer) -> list[str]:
 
 
 def run_remote_command(
-    server: RsyncServer, command: str
+    server: RsyncServer, command: list[str]
 ) -> subprocess.CompletedProcess[str]:
-    """Run a shell command on a remote host via SSH."""
-    args = build_ssh_base_args(server) + [command]
+    """Run a command on a remote host via SSH."""
+    cmd_string = " ".join(shlex.quote(arg) for arg in command)
+    args = build_ssh_base_args(server) + [cmd_string]
     return subprocess.run(
         args,
         capture_output=True,
