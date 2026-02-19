@@ -123,7 +123,7 @@ def _build_remote_to_remote(
     link_dest: str | None,
 ) -> list[str]:
     """Build remote-to-remote rsync command (SSH into dest, rsync from src)."""
-    inner_rsync_parts = ["rsync", "-av", "--delete"]
+    inner_rsync_parts = ["rsync", "-av", "--delete", "--delete-excluded", "--safe-links"]
     if dry_run:
         inner_rsync_parts.append("--dry-run")
     if link_dest:
