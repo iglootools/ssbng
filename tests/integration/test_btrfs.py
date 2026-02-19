@@ -39,9 +39,9 @@ def _make_btrfs_config(
     remote_btrfs_volume: RemoteVolume,
     rsync_server: RsyncServer,
 ) -> tuple[SyncConfig, Config]:
-    src_vol = LocalVolume(name="src", path=src_path)
+    src_vol = LocalVolume(slug="src", path=src_path)
     sync = SyncConfig(
-        name="test-sync",
+        slug="test-sync",
         source=SyncEndpoint(volume="src"),
         destination=DestinationSyncEndpoint(
             volume="dst",

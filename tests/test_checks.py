@@ -33,9 +33,9 @@ def _remote_config(
     host: str = "nas.local",
     path: str = "/backup",
 ) -> tuple[RemoteVolume, Config]:
-    server = RsyncServer(name=server_name, host=host)
+    server = RsyncServer(slug=server_name, host=host)
     vol = RemoteVolume(
-        name=vol_name,
+        slug=vol_name,
         rsync_server=server_name,
         path=path,
     )
@@ -48,7 +48,7 @@ def _remote_config(
 
 class TestCheckLocalVolume:
     def test_active(self, tmp_path: Path) -> None:
-        vol = LocalVolume(name="data", path=str(tmp_path))
+        vol = LocalVolume(slug="data", path=str(tmp_path))
         (tmp_path / ".ssb-vol").touch()
         config = Config(volumes={"data": vol})
         status = check_volume(vol, config)
@@ -56,7 +56,7 @@ class TestCheckLocalVolume:
         assert status.reasons == []
 
     def test_inactive(self, tmp_path: Path) -> None:
-        vol = LocalVolume(name="data", path=str(tmp_path))
+        vol = LocalVolume(slug="data", path=str(tmp_path))
         config = Config(volumes={"data": vol})
         status = check_volume(vol, config)
         assert status.active is False
@@ -89,7 +89,7 @@ class TestCheckCommandAvailableLocal:
     @patch("ssb.status.shutil.which")
     def test_command_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = "/usr/bin/rsync"
-        vol = LocalVolume(name="data", path="/mnt/data")
+        vol = LocalVolume(slug="data", path="/mnt/data")
         config = Config(volumes={"data": vol})
         assert _check_command_available(vol, "rsync", config) is True
         mock_which.assert_called_once_with("rsync")
@@ -97,7 +97,7 @@ class TestCheckCommandAvailableLocal:
     @patch("ssb.status.shutil.which")
     def test_command_not_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = None
-        vol = LocalVolume(name="data", path="/mnt/data")
+        vol = LocalVolume(slug="data", path="/mnt/data")
         config = Config(volumes={"data": vol})
         assert _check_command_available(vol, "rsync", config) is False
         mock_which.assert_called_once_with("rsync")
@@ -125,7 +125,7 @@ class TestCheckBtrfsFilesystemLocal:
     @patch("ssb.status.subprocess.run")
     def test_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
-        vol = LocalVolume(name="data", path="/mnt/data")
+        vol = LocalVolume(slug="data", path="/mnt/data")
         config = Config(volumes={"data": vol})
         assert _check_btrfs_filesystem(vol, config) is True
         mock_run.assert_called_once_with(
@@ -137,14 +137,14 @@ class TestCheckBtrfsFilesystemLocal:
     @patch("ssb.status.subprocess.run")
     def test_not_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
-        vol = LocalVolume(name="data", path="/mnt/data")
+        vol = LocalVolume(slug="data", path="/mnt/data")
         config = Config(volumes={"data": vol})
         assert _check_btrfs_filesystem(vol, config) is False
 
     @patch("ssb.status.subprocess.run")
     def test_stat_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
-        vol = LocalVolume(name="data", path="/mnt/data")
+        vol = LocalVolume(slug="data", path="/mnt/data")
         config = Config(volumes={"data": vol})
         assert _check_btrfs_filesystem(vol, config) is False
 
@@ -172,7 +172,7 @@ class TestCheckBtrfsSubvolumeLocal:
     @patch("ssb.status.subprocess.run")
     def test_is_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
-        vol = LocalVolume(name="data", path="/mnt/data")
+        vol = LocalVolume(slug="data", path="/mnt/data")
         config = Config(volumes={"data": vol})
         assert _check_btrfs_subvolume(vol, None, config) is True
         mock_run.assert_called_once_with(
@@ -184,7 +184,7 @@ class TestCheckBtrfsSubvolumeLocal:
     @patch("ssb.status.subprocess.run")
     def test_is_subvolume_with_subdir(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
-        vol = LocalVolume(name="data", path="/mnt/data")
+        vol = LocalVolume(slug="data", path="/mnt/data")
         config = Config(volumes={"data": vol})
         assert _check_btrfs_subvolume(vol, "backup", config) is True
         mock_run.assert_called_once_with(
@@ -196,14 +196,14 @@ class TestCheckBtrfsSubvolumeLocal:
     @patch("ssb.status.subprocess.run")
     def test_not_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="1234\n")
-        vol = LocalVolume(name="data", path="/mnt/data")
+        vol = LocalVolume(slug="data", path="/mnt/data")
         config = Config(volumes={"data": vol})
         assert _check_btrfs_subvolume(vol, None, config) is False
 
     @patch("ssb.status.subprocess.run")
     def test_stat_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
-        vol = LocalVolume(name="data", path="/mnt/data")
+        vol = LocalVolume(slug="data", path="/mnt/data")
         config = Config(volumes={"data": vol})
         assert _check_btrfs_subvolume(vol, None, config) is False
 
@@ -242,10 +242,10 @@ class TestCheckSync:
     def _make_config(
         self, tmp_src: Path, tmp_dst: Path
     ) -> tuple[Config, SyncConfig]:
-        src_vol = LocalVolume(name="src", path=str(tmp_src))
-        dst_vol = LocalVolume(name="dst", path=str(tmp_dst))
+        src_vol = LocalVolume(slug="src", path=str(tmp_src))
+        dst_vol = LocalVolume(slug="dst", path=str(tmp_dst))
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src", subdir="data"),
             destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
         )
@@ -275,12 +275,12 @@ class TestCheckSync:
         config, sync = self._make_config(src, dst)
         vol_statuses = {
             "src": VolumeStatus(
-                name="src",
+                slug="src",
                 config=config.volumes["src"],
                 reasons=[],
             ),
             "dst": VolumeStatus(
-                name="dst",
+                slug="dst",
                 config=config.volumes["dst"],
                 reasons=[],
             ),
@@ -298,19 +298,19 @@ class TestCheckSync:
 
         config, _ = self._make_config(src, dst)
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src", subdir="data"),
             destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
             enabled=False,
         )
         vol_statuses = {
             "src": VolumeStatus(
-                name="src",
+                slug="src",
                 config=config.volumes["src"],
                 reasons=[],
             ),
             "dst": VolumeStatus(
-                name="dst",
+                slug="dst",
                 config=config.volumes["dst"],
                 reasons=[],
             ),
@@ -329,12 +329,12 @@ class TestCheckSync:
         config, sync = self._make_config(src, dst)
         vol_statuses = {
             "src": VolumeStatus(
-                name="src",
+                slug="src",
                 config=config.volumes["src"],
                 reasons=[VolumeReason.MARKER_NOT_FOUND],
             ),
             "dst": VolumeStatus(
-                name="dst",
+                slug="dst",
                 config=config.volumes["dst"],
                 reasons=[],
             ),
@@ -356,12 +356,12 @@ class TestCheckSync:
         config, sync = self._make_config(src, dst)
         vol_statuses = {
             "src": VolumeStatus(
-                name="src",
+                slug="src",
                 config=config.volumes["src"],
                 reasons=[],
             ),
             "dst": VolumeStatus(
-                name="dst",
+                slug="dst",
                 config=config.volumes["dst"],
                 reasons=[],
             ),
@@ -384,12 +384,12 @@ class TestCheckSync:
     ) -> dict[str, VolumeStatus]:
         return {
             "src": VolumeStatus(
-                name="src",
+                slug="src",
                 config=config.volumes["src"],
                 reasons=[],
             ),
             "dst": VolumeStatus(
-                name="dst",
+                slug="dst",
                 config=config.volumes["dst"],
                 reasons=[],
             ),
@@ -426,10 +426,10 @@ class TestCheckSync:
         dst.mkdir()
         self._setup_active_markers(src, dst)
 
-        src_vol = LocalVolume(name="src", path=str(src))
-        dst_vol = LocalVolume(name="dst", path=str(dst))
+        src_vol = LocalVolume(slug="src", path=str(src))
+        dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src", subdir="data"),
             destination=DestinationSyncEndpoint(
                 volume="dst",
@@ -464,10 +464,10 @@ class TestCheckSync:
         dst.mkdir()
         self._setup_active_markers(src, dst)
 
-        src_vol = LocalVolume(name="src", path=str(src))
-        dst_vol = LocalVolume(name="dst", path=str(dst))
+        src_vol = LocalVolume(slug="src", path=str(src))
+        dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src", subdir="data"),
             destination=DestinationSyncEndpoint(
                 volume="dst",
@@ -506,10 +506,10 @@ class TestCheckSync:
         dst.mkdir()
         self._setup_active_markers(src, dst)
 
-        src_vol = LocalVolume(name="src", path=str(src))
-        dst_vol = LocalVolume(name="dst", path=str(dst))
+        src_vol = LocalVolume(slug="src", path=str(src))
+        dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src", subdir="data"),
             destination=DestinationSyncEndpoint(
                 volume="dst",
@@ -593,12 +593,12 @@ class TestCheckSync:
         config, sync = self._make_config(src, dst)
         vol_statuses = {
             "src": VolumeStatus(
-                name="src",
+                slug="src",
                 config=config.volumes["src"],
                 reasons=[VolumeReason.MARKER_NOT_FOUND],
             ),
             "dst": VolumeStatus(
-                name="dst",
+                slug="dst",
                 config=config.volumes["dst"],
                 reasons=[VolumeReason.MARKER_NOT_FOUND],
             ),
@@ -621,15 +621,15 @@ class TestCheckSyncRemoteCommands:
         (dst / "backup").mkdir()
         (dst / "backup" / ".ssb-dst").touch()
 
-        src_server = RsyncServer(name="src-server", host="src.local")
+        src_server = RsyncServer(slug="src-server", host="src.local")
         src_vol = RemoteVolume(
-            name="src",
+            slug="src",
             rsync_server="src-server",
             path="/data",
         )
-        dst_vol = LocalVolume(name="dst", path=str(dst))
+        dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src", subdir="data"),
             destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
         )
@@ -640,12 +640,12 @@ class TestCheckSyncRemoteCommands:
         )
         vol_statuses = {
             "src": VolumeStatus(
-                name="src",
+                slug="src",
                 config=src_vol,
                 reasons=[],
             ),
             "dst": VolumeStatus(
-                name="dst",
+                slug="dst",
                 config=dst_vol,
                 reasons=[],
             ),
@@ -683,15 +683,15 @@ class TestCheckSyncRemoteCommands:
         (src / "data").mkdir()
         (src / "data" / ".ssb-src").touch()
 
-        dst_server = RsyncServer(name="dst-server", host="dst.local")
-        src_vol = LocalVolume(name="src", path=str(src))
+        dst_server = RsyncServer(slug="dst-server", host="dst.local")
+        src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = RemoteVolume(
-            name="dst",
+            slug="dst",
             rsync_server="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src", subdir="data"),
             destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
         )
@@ -702,12 +702,12 @@ class TestCheckSyncRemoteCommands:
         )
         vol_statuses = {
             "src": VolumeStatus(
-                name="src",
+                slug="src",
                 config=src_vol,
                 reasons=[],
             ),
             "dst": VolumeStatus(
-                name="dst",
+                slug="dst",
                 config=dst_vol,
                 reasons=[],
             ),
@@ -745,15 +745,15 @@ class TestCheckSyncRemoteCommands:
         (src / "data").mkdir()
         (src / "data" / ".ssb-src").touch()
 
-        dst_server = RsyncServer(name="dst-server", host="dst.local")
-        src_vol = LocalVolume(name="src", path=str(src))
+        dst_server = RsyncServer(slug="dst-server", host="dst.local")
+        src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = RemoteVolume(
-            name="dst",
+            slug="dst",
             rsync_server="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src", subdir="data"),
             destination=DestinationSyncEndpoint(
                 volume="dst",
@@ -768,12 +768,12 @@ class TestCheckSyncRemoteCommands:
         )
         vol_statuses = {
             "src": VolumeStatus(
-                name="src",
+                slug="src",
                 config=src_vol,
                 reasons=[],
             ),
             "dst": VolumeStatus(
-                name="dst",
+                slug="dst",
                 config=dst_vol,
                 reasons=[],
             ),
@@ -813,15 +813,15 @@ class TestCheckSyncRemoteCommands:
         (src / "data").mkdir()
         (src / "data" / ".ssb-src").touch()
 
-        dst_server = RsyncServer(name="dst-server", host="dst.local")
-        src_vol = LocalVolume(name="src", path=str(src))
+        dst_server = RsyncServer(slug="dst-server", host="dst.local")
+        src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = RemoteVolume(
-            name="dst",
+            slug="dst",
             rsync_server="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src", subdir="data"),
             destination=DestinationSyncEndpoint(
                 volume="dst",
@@ -836,12 +836,12 @@ class TestCheckSyncRemoteCommands:
         )
         vol_statuses = {
             "src": VolumeStatus(
-                name="src",
+                slug="src",
                 config=src_vol,
                 reasons=[],
             ),
             "dst": VolumeStatus(
-                name="dst",
+                slug="dst",
                 config=dst_vol,
                 reasons=[],
             ),
@@ -883,15 +883,15 @@ class TestCheckSyncRemoteCommands:
         (src / "data").mkdir()
         (src / "data" / ".ssb-src").touch()
 
-        dst_server = RsyncServer(name="dst-server", host="dst.local")
-        src_vol = LocalVolume(name="src", path=str(src))
+        dst_server = RsyncServer(slug="dst-server", host="dst.local")
+        src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = RemoteVolume(
-            name="dst",
+            slug="dst",
             rsync_server="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src", subdir="backup"),
             destination=DestinationSyncEndpoint(
                 volume="dst",
@@ -906,12 +906,12 @@ class TestCheckSyncRemoteCommands:
         )
         vol_statuses = {
             "src": VolumeStatus(
-                name="src",
+                slug="src",
                 config=src_vol,
                 reasons=[],
             ),
             "dst": VolumeStatus(
-                name="dst",
+                slug="dst",
                 config=dst_vol,
                 reasons=[],
             ),
@@ -959,10 +959,10 @@ class TestCheckAllSyncs:
         (src / ".ssb-src").touch()
         (dst / ".ssb-dst").touch()
 
-        src_vol = LocalVolume(name="src", path=str(src))
-        dst_vol = LocalVolume(name="dst", path=str(dst))
+        src_vol = LocalVolume(slug="src", path=str(src))
+        dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
         )

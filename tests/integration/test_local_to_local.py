@@ -21,10 +21,10 @@ def _make_local_config(
     dst_subdir: str | None = None,
     btrfs_snapshots: bool = False,
 ) -> tuple[SyncConfig, Config]:
-    src_vol = LocalVolume(name="src", path=src_path)
-    dst_vol = LocalVolume(name="dst", path=dst_path)
+    src_vol = LocalVolume(slug="src", path=src_path)
+    dst_vol = LocalVolume(slug="dst", path=dst_path)
     sync = SyncConfig(
-        name="test-sync",
+        slug="test-sync",
         source=SyncEndpoint(volume="src", subdir=src_subdir),
         destination=DestinationSyncEndpoint(
             volume="dst",

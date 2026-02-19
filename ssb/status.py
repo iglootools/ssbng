@@ -42,7 +42,7 @@ class SyncReason(str, enum.Enum):
 class VolumeStatus(BaseModel):
     """Runtime status of a volume."""
 
-    name: str
+    slug: str
     config: Volume
     reasons: list[VolumeReason]
 
@@ -55,7 +55,7 @@ class VolumeStatus(BaseModel):
 class SyncStatus(BaseModel):
     """Runtime status of a sync."""
 
-    name: str
+    slug: str
     config: SyncConfig
     source_status: VolumeStatus
     destination_status: VolumeStatus
@@ -83,7 +83,7 @@ def _check_local_volume(volume: LocalVolume) -> VolumeStatus:
         [] if marker.exists() else [VolumeReason.MARKER_NOT_FOUND]
     )
     return VolumeStatus(
-        name=volume.name,
+        slug=volume.slug,
         config=volume,
         reasons=reasons,
     )
@@ -98,7 +98,7 @@ def _check_remote_volume(volume: RemoteVolume, config: Config) -> VolumeStatus:
         [] if result.returncode == 0 else [VolumeReason.UNREACHABLE]
     )
     return VolumeStatus(
-        name=volume.name,
+        slug=volume.slug,
         config=volume,
         reasons=reasons,
     )
@@ -192,7 +192,7 @@ def check_sync(
 
     if not sync.enabled:
         return SyncStatus(
-            name=sync.name,
+            slug=sync.slug,
             config=sync,
             source_status=src_status,
             destination_status=dst_status,
@@ -239,7 +239,7 @@ def check_sync(
                 reasons.append(SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME)
 
     return SyncStatus(
-        name=sync.name,
+        slug=sync.slug,
         config=sync,
         source_status=src_status,
         destination_status=dst_status,
@@ -252,11 +252,11 @@ def check_all_syncs(
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     """Check all volumes and syncs, caching volume checks."""
     volume_statuses = {
-        name: check_volume(volume, config)
-        for name, volume in config.volumes.items()
+        slug: check_volume(volume, config)
+        for slug, volume in config.volumes.items()
     }
     sync_statuses = {
-        name: check_sync(sync, config, volume_statuses)
-        for name, sync in config.syncs.items()
+        slug: check_sync(sync, config, volume_statuses)
+        for slug, sync in config.syncs.items()
     }
     return volume_statuses, sync_statuses

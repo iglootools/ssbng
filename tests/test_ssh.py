@@ -42,7 +42,7 @@ class TestBuildSshBaseArgs:
 
     def test_with_ssh_options(self) -> None:
         server = RsyncServer(
-            name="host-server",
+            slug="host-server",
             host="host.example.com",
             ssh_options=[
                 "StrictHostKeyChecking=no",
@@ -65,7 +65,7 @@ class TestBuildSshBaseArgs:
 
     def test_custom_connect_timeout(self) -> None:
         server = RsyncServer(
-            name="slow-server",
+            slug="slow-server",
             host="slow.example.com",
             connect_timeout=30,
         )
@@ -91,7 +91,7 @@ class TestBuildSshEOption:
 
     def test_with_ssh_options(self) -> None:
         server = RsyncServer(
-            name="host-server",
+            slug="host-server",
             host="host.example.com",
             ssh_options=["StrictHostKeyChecking=no"],
         )

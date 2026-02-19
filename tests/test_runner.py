@@ -23,10 +23,10 @@ from ssb.runner import run_all_syncs
 
 
 def _make_local_config() -> Config:
-    src = LocalVolume(name="src", path="/src")
-    dst = LocalVolume(name="dst", path="/dst")
+    src = LocalVolume(slug="src", path="/src")
+    dst = LocalVolume(slug="dst", path="/dst")
     sync = SyncConfig(
-        name="s1",
+        slug="s1",
         source=SyncEndpoint(volume="src"),
         destination=DestinationSyncEndpoint(volume="dst"),
     )
@@ -37,10 +37,10 @@ def _make_local_config() -> Config:
 
 
 def _make_btrfs_config() -> Config:
-    src = LocalVolume(name="src", path="/src")
-    dst = LocalVolume(name="dst", path="/dst")
+    src = LocalVolume(slug="src", path="/src")
+    dst = LocalVolume(slug="dst", path="/dst")
     sync = SyncConfig(
-        name="s1",
+        slug="s1",
         source=SyncEndpoint(volume="src"),
         destination=DestinationSyncEndpoint(
             volume="dst",
@@ -55,23 +55,23 @@ def _make_btrfs_config() -> Config:
 
 def _make_remote_to_remote_config() -> Config:
     src_server = RsyncServer(
-        name="src-server", host="src.local", user="srcuser"
+        slug="src-server", host="src.local", user="srcuser"
     )
     dst_server = RsyncServer(
-        name="dst-server", host="dst.local", user="dstuser"
+        slug="dst-server", host="dst.local", user="dstuser"
     )
     src = RemoteVolume(
-        name="src",
+        slug="src",
         rsync_server="src-server",
         path="/data",
     )
     dst = RemoteVolume(
-        name="dst",
+        slug="dst",
         rsync_server="dst-server",
         path="/backup",
     )
     sync = SyncConfig(
-        name="s1",
+        slug="s1",
         source=SyncEndpoint(volume="src"),
         destination=DestinationSyncEndpoint(
             volume="dst",
@@ -93,7 +93,7 @@ def _active_statuses(
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     vol_statuses = {
         name: VolumeStatus(
-            name=name,
+            slug=name,
             config=vol,
             reasons=[],
         )
@@ -101,7 +101,7 @@ def _active_statuses(
     }
     sync_statuses = {
         name: SyncStatus(
-            name=name,
+            slug=name,
             config=sync,
             source_status=vol_statuses[sync.source.volume],
             destination_status=vol_statuses[sync.destination.volume],
@@ -117,7 +117,7 @@ def _inactive_statuses(
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     vol_statuses = {
         name: VolumeStatus(
-            name=name,
+            slug=name,
             config=vol,
             reasons=[VolumeReason.UNREACHABLE],
         )
@@ -125,7 +125,7 @@ def _inactive_statuses(
     }
     sync_statuses = {
         name: SyncStatus(
-            name=name,
+            slug=name,
             config=sync,
             source_status=vol_statuses[sync.source.volume],
             destination_status=vol_statuses[sync.destination.volume],
@@ -172,7 +172,7 @@ class TestRunAllSyncs:
         assert results[0].rsync_exit_code == 23
 
     @patch("ssb.runner.run_rsync")
-    def test_filter_by_sync_name(self, mock_rsync: MagicMock) -> None:
+    def test_filter_by_sync_slug(self, mock_rsync: MagicMock) -> None:
         config = _make_local_config()
         _, sync_statuses = _active_statuses(config)
         mock_rsync.return_value = MagicMock(
@@ -180,7 +180,7 @@ class TestRunAllSyncs:
         )
 
         results = run_all_syncs(
-            config, sync_statuses, sync_names=["nonexistent"]
+            config, sync_statuses, sync_slugs=["nonexistent"]
         )
         assert len(results) == 0
 

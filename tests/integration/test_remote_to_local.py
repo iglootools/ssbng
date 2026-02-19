@@ -40,14 +40,14 @@ class TestRemoteToLocal:
         dst_dir = tmp_path / "dst"
         (dst_dir / "latest").mkdir(parents=True)
 
-        dst_vol = LocalVolume(name="dst", path=str(dst_dir))
+        dst_vol = LocalVolume(slug="dst", path=str(dst_dir))
         src_vol = RemoteVolume(
-            name="src-remote",
+            slug="src-remote",
             rsync_server="test-server",
             path="/data/src",
         )
         sync = SyncConfig(
-            name="test-sync",
+            slug="test-sync",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
         )

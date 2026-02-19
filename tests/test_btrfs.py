@@ -19,10 +19,10 @@ from ssb.config import (
 
 
 def _local_config() -> tuple[Config, SyncConfig]:
-    src = LocalVolume(name="src", path="/mnt/src")
-    dst = LocalVolume(name="dst", path="/mnt/dst")
+    src = LocalVolume(slug="src", path="/mnt/src")
+    dst = LocalVolume(slug="dst", path="/mnt/dst")
     sync = SyncConfig(
-        name="s1",
+        slug="s1",
         source=SyncEndpoint(volume="src"),
         destination=DestinationSyncEndpoint(
             volume="dst",
@@ -38,19 +38,19 @@ def _local_config() -> tuple[Config, SyncConfig]:
 
 
 def _remote_config() -> tuple[Config, SyncConfig]:
-    src = LocalVolume(name="src", path="/mnt/src")
+    src = LocalVolume(slug="src", path="/mnt/src")
     dst_server = RsyncServer(
-        name="nas-server",
+        slug="nas-server",
         host="nas.local",
         user="admin",
     )
     dst = RemoteVolume(
-        name="dst",
+        slug="dst",
         rsync_server="nas-server",
         path="/backup",
     )
     sync = SyncConfig(
-        name="s1",
+        slug="s1",
         source=SyncEndpoint(volume="src"),
         destination=DestinationSyncEndpoint(
             volume="dst",
@@ -170,10 +170,10 @@ class TestGetLatestSnapshotRemote:
 
 
 def _local_config_spaces() -> tuple[Config, SyncConfig]:
-    src = LocalVolume(name="src", path="/mnt/my src")
-    dst = LocalVolume(name="dst", path="/mnt/my dst")
+    src = LocalVolume(slug="src", path="/mnt/my src")
+    dst = LocalVolume(slug="dst", path="/mnt/my dst")
     sync = SyncConfig(
-        name="s1",
+        slug="s1",
         source=SyncEndpoint(volume="src"),
         destination=DestinationSyncEndpoint(
             volume="dst",
@@ -189,19 +189,19 @@ def _local_config_spaces() -> tuple[Config, SyncConfig]:
 
 
 def _remote_config_spaces() -> tuple[Config, SyncConfig]:
-    src = LocalVolume(name="src", path="/mnt/my src")
+    src = LocalVolume(slug="src", path="/mnt/my src")
     dst_server = RsyncServer(
-        name="nas-server",
+        slug="nas-server",
         host="nas.local",
         user="admin",
     )
     dst = RemoteVolume(
-        name="dst",
+        slug="dst",
         rsync_server="nas-server",
         path="/my backup",
     )
     sync = SyncConfig(
-        name="s1",
+        slug="s1",
         source=SyncEndpoint(volume="src"),
         destination=DestinationSyncEndpoint(
             volume="dst",

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import enum
 
-from rich import box
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
@@ -74,7 +73,7 @@ def print_human_status(
             case LocalVolume():
                 vol_type = "local"
         vol_table.add_row(
-            vs.name,
+            vs.slug,
             vol_type,
             format_volume_display(vol, config),
             _status_text(vs.active, vs.reasons),
@@ -93,7 +92,7 @@ def print_human_status(
 
     for ss in sync_statuses.values():
         sync_table.add_row(
-            ss.name,
+            ss.slug,
             ss.config.source.volume,
             ss.config.destination.volume,
             _status_text(ss.active, ss.reasons),
@@ -130,7 +129,7 @@ def print_human_results(results: list[SyncResult], dry_run: bool) -> None:
             details_parts.extend(lines)
 
         table.add_row(
-            r.sync_name,
+            r.sync_slug,
             status,
             "\n".join(details_parts),
         )

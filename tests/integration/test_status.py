@@ -35,7 +35,7 @@ class TestLocalVolumeStatus:
         vol_path.mkdir()
         (vol_path / ".ssb-vol").touch()
 
-        vol = LocalVolume(name="local", path=str(vol_path))
+        vol = LocalVolume(slug="local", path=str(vol_path))
         config = Config(
             volumes={"local": vol},
         )
@@ -47,7 +47,7 @@ class TestLocalVolumeStatus:
         vol_path.mkdir()
         # No .ssb-vol marker
 
-        vol = LocalVolume(name="local", path=str(vol_path))
+        vol = LocalVolume(slug="local", path=str(vol_path))
         config = Config(
             volumes={"local": vol},
         )
@@ -102,9 +102,9 @@ class TestSyncStatus:
         # Set up remote destination markers
         create_markers(docker_container, "/data", [".ssb-vol", ".ssb-dst"])
 
-        src_vol = LocalVolume(name="src", path=str(src_path))
+        src_vol = LocalVolume(slug="src", path=str(src_path))
         sync = SyncConfig(
-            name="test-sync",
+            slug="test-sync",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
         )
@@ -233,9 +233,9 @@ class TestSyncStatusBtrfsChecks:
         (src_path / ".ssb-vol").touch()
         (src_path / ".ssb-src").touch()
 
-        src_vol = LocalVolume(name="src", path=str(src_path))
+        src_vol = LocalVolume(slug="src", path=str(src_path))
         sync = SyncConfig(
-            name="test-sync",
+            slug="test-sync",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(
                 volume="dst",

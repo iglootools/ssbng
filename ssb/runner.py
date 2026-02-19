@@ -15,7 +15,7 @@ from .rsync import run_rsync
 class SyncResult(BaseModel):
     """Result of running a sync."""
 
-    sync_name: str
+    sync_slug: str
     success: bool
     dry_run: bool
     rsync_exit_code: int
@@ -28,7 +28,7 @@ def run_all_syncs(
     config: Config,
     sync_statuses: dict[str, SyncStatus],
     dry_run: bool = False,
-    sync_names: list[str] | None = None,
+    sync_slugs: list[str] | None = None,
     verbose: int = 0,
     on_rsync_output: Callable[[str], None] | None = None,
 ) -> list[SyncResult]:
@@ -39,14 +39,14 @@ def run_all_syncs(
 
     results: list[SyncResult] = []
 
-    for name, status in sync_statuses.items():
-        if sync_names and name not in sync_names:
+    for slug, status in sync_statuses.items():
+        if sync_slugs and slug not in sync_slugs:
             continue
 
         if not status.active:
             results.append(
                 SyncResult(
-                    sync_name=name,
+                    sync_slug=slug,
                     success=False,
                     dry_run=dry_run,
                     rsync_exit_code=-1,
@@ -60,7 +60,7 @@ def run_all_syncs(
             continue
 
         result = _run_single_sync(
-            name,
+            slug,
             status,
             config,
             dry_run,
@@ -73,7 +73,7 @@ def run_all_syncs(
 
 
 def _run_single_sync(
-    name: str,
+    slug: str,
     status: SyncStatus,
     config: Config,
     dry_run: bool,
@@ -101,7 +101,7 @@ def _run_single_sync(
         )
     except Exception as e:
         return SyncResult(
-            sync_name=name,
+            sync_slug=slug,
             success=False,
             dry_run=dry_run,
             rsync_exit_code=-1,
@@ -111,7 +111,7 @@ def _run_single_sync(
 
     if proc.returncode != 0:
         return SyncResult(
-            sync_name=name,
+            sync_slug=slug,
             success=False,
             dry_run=dry_run,
             rsync_exit_code=proc.returncode,
@@ -126,7 +126,7 @@ def _run_single_sync(
             snapshot_path = create_snapshot(sync, config)
         except RuntimeError as e:
             return SyncResult(
-                sync_name=name,
+                sync_slug=slug,
                 success=False,
                 dry_run=dry_run,
                 rsync_exit_code=proc.returncode,
@@ -135,7 +135,7 @@ def _run_single_sync(
             )
 
     return SyncResult(
-        sync_name=name,
+        sync_slug=slug,
         success=True,
         dry_run=dry_run,
         rsync_exit_code=proc.returncode,

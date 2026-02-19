@@ -29,20 +29,20 @@ runner = CliRunner()
 
 
 def _sample_config() -> Config:
-    src = LocalVolume(name="local-data", path="/mnt/data")
+    src = LocalVolume(slug="local-data", path="/mnt/data")
     nas_server = RsyncServer(
-        name="nas-server",
+        slug="nas-server",
         host="nas.example.com",
         port=5022,
         user="backup",
     )
     dst = RemoteVolume(
-        name="nas",
+        slug="nas",
         rsync_server="nas-server",
         path="/volume1/backups",
     )
     sync = SyncConfig(
-        name="photos-to-nas",
+        slug="photos-to-nas",
         source=SyncEndpoint(volume="local-data", subdir="photos"),
         destination=DestinationSyncEndpoint(
             volume="nas", subdir="photos-backup"
@@ -60,12 +60,12 @@ def _sample_vol_statuses(
 ) -> dict[str, VolumeStatus]:
     return {
         "local-data": VolumeStatus(
-            name="local-data",
+            slug="local-data",
             config=config.volumes["local-data"],
             reasons=[],
         ),
         "nas": VolumeStatus(
-            name="nas",
+            slug="nas",
             config=config.volumes["nas"],
             reasons=[VolumeReason.UNREACHABLE],
         ),
@@ -78,7 +78,7 @@ def _sample_sync_statuses(
 ) -> dict[str, SyncStatus]:
     return {
         "photos-to-nas": SyncStatus(
-            name="photos-to-nas",
+            slug="photos-to-nas",
             config=config.syncs["photos-to-nas"],
             source_status=vol_statuses["local-data"],
             destination_status=vol_statuses["nas"],
@@ -93,7 +93,7 @@ def _sample_marker_only_sync_statuses(
 ) -> dict[str, SyncStatus]:
     return {
         "photos-to-nas": SyncStatus(
-            name="photos-to-nas",
+            slug="photos-to-nas",
             config=config.syncs["photos-to-nas"],
             source_status=vol_statuses["local-data"],
             destination_status=vol_statuses["nas"],
@@ -110,12 +110,12 @@ def _sample_all_active_vol_statuses(
 ) -> dict[str, VolumeStatus]:
     return {
         "local-data": VolumeStatus(
-            name="local-data",
+            slug="local-data",
             config=config.volumes["local-data"],
             reasons=[],
         ),
         "nas": VolumeStatus(
-            name="nas",
+            slug="nas",
             config=config.volumes["nas"],
             reasons=[],
         ),
@@ -128,7 +128,7 @@ def _sample_all_active_sync_statuses(
 ) -> dict[str, SyncStatus]:
     return {
         "photos-to-nas": SyncStatus(
-            name="photos-to-nas",
+            slug="photos-to-nas",
             config=config.syncs["photos-to-nas"],
             source_status=vol_statuses["local-data"],
             destination_status=vol_statuses["nas"],
@@ -277,7 +277,7 @@ class TestRunCommand:
         mock_checks.return_value = (vol_s, sync_s)
         mock_run.return_value = [
             SyncResult(
-                sync_name="photos-to-nas",
+                sync_slug="photos-to-nas",
                 success=True,
                 dry_run=False,
                 rsync_exit_code=0,
@@ -308,7 +308,7 @@ class TestRunCommand:
         mock_checks.return_value = (vol_s, sync_s)
         mock_run.return_value = [
             SyncResult(
-                sync_name="photos-to-nas",
+                sync_slug="photos-to-nas",
                 success=True,
                 dry_run=False,
                 rsync_exit_code=0,
@@ -341,7 +341,7 @@ class TestRunCommand:
         mock_checks.return_value = (vol_s, sync_s)
         mock_run.return_value = [
             SyncResult(
-                sync_name="photos-to-nas",
+                sync_slug="photos-to-nas",
                 success=False,
                 dry_run=False,
                 rsync_exit_code=23,
@@ -370,7 +370,7 @@ class TestRunCommand:
         mock_checks.return_value = (vol_s, sync_s)
         mock_run.return_value = [
             SyncResult(
-                sync_name="photos-to-nas",
+                sync_slug="photos-to-nas",
                 success=True,
                 dry_run=True,
                 rsync_exit_code=0,
@@ -401,7 +401,7 @@ class TestRunCommand:
         mock_checks.return_value = (vol_s, sync_s)
         mock_run.return_value = [
             SyncResult(
-                sync_name="photos-to-nas",
+                sync_slug="photos-to-nas",
                 success=True,
                 dry_run=False,
                 rsync_exit_code=0,
@@ -424,7 +424,7 @@ class TestRunCommand:
         assert "volumes" in data
         assert "syncs" in data
         assert "results" in data
-        assert data["results"][0]["sync_name"] == "photos-to-nas"
+        assert data["results"][0]["sync_slug"] == "photos-to-nas"
         call_kwargs = mock_run.call_args
         assert call_kwargs.kwargs.get("on_rsync_output") is None
 
@@ -444,7 +444,7 @@ class TestRunCommand:
         mock_checks.return_value = (vol_s, sync_s)
         mock_run.return_value = [
             SyncResult(
-                sync_name="photos-to-nas",
+                sync_slug="photos-to-nas",
                 success=True,
                 dry_run=False,
                 rsync_exit_code=0,
@@ -464,7 +464,7 @@ class TestRunCommand:
         )
         assert result.exit_code == 0
         call_kwargs = mock_run.call_args
-        assert call_kwargs.kwargs.get("sync_names") == ["photos-to-nas"]
+        assert call_kwargs.kwargs.get("sync_slugs") == ["photos-to-nas"]
 
     @patch("ssb.cli.run_all_syncs")
     @patch("ssb.cli.check_all_syncs")
@@ -482,7 +482,7 @@ class TestRunCommand:
         mock_checks.return_value = (vol_s, sync_s)
         mock_run.return_value = [
             SyncResult(
-                sync_name="photos-to-nas",
+                sync_slug="photos-to-nas",
                 success=True,
                 dry_run=False,
                 rsync_exit_code=0,
@@ -533,7 +533,7 @@ class TestRunCommand:
         mock_checks.return_value = (vol_s, sync_s)
         mock_run.return_value = [
             SyncResult(
-                sync_name="photos-to-nas",
+                sync_slug="photos-to-nas",
                 success=True,
                 dry_run=False,
                 rsync_exit_code=0,

@@ -155,7 +155,7 @@ def rsync_server(
 ) -> RsyncServer:
     """RsyncServer pointing at the Docker container."""
     return RsyncServer(
-        name="test-server",
+        slug="test-server",
         host=docker_container["host"],
         port=docker_container["port"],
         user=docker_container["user"],
@@ -171,7 +171,7 @@ def rsync_server(
 def remote_volume() -> RemoteVolume:
     """RemoteVolume pointing at /data on the container."""
     return RemoteVolume(
-        name="test-remote",
+        slug="test-remote",
         rsync_server="test-server",
         path="/data",
     )
@@ -181,7 +181,7 @@ def remote_volume() -> RemoteVolume:
 def remote_btrfs_volume() -> RemoteVolume:
     """RemoteVolume pointing at /mnt/btrfs on the container."""
     return RemoteVolume(
-        name="test-btrfs",
+        slug="test-btrfs",
         rsync_server="test-server",
         path="/mnt/btrfs",
     )

@@ -87,13 +87,13 @@ def sample_minimal_config_file(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def local_volume() -> LocalVolume:
-    return LocalVolume(name="local-data", path="/mnt/data")
+    return LocalVolume(slug="local-data", path="/mnt/data")
 
 
 @pytest.fixture()
 def rsync_server() -> RsyncServer:
     return RsyncServer(
-        name="nas-server",
+        slug="nas-server",
         host="nas.example.com",
         port=5022,
         user="backup",
@@ -104,7 +104,7 @@ def rsync_server() -> RsyncServer:
 @pytest.fixture()
 def rsync_server_minimal() -> RsyncServer:
     return RsyncServer(
-        name="nas2-server",
+        slug="nas2-server",
         host="nas2.example.com",
     )
 
@@ -112,7 +112,7 @@ def rsync_server_minimal() -> RsyncServer:
 @pytest.fixture()
 def remote_volume() -> RemoteVolume:
     return RemoteVolume(
-        name="nas",
+        slug="nas",
         rsync_server="nas-server",
         path="/volume1/backups",
     )
@@ -121,7 +121,7 @@ def remote_volume() -> RemoteVolume:
 @pytest.fixture()
 def remote_volume_minimal() -> RemoteVolume:
     return RemoteVolume(
-        name="nas2",
+        slug="nas2",
         rsync_server="nas2-server",
         path="/backups",
     )
@@ -143,7 +143,7 @@ def sample_config(
         },
         syncs={
             "photos-to-nas": SyncConfig(
-                name="photos-to-nas",
+                slug="photos-to-nas",
                 source=SyncEndpoint(volume="local-data", subdir="photos"),
                 destination=DestinationSyncEndpoint(
                     volume="nas",

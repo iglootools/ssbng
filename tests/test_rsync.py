@@ -19,10 +19,10 @@ from ssb.rsync import build_rsync_command, run_rsync
 
 class TestBuildRsyncCommandLocalToLocal:
     def test_basic(self) -> None:
-        src = LocalVolume(name="src", path="/mnt/src")
-        dst = LocalVolume(name="dst", path="/mnt/dst")
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src", subdir="photos"),
             destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
         )
@@ -43,10 +43,10 @@ class TestBuildRsyncCommandLocalToLocal:
         ]
 
     def test_dry_run(self) -> None:
-        src = LocalVolume(name="src", path="/mnt/src")
-        dst = LocalVolume(name="dst", path="/mnt/dst")
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
         )
@@ -59,10 +59,10 @@ class TestBuildRsyncCommandLocalToLocal:
         assert "--dry-run" in cmd
 
     def test_link_dest(self) -> None:
-        src = LocalVolume(name="src", path="/mnt/src")
-        dst = LocalVolume(name="dst", path="/mnt/dst")
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
         )
@@ -82,20 +82,20 @@ class TestBuildRsyncCommandLocalToLocal:
 class TestBuildRsyncCommandLocalToRemote:
     def test_basic(self) -> None:
         nas_server = RsyncServer(
-            name="nas-server",
+            slug="nas-server",
             host="nas.local",
             port=5022,
             user="backup",
             ssh_key="~/.ssh/key",
         )
-        src = LocalVolume(name="src", path="/mnt/src")
+        src = LocalVolume(slug="src", path="/mnt/src")
         dst = RemoteVolume(
-            name="dst",
+            slug="dst",
             rsync_server="nas-server",
             path="/backup",
         )
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src", subdir="photos"),
             destination=DestinationSyncEndpoint(volume="dst", subdir="photos"),
         )
@@ -122,18 +122,18 @@ class TestBuildRsyncCommandLocalToRemote:
 class TestBuildRsyncCommandRemoteToLocal:
     def test_basic(self) -> None:
         server = RsyncServer(
-            name="server",
+            slug="server",
             host="server.local",
             user="admin",
         )
         src = RemoteVolume(
-            name="src",
+            slug="src",
             rsync_server="server",
             path="/data",
         )
-        dst = LocalVolume(name="dst", path="/mnt/dst")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
         )
@@ -160,29 +160,29 @@ class TestBuildRsyncCommandRemoteToLocal:
 class TestBuildRsyncCommandRemoteToRemote:
     def test_basic(self) -> None:
         src_server = RsyncServer(
-            name="src-server",
+            slug="src-server",
             host="src.local",
             port=2222,
             user="srcuser",
         )
         dst_server = RsyncServer(
-            name="dst-server",
+            slug="dst-server",
             host="dst.local",
             user="dstuser",
             ssh_key="~/.ssh/dst_key",
         )
         src = RemoteVolume(
-            name="src",
+            slug="src",
             rsync_server="src-server",
             path="/data",
         )
         dst = RemoteVolume(
-            name="dst",
+            slug="dst",
             rsync_server="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src", subdir="photos"),
             destination=DestinationSyncEndpoint(volume="dst", subdir="photos"),
         )
@@ -211,20 +211,20 @@ class TestBuildRsyncCommandRemoteToRemote:
         assert "/backup/photos/latest/" in inner
 
     def test_dry_run(self) -> None:
-        src_server = RsyncServer(name="src-server", host="src.local")
-        dst_server = RsyncServer(name="dst-server", host="dst.local")
+        src_server = RsyncServer(slug="src-server", host="src.local")
+        dst_server = RsyncServer(slug="dst-server", host="dst.local")
         src = RemoteVolume(
-            name="src",
+            slug="src",
             rsync_server="src-server",
             path="/data",
         )
         dst = RemoteVolume(
-            name="dst",
+            slug="dst",
             rsync_server="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
         )
@@ -244,10 +244,10 @@ class TestBuildRsyncCommandRemoteToRemote:
 
 class TestBuildRsyncCommandFilters:
     def test_inline_filters(self) -> None:
-        src = LocalVolume(name="src", path="/mnt/src")
-        dst = LocalVolume(name="dst", path="/mnt/dst")
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
             filters=["+ *.jpg", "- *.tmp"],
@@ -271,10 +271,10 @@ class TestBuildRsyncCommandFilters:
         ]
 
     def test_filter_file(self) -> None:
-        src = LocalVolume(name="src", path="/mnt/src")
-        dst = LocalVolume(name="dst", path="/mnt/dst")
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
             filter_file="/etc/ssb/filters.rules",
@@ -297,10 +297,10 @@ class TestBuildRsyncCommandFilters:
         ]
 
     def test_filters_and_filter_file(self) -> None:
-        src = LocalVolume(name="src", path="/mnt/src")
-        dst = LocalVolume(name="dst", path="/mnt/dst")
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
             filters=["+ *.jpg"],
@@ -325,20 +325,20 @@ class TestBuildRsyncCommandFilters:
         ]
 
     def test_remote_to_remote_filters(self) -> None:
-        src_server = RsyncServer(name="src-server", host="src.local")
-        dst_server = RsyncServer(name="dst-server", host="dst.local")
+        src_server = RsyncServer(slug="src-server", host="src.local")
+        dst_server = RsyncServer(slug="dst-server", host="dst.local")
         src = RemoteVolume(
-            name="src",
+            slug="src",
             rsync_server="src-server",
             path="/data",
         )
         dst = RemoteVolume(
-            name="dst",
+            slug="dst",
             rsync_server="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
             filters=["+ *.jpg", "- *.tmp"],
@@ -360,10 +360,10 @@ class TestBuildRsyncCommandFilters:
         assert "'--filter=merge /etc/ssb/filters.rules'" in inner
 
     def test_no_filters(self) -> None:
-        src = LocalVolume(name="src", path="/mnt/src")
-        dst = LocalVolume(name="dst", path="/mnt/dst")
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
         )
@@ -378,10 +378,10 @@ class TestBuildRsyncCommandFilters:
 
 class TestBuildRsyncCommandOptions:
     def test_override_rsync_options(self) -> None:
-        src = LocalVolume(name="src", path="/mnt/src")
-        dst = LocalVolume(name="dst", path="/mnt/dst")
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
             rsync_options=["-a"],
@@ -400,10 +400,10 @@ class TestBuildRsyncCommandOptions:
         ]
 
     def test_extra_rsync_options(self) -> None:
-        src = LocalVolume(name="src", path="/mnt/src")
-        dst = LocalVolume(name="dst", path="/mnt/dst")
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
             extra_rsync_options=["--compress"],
@@ -426,10 +426,10 @@ class TestBuildRsyncCommandOptions:
         ]
 
     def test_override_and_extra(self) -> None:
-        src = LocalVolume(name="src", path="/mnt/src")
-        dst = LocalVolume(name="dst", path="/mnt/dst")
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
             rsync_options=["-a", "--delete"],
@@ -451,20 +451,20 @@ class TestBuildRsyncCommandOptions:
         ]
 
     def test_remote_to_remote_override(self) -> None:
-        src_server = RsyncServer(name="src-server", host="src.local")
-        dst_server = RsyncServer(name="dst-server", host="dst.local")
+        src_server = RsyncServer(slug="src-server", host="src.local")
+        dst_server = RsyncServer(slug="dst-server", host="dst.local")
         src = RemoteVolume(
-            name="src",
+            slug="src",
             rsync_server="src-server",
             path="/data",
         )
         dst = RemoteVolume(
-            name="dst",
+            slug="dst",
             rsync_server="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
             rsync_options=["-a"],
@@ -484,20 +484,20 @@ class TestBuildRsyncCommandOptions:
         assert "--delete" not in inner
 
     def test_remote_to_remote_extra(self) -> None:
-        src_server = RsyncServer(name="src-server", host="src.local")
-        dst_server = RsyncServer(name="dst-server", host="dst.local")
+        src_server = RsyncServer(slug="src-server", host="src.local")
+        dst_server = RsyncServer(slug="dst-server", host="dst.local")
         src = RemoteVolume(
-            name="src",
+            slug="src",
             rsync_server="src-server",
             path="/data",
         )
         dst = RemoteVolume(
-            name="dst",
+            slug="dst",
             rsync_server="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
             extra_rsync_options=["--compress"],
@@ -521,10 +521,10 @@ class TestBuildRsyncCommandOptions:
 
 class TestBuildRsyncCommandSpacesInPaths:
     def test_local_to_local_spaces(self) -> None:
-        src = LocalVolume(name="src", path="/mnt/my src")
-        dst = LocalVolume(name="dst", path="/mnt/my dst")
+        src = LocalVolume(slug="src", path="/mnt/my src")
+        dst = LocalVolume(slug="dst", path="/mnt/my dst")
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src", subdir="my photos"),
             destination=DestinationSyncEndpoint(
                 volume="dst", subdir="my backup"
@@ -548,28 +548,28 @@ class TestBuildRsyncCommandSpacesInPaths:
 
     def test_remote_to_remote_spaces(self) -> None:
         src_server = RsyncServer(
-            name="src-server",
+            slug="src-server",
             host="src.local",
             port=2222,
             user="srcuser",
         )
         dst_server = RsyncServer(
-            name="dst-server",
+            slug="dst-server",
             host="dst.local",
             user="dstuser",
         )
         src = RemoteVolume(
-            name="src",
+            slug="src",
             rsync_server="src-server",
             path="/my data",
         )
         dst = RemoteVolume(
-            name="dst",
+            slug="dst",
             rsync_server="dst-server",
             path="/my backup",
         )
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src", subdir="my photos"),
             destination=DestinationSyncEndpoint(
                 volume="dst", subdir="my dest"
@@ -593,10 +593,10 @@ class TestBuildRsyncCommandSpacesInPaths:
 
 class TestBuildRsyncCommandVerbose:
     def _simple_config(self) -> tuple[SyncConfig, Config]:
-        src = LocalVolume(name="src", path="/mnt/src")
-        dst = LocalVolume(name="dst", path="/mnt/dst")
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
         )
@@ -634,20 +634,20 @@ class TestBuildRsyncCommandVerbose:
         assert "-vvv" in cmd
 
     def test_remote_to_remote_verbose(self) -> None:
-        src_server = RsyncServer(name="src-server", host="src.local")
-        dst_server = RsyncServer(name="dst-server", host="dst.local")
+        src_server = RsyncServer(slug="src-server", host="src.local")
+        dst_server = RsyncServer(slug="dst-server", host="dst.local")
         src = RemoteVolume(
-            name="src",
+            slug="src",
             rsync_server="src-server",
             path="/data",
         )
         dst = RemoteVolume(
-            name="dst",
+            slug="dst",
             rsync_server="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
         )
@@ -671,10 +671,10 @@ class TestRunRsync:
         mock_run.return_value = MagicMock(
             returncode=0, stdout="done", stderr=""
         )
-        src = LocalVolume(name="src", path="/src")
-        dst = LocalVolume(name="dst", path="/dst")
+        src = LocalVolume(slug="src", path="/src")
+        dst = LocalVolume(slug="dst", path="/dst")
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
         )
@@ -689,10 +689,10 @@ class TestRunRsync:
 
     @patch("ssb.rsync.subprocess.Popen")
     def test_run_rsync_streams_output(self, mock_popen: MagicMock) -> None:
-        src = LocalVolume(name="src", path="/src")
-        dst = LocalVolume(name="dst", path="/dst")
+        src = LocalVolume(slug="src", path="/src")
+        dst = LocalVolume(slug="dst", path="/dst")
         sync = SyncConfig(
-            name="s1",
+            slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
         )

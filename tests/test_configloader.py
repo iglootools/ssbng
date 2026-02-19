@@ -43,7 +43,7 @@ class TestLoadConfig:
         cfg = load_config(str(sample_config_file))
         assert "nas-server" in cfg.rsync_servers
         server = cfg.rsync_servers["nas-server"]
-        assert server.name == "nas-server"
+        assert server.slug == "nas-server"
         assert server.host == "nas.example.com"
         assert server.port == 5022
         assert server.user == "backup"

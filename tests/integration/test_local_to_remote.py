@@ -39,9 +39,9 @@ class TestLocalToRemote:
         src_dir.mkdir()
         (src_dir / "hello.txt").write_text("hello from local")
 
-        src_vol = LocalVolume(name="src", path=str(src_dir))
+        src_vol = LocalVolume(slug="src", path=str(src_dir))
         sync = SyncConfig(
-            name="test-sync",
+            slug="test-sync",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
         )
@@ -76,9 +76,9 @@ class TestLocalToRemote:
         src_dir.mkdir(parents=True)
         (src_dir / "img.jpg").write_text("image-data")
 
-        src_vol = LocalVolume(name="src", path=str(tmp_path / "src"))
+        src_vol = LocalVolume(slug="src", path=str(tmp_path / "src"))
         sync = SyncConfig(
-            name="test-sync",
+            slug="test-sync",
             source=SyncEndpoint(volume="src", subdir="photos"),
             destination=DestinationSyncEndpoint(
                 volume="dst", subdir="photos-backup"
