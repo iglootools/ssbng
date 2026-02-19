@@ -5,19 +5,17 @@ from __future__ import annotations
 import enum
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 from .config import SyncConfig, Volume
 
 
 class VolumeReason(str, enum.Enum):
-    OK = "ok"
     MARKER_NOT_FOUND = "marker not found"
     UNREACHABLE = "unreachable"
 
 
 class SyncReason(str, enum.Enum):
-    OK = "ok"
     DISABLED = "disabled"
     SOURCE_UNAVAILABLE = "source unavailable"
     DESTINATION_UNAVAILABLE = "destination unavailable"
@@ -33,8 +31,12 @@ class VolumeStatus(BaseModel):
 
     name: str
     config: Volume
-    active: bool
-    reason: VolumeReason
+    reasons: list[VolumeReason]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def active(self) -> bool:
+        return len(self.reasons) == 0
 
 
 class SyncStatus(BaseModel):
@@ -44,8 +46,12 @@ class SyncStatus(BaseModel):
     config: SyncConfig
     source_status: VolumeStatus
     destination_status: VolumeStatus
-    active: bool
-    reason: SyncReason
+    reasons: list[SyncReason]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def active(self) -> bool:
+        return len(self.reasons) == 0
 
 
 class SyncResult(BaseModel):

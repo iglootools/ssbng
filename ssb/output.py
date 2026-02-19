@@ -48,7 +48,9 @@ def print_human_status(
                 vol_type = "local"
         display = format_volume_display(vol)
         status_str = "active" if vs.active else "inactive"
-        reason = "" if vs.active else f" ({vs.reason})"
+        reason = (
+            "" if vs.active else f" ({', '.join(r.value for r in vs.reasons)})"
+        )
         typer.echo(
             f"  {vs.name:<18s}{vol_type:<10s}{display:<24s}"
             f"{status_str}{reason}"
@@ -61,7 +63,9 @@ def print_human_status(
         dst = ss.config.destination.volume_name
         arrow = f"{src} -> {dst}"
         status_str = "active" if ss.active else "inactive"
-        reason = "" if ss.active else f" ({ss.reason})"
+        reason = (
+            "" if ss.active else f" ({', '.join(r.value for r in ss.reasons)})"
+        )
         typer.echo(f"  {ss.name:<18s}{arrow:<30s}{status_str}{reason}")
 
 

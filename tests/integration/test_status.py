@@ -15,7 +15,6 @@ from ssb.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ssb.status import SyncReason
 
 from .conftest import create_markers
 
@@ -98,4 +97,4 @@ class TestSyncStatus:
 
         status = check_sync(sync, config, volume_statuses)
         assert status.active is True
-        assert status.reason == SyncReason.OK
+        assert status.reasons == []

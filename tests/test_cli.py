@@ -53,14 +53,12 @@ def _sample_vol_statuses(
         "local-data": VolumeStatus(
             name="local-data",
             config=config.volumes["local-data"],
-            active=True,
-            reason=VolumeReason.OK,
+            reasons=[],
         ),
         "nas": VolumeStatus(
             name="nas",
             config=config.volumes["nas"],
-            active=False,
-            reason=VolumeReason.UNREACHABLE,
+            reasons=[VolumeReason.UNREACHABLE],
         ),
     }
 
@@ -75,8 +73,7 @@ def _sample_sync_statuses(
             config=config.syncs["photos-to-nas"],
             source_status=vol_statuses["local-data"],
             destination_status=vol_statuses["nas"],
-            active=False,
-            reason=SyncReason.DESTINATION_UNAVAILABLE,
+            reasons=[SyncReason.DESTINATION_UNAVAILABLE],
         ),
     }
 

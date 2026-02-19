@@ -75,8 +75,7 @@ def _active_statuses(
         name: VolumeStatus(
             name=name,
             config=vol,
-            active=True,
-            reason=VolumeReason.OK,
+            reasons=[],
         )
         for name, vol in config.volumes.items()
     }
@@ -86,8 +85,7 @@ def _active_statuses(
             config=sync,
             source_status=vol_statuses[sync.source.volume_name],
             destination_status=vol_statuses[sync.destination.volume_name],
-            active=True,
-            reason=SyncReason.OK,
+            reasons=[],
         )
         for name, sync in config.syncs.items()
     }
@@ -101,8 +99,7 @@ def _inactive_statuses(
         name: VolumeStatus(
             name=name,
             config=vol,
-            active=False,
-            reason=VolumeReason.UNREACHABLE,
+            reasons=[VolumeReason.UNREACHABLE],
         )
         for name, vol in config.volumes.items()
     }
@@ -112,8 +109,7 @@ def _inactive_statuses(
             config=sync,
             source_status=vol_statuses[sync.source.volume_name],
             destination_status=vol_statuses[sync.destination.volume_name],
-            active=False,
-            reason=SyncReason.SOURCE_UNAVAILABLE,
+            reasons=[SyncReason.SOURCE_UNAVAILABLE],
         )
         for name, sync in config.syncs.items()
     }

@@ -125,26 +125,32 @@ class TestConfig:
 
 
 class TestVolumeStatus:
-    def test_construction(self) -> None:
+    def test_construction_active(self) -> None:
         vol = LocalVolume(name="data", path="/mnt/data")
         vs = VolumeStatus(
             name="data",
             config=vol,
-            active=True,
-            reason=VolumeReason.OK,
+            reasons=[],
         )
         assert vs.active is True
-        assert vs.reason == VolumeReason.OK
+
+    def test_construction_inactive(self) -> None:
+        vol = LocalVolume(name="data", path="/mnt/data")
+        vs = VolumeStatus(
+            name="data",
+            config=vol,
+            reasons=[VolumeReason.MARKER_NOT_FOUND],
+        )
+        assert vs.active is False
 
 
 class TestSyncStatus:
-    def test_construction(self) -> None:
+    def test_construction_active(self) -> None:
         vol = LocalVolume(name="data", path="/mnt/data")
         vs = VolumeStatus(
             name="data",
             config=vol,
-            active=True,
-            reason=VolumeReason.OK,
+            reasons=[],
         )
         sc = SyncConfig(
             name="s1",
@@ -156,10 +162,30 @@ class TestSyncStatus:
             config=sc,
             source_status=vs,
             destination_status=vs,
-            active=True,
-            reason=SyncReason.OK,
+            reasons=[],
         )
         assert ss.active is True
+
+    def test_construction_inactive(self) -> None:
+        vol = LocalVolume(name="data", path="/mnt/data")
+        vs = VolumeStatus(
+            name="data",
+            config=vol,
+            reasons=[],
+        )
+        sc = SyncConfig(
+            name="s1",
+            source=SyncEndpoint(volume_name="data"),
+            destination=SyncEndpoint(volume_name="data"),
+        )
+        ss = SyncStatus(
+            name="s1",
+            config=sc,
+            source_status=vs,
+            destination_status=vs,
+            reasons=[SyncReason.DISABLED],
+        )
+        assert ss.active is False
 
 
 class TestSyncResult:

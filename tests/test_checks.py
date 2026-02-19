@@ -31,13 +31,13 @@ class TestCheckLocalVolume:
         (tmp_path / ".ssb-vol").touch()
         status = check_volume(vol)
         assert status.active is True
-        assert status.reason == VolumeReason.OK
+        assert status.reasons == []
 
     def test_inactive(self, tmp_path: Path) -> None:
         vol = LocalVolume(name="data", path=str(tmp_path))
         status = check_volume(vol)
         assert status.active is False
-        assert status.reason == VolumeReason.MARKER_NOT_FOUND
+        assert status.reasons == [VolumeReason.MARKER_NOT_FOUND]
 
 
 class TestCheckRemoteVolume:
@@ -47,6 +47,7 @@ class TestCheckRemoteVolume:
         vol = RemoteVolume(name="nas", host="nas.local", path="/backup")
         status = check_volume(vol)
         assert status.active is True
+        assert status.reasons == []
         mock_run.assert_called_once_with(vol, "test -f /backup/.ssb-vol")
 
     @patch("ssb.checks.run_remote_command")
@@ -55,7 +56,7 @@ class TestCheckRemoteVolume:
         vol = RemoteVolume(name="nas", host="nas.local", path="/backup")
         status = check_volume(vol)
         assert status.active is False
-        assert status.reason == VolumeReason.UNREACHABLE
+        assert status.reasons == [VolumeReason.UNREACHABLE]
 
 
 class TestCheckCommandAvailableLocal:
@@ -126,20 +127,18 @@ class TestCheckSync:
             "src": VolumeStatus(
                 name="src",
                 config=config.volumes["src"],
-                active=True,
-                reason=VolumeReason.OK,
+                reasons=[],
             ),
             "dst": VolumeStatus(
                 name="dst",
                 config=config.volumes["dst"],
-                active=True,
-                reason=VolumeReason.OK,
+                reasons=[],
             ),
         }
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is True
-        assert status.reason == SyncReason.OK
+        assert status.reasons == []
 
     def test_disabled_sync(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
@@ -158,20 +157,18 @@ class TestCheckSync:
             "src": VolumeStatus(
                 name="src",
                 config=config.volumes["src"],
-                active=True,
-                reason=VolumeReason.OK,
+                reasons=[],
             ),
             "dst": VolumeStatus(
                 name="dst",
                 config=config.volumes["dst"],
-                active=True,
-                reason=VolumeReason.OK,
+                reasons=[],
             ),
         }
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert status.reason == SyncReason.DISABLED
+        assert status.reasons == [SyncReason.DISABLED]
 
     def test_source_unavailable(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
@@ -184,20 +181,18 @@ class TestCheckSync:
             "src": VolumeStatus(
                 name="src",
                 config=config.volumes["src"],
-                active=False,
-                reason=VolumeReason.MARKER_NOT_FOUND,
+                reasons=[VolumeReason.MARKER_NOT_FOUND],
             ),
             "dst": VolumeStatus(
                 name="dst",
                 config=config.volumes["dst"],
-                active=True,
-                reason=VolumeReason.OK,
+                reasons=[],
             ),
         }
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert status.reason == SyncReason.SOURCE_UNAVAILABLE
+        assert SyncReason.SOURCE_UNAVAILABLE in status.reasons
 
     def test_missing_src_marker(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
@@ -213,20 +208,18 @@ class TestCheckSync:
             "src": VolumeStatus(
                 name="src",
                 config=config.volumes["src"],
-                active=True,
-                reason=VolumeReason.OK,
+                reasons=[],
             ),
             "dst": VolumeStatus(
                 name="dst",
                 config=config.volumes["dst"],
-                active=True,
-                reason=VolumeReason.OK,
+                reasons=[],
             ),
         }
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert status.reason == SyncReason.SOURCE_MARKER_NOT_FOUND
+        assert SyncReason.SOURCE_MARKER_NOT_FOUND in status.reasons
 
     def _setup_active_markers(self, src: Path, dst: Path) -> None:
         (src / ".ssb-vol").touch()
@@ -243,14 +236,12 @@ class TestCheckSync:
             "src": VolumeStatus(
                 name="src",
                 config=config.volumes["src"],
-                active=True,
-                reason=VolumeReason.OK,
+                reasons=[],
             ),
             "dst": VolumeStatus(
                 name="dst",
                 config=config.volumes["dst"],
-                active=True,
-                reason=VolumeReason.OK,
+                reasons=[],
             ),
         }
 
@@ -269,11 +260,12 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert status.reason == SyncReason.RSYNC_NOT_FOUND_ON_SOURCE
+        assert SyncReason.RSYNC_NOT_FOUND_ON_SOURCE in status.reasons
+        assert SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION in status.reasons
 
     @patch(
         "ssb.checks.shutil.which",
-        side_effect=lambda cmd: "/usr/bin/rsync" if cmd == "rsync" else None,
+        side_effect=lambda cmd: ("/usr/bin/rsync" if cmd == "rsync" else None),
     )
     def test_rsync_found_btrfs_not_found_on_destination(
         self, mock_which: MagicMock, tmp_path: Path
@@ -300,7 +292,7 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert status.reason == SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION
+        assert SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION in status.reasons
 
     @patch("ssb.checks.shutil.which", return_value="/usr/bin/rsync")
     def test_btrfs_check_skipped_when_not_enabled(
@@ -317,7 +309,58 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is True
-        assert status.reason == SyncReason.OK
+        assert status.reasons == []
+
+    @patch("ssb.checks.shutil.which", return_value=None)
+    def test_multiple_failures_accumulated(
+        self, mock_which: MagicMock, tmp_path: Path
+    ) -> None:
+        """Source marker missing AND rsync missing on both sides."""
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        (src / ".ssb-vol").touch()
+        (dst / ".ssb-vol").touch()
+        (src / "data").mkdir()
+        # No .ssb-src marker
+        (dst / "backup").mkdir()
+        (dst / "backup" / ".ssb-dst").touch()
+
+        config, sync = self._make_config(src, dst)
+        vol_statuses = self._make_active_vol_statuses(config)
+
+        status = check_sync(sync, config, vol_statuses)
+        assert status.active is False
+        assert SyncReason.SOURCE_MARKER_NOT_FOUND in status.reasons
+        assert SyncReason.RSYNC_NOT_FOUND_ON_SOURCE in status.reasons
+        assert SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION in status.reasons
+
+    def test_both_volumes_unavailable(self, tmp_path: Path) -> None:
+        """Both source and destination unavailable."""
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+
+        config, sync = self._make_config(src, dst)
+        vol_statuses = {
+            "src": VolumeStatus(
+                name="src",
+                config=config.volumes["src"],
+                reasons=[VolumeReason.MARKER_NOT_FOUND],
+            ),
+            "dst": VolumeStatus(
+                name="dst",
+                config=config.volumes["dst"],
+                reasons=[VolumeReason.MARKER_NOT_FOUND],
+            ),
+        }
+
+        status = check_sync(sync, config, vol_statuses)
+        assert status.active is False
+        assert SyncReason.SOURCE_UNAVAILABLE in status.reasons
+        assert SyncReason.DESTINATION_UNAVAILABLE in status.reasons
 
 
 class TestCheckSyncRemoteCommands:
@@ -346,14 +389,12 @@ class TestCheckSyncRemoteCommands:
             "src": VolumeStatus(
                 name="src",
                 config=src_vol,
-                active=True,
-                reason=VolumeReason.OK,
+                reasons=[],
             ),
             "dst": VolumeStatus(
                 name="dst",
                 config=dst_vol,
-                active=True,
-                reason=VolumeReason.OK,
+                reasons=[],
             ),
         }
 
@@ -368,7 +409,7 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert status.reason == SyncReason.RSYNC_NOT_FOUND_ON_SOURCE
+        assert SyncReason.RSYNC_NOT_FOUND_ON_SOURCE in status.reasons
 
     @patch("ssb.checks.run_remote_command")
     @patch("ssb.checks.shutil.which", return_value="/usr/bin/rsync")
@@ -399,14 +440,12 @@ class TestCheckSyncRemoteCommands:
             "src": VolumeStatus(
                 name="src",
                 config=src_vol,
-                active=True,
-                reason=VolumeReason.OK,
+                reasons=[],
             ),
             "dst": VolumeStatus(
                 name="dst",
                 config=dst_vol,
-                active=True,
-                reason=VolumeReason.OK,
+                reasons=[],
             ),
         }
 
@@ -421,7 +460,7 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert status.reason == SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION
+        assert SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION in status.reasons
 
     @patch("ssb.checks.run_remote_command")
     @patch("ssb.checks.shutil.which", return_value="/usr/bin/rsync")
@@ -453,14 +492,12 @@ class TestCheckSyncRemoteCommands:
             "src": VolumeStatus(
                 name="src",
                 config=src_vol,
-                active=True,
-                reason=VolumeReason.OK,
+                reasons=[],
             ),
             "dst": VolumeStatus(
                 name="dst",
                 config=dst_vol,
-                active=True,
-                reason=VolumeReason.OK,
+                reasons=[],
             ),
         }
 
@@ -477,7 +514,7 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert status.reason == SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION
+        assert SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION in status.reasons
 
 
 class TestCheckAllSyncs:
