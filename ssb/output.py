@@ -233,6 +233,40 @@ def _print_marker_fix(
     console.print(f"    {_wrap_cmd(touch_cmd, vol, config)}")
 
 
+def _print_ssh_troubleshoot(
+    console: Console,
+    server: RsyncServer,
+) -> None:
+    """Print SSH connectivity troubleshooting instructions."""
+    ssh_cmd = _ssh_prefix(server)
+    console.print(f"    Server {server.host} is unreachable.")
+    console.print("    Verify connectivity:")
+    console.print(f"      {ssh_cmd} echo ok")
+    console.print("    If authentication fails:")
+    if server.ssh_key:
+        console.print(
+            f"      1. Ensure the key exists: ls -l {server.ssh_key}"
+        )
+        console.print(
+            "      2. Copy it to the server:"
+            f" ssh-copy-id"
+            f" {'-p ' + str(server.port) + ' ' if server.port != 22 else ''}"
+            f"-i {server.ssh_key}"
+            f" {server.user + '@' if server.user else ''}"
+            f"{server.host}"
+        )
+    else:
+        console.print("      1. Generate a key:" " ssh-keygen -t ed25519")
+        console.print(
+            "      2. Copy it to the server:"
+            f" ssh-copy-id"
+            f" {'-p ' + str(server.port) + ' ' if server.port != 22 else ''}"
+            f"{server.user + '@' if server.user else ''}"
+            f"{server.host}"
+        )
+    console.print("      3. Verify passwordless login:" f" {ssh_cmd} echo ok")
+
+
 def _print_sync_reason_fix(
     console: Console,
     sync: SyncConfig,
@@ -248,9 +282,7 @@ def _print_sync_reason_fix(
             match src:
                 case RemoteVolume():
                     server = config.rsync_servers[src.rsync_server]
-                    console.print(
-                        f"    Server {server.host}" " is unreachable."
-                    )
+                    _print_ssh_troubleshoot(console, server)
                 case LocalVolume():
                     console.print(
                         "    Source volume"
@@ -262,9 +294,7 @@ def _print_sync_reason_fix(
             match dst:
                 case RemoteVolume():
                     server = config.rsync_servers[dst.rsync_server]
-                    console.print(
-                        f"    Server {server.host}" " is unreachable."
-                    )
+                    _print_ssh_troubleshoot(console, server)
                 case LocalVolume():
                     console.print(
                         "    Destination volume"
@@ -358,11 +388,7 @@ def print_human_troubleshoot(
                     match vol:
                         case RemoteVolume():
                             server = config.rsync_servers[vol.rsync_server]
-                            console.print(
-                                "    Server"
-                                f" {server.host}"
-                                " is unreachable."
-                            )
+                            _print_ssh_troubleshoot(console, server)
 
     for ss in sync_statuses.values():
         if not ss.reasons:
