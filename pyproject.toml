@@ -1,7 +1,7 @@
 [project]
-name = "ssb"
+name = "dab"
 version = "0.1.0"
-description = "Simple Safe Backup - A secure backup solution"
+description = "Device-Aware Backup - A secure backup solution"
 authors = [{name = "Sami Dalouche", email = "sami.dalouche@gmail.com"}]
 readme = "README.md"
 requires-python = ">=3.14"
@@ -12,11 +12,11 @@ dependencies = [
 ]
 
 [project.scripts]
-ssb = "ssb.cli:main"
-ssb-testcli = "ssb.testcli:main"
+dab = "dab.cli:main"
+dab-testcli = "dab.testcli:main"
 
 [tool.poetry]
-packages = [{include = "ssb"}]
+packages = [{include = "dab"}]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.0"

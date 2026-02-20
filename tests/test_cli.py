@@ -1,4 +1,4 @@
-"""Tests for ssb.cli."""
+"""Tests for dab.cli."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
-from ssb.cli import app
-from ssb.config import (
+from dab.cli import app
+from dab.config import (
     BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
@@ -18,8 +18,8 @@ from ssb.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ssb.runner import SyncResult
-from ssb.status import (
+from dab.runner import SyncResult
+from dab.status import (
     SyncReason,
     SyncStatus,
     VolumeReason,
@@ -139,8 +139,8 @@ def _sample_all_active_sync_statuses(
 
 
 class TestStatusCommand:
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_human_output_inactive(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -158,8 +158,8 @@ class TestStatusCommand:
         assert "inactive" in result.output
         assert "photos-to-nas" in result.output
 
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_human_output_all_active(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -172,8 +172,8 @@ class TestStatusCommand:
         result = runner.invoke(app, ["status", "--config", "/fake.yaml"])
         assert result.exit_code == 0
 
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_json_output_inactive(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -198,8 +198,8 @@ class TestStatusCommand:
         assert "volumes" in data
         assert "syncs" in data
 
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_json_output_all_active(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -224,8 +224,8 @@ class TestStatusCommand:
         assert "volumes" in data
         assert "syncs" in data
 
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_marker_only_exit_0_by_default(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -238,8 +238,8 @@ class TestStatusCommand:
         result = runner.invoke(app, ["status", "--config", "/fake.yaml"])
         assert result.exit_code == 0
 
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_marker_only_exit_1_when_no_allow_removable(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -262,9 +262,9 @@ class TestStatusCommand:
 
 
 class TestRunCommand:
-    @patch("ssb.cli.run_all_syncs")
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.run_all_syncs")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_successful_run(
         self,
         mock_load: MagicMock,
@@ -293,9 +293,9 @@ class TestRunCommand:
         call_kwargs = mock_run.call_args
         assert callable(call_kwargs.kwargs.get("on_rsync_output"))
 
-    @patch("ssb.cli.run_all_syncs")
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.run_all_syncs")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_displays_status_before_results(
         self,
         mock_load: MagicMock,
@@ -326,9 +326,9 @@ class TestRunCommand:
         ok_pos = result.output.index("OK")
         assert vol_pos < ok_pos
 
-    @patch("ssb.cli.run_all_syncs")
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.run_all_syncs")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_failed_run(
         self,
         mock_load: MagicMock,
@@ -355,9 +355,9 @@ class TestRunCommand:
         assert result.exit_code == 1
         assert "FAILED" in result.output
 
-    @patch("ssb.cli.run_all_syncs")
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.run_all_syncs")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_dry_run(
         self,
         mock_load: MagicMock,
@@ -386,9 +386,9 @@ class TestRunCommand:
         assert result.exit_code == 0
         assert "dry run" in result.output
 
-    @patch("ssb.cli.run_all_syncs")
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.run_all_syncs")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_json_output(
         self,
         mock_load: MagicMock,
@@ -429,9 +429,9 @@ class TestRunCommand:
         call_kwargs = mock_run.call_args
         assert call_kwargs.kwargs.get("on_rsync_output") is None
 
-    @patch("ssb.cli.run_all_syncs")
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.run_all_syncs")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_sync_filter(
         self,
         mock_load: MagicMock,
@@ -467,9 +467,9 @@ class TestRunCommand:
         call_kwargs = mock_run.call_args
         assert call_kwargs.kwargs.get("only_syncs") == ["photos-to-nas"]
 
-    @patch("ssb.cli.run_all_syncs")
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.run_all_syncs")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_verbose(
         self,
         mock_load: MagicMock,
@@ -499,9 +499,9 @@ class TestRunCommand:
         call_kwargs = mock_run.call_args
         assert call_kwargs.kwargs.get("verbose") == 2
 
-    @patch("ssb.cli.run_all_syncs")
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.run_all_syncs")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_exits_before_syncs_on_status_error(
         self,
         mock_load: MagicMock,
@@ -518,9 +518,9 @@ class TestRunCommand:
         assert result.exit_code == 1
         mock_run.assert_not_called()
 
-    @patch("ssb.cli.run_all_syncs")
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.run_all_syncs")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_marker_only_proceeds_by_default(
         self,
         mock_load: MagicMock,
@@ -546,9 +546,9 @@ class TestRunCommand:
         assert result.exit_code == 0
         mock_run.assert_called_once()
 
-    @patch("ssb.cli.run_all_syncs")
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.run_all_syncs")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_marker_only_exits_when_no_allow_removable(
         self,
         mock_load: MagicMock,
@@ -612,10 +612,10 @@ def _prune_active_statuses(
 
 
 class TestPruneCommand:
-    @patch("ssb.cli.list_snapshots")
-    @patch("ssb.cli.prune_snapshots")
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.list_snapshots")
+    @patch("dab.cli.prune_snapshots")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_successful_prune(
         self,
         mock_load: MagicMock,
@@ -648,10 +648,10 @@ class TestPruneCommand:
         assert "OK" in result.output
         mock_prune.assert_called_once()
 
-    @patch("ssb.cli.list_snapshots")
-    @patch("ssb.cli.prune_snapshots")
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.list_snapshots")
+    @patch("dab.cli.prune_snapshots")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_dry_run(
         self,
         mock_load: MagicMock,
@@ -689,10 +689,10 @@ class TestPruneCommand:
         call_kwargs = mock_prune.call_args
         assert call_kwargs.kwargs.get("dry_run") is True
 
-    @patch("ssb.cli.list_snapshots")
-    @patch("ssb.cli.prune_snapshots")
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.list_snapshots")
+    @patch("dab.cli.prune_snapshots")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_json_output(
         self,
         mock_load: MagicMock,
@@ -736,8 +736,8 @@ class TestPruneCommand:
         assert data[0]["sync_slug"] == "s1"
         assert len(data[0]["deleted"]) == 1
 
-    @patch("ssb.cli.check_all_syncs")
-    @patch("ssb.cli.load_config")
+    @patch("dab.cli.check_all_syncs")
+    @patch("dab.cli.load_config")
     def test_no_syncs_to_prune(
         self,
         mock_load: MagicMock,
@@ -755,9 +755,9 @@ class TestPruneCommand:
 
 class TestConfigError:
     @patch(
-        "ssb.cli.load_config",
+        "dab.cli.load_config",
         side_effect=__import__(
-            "ssb.configloader", fromlist=["ConfigError"]
+            "dab.configloader", fromlist=["ConfigError"]
         ).ConfigError("bad config"),
     )
     def test_status_config_error(self, mock_load: MagicMock) -> None:
@@ -765,9 +765,9 @@ class TestConfigError:
         assert result.exit_code == 2
 
     @patch(
-        "ssb.cli.load_config",
+        "dab.cli.load_config",
         side_effect=__import__(
-            "ssb.configloader", fromlist=["ConfigError"]
+            "dab.configloader", fromlist=["ConfigError"]
         ).ConfigError("bad config"),
     )
     def test_run_config_error(self, mock_load: MagicMock) -> None:

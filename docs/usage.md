@@ -11,7 +11,7 @@ TODO: add system requirements:
 
 ### Get help:
 ```bash
-ssb --help
+dab --help
 ```
 
 ## Python API

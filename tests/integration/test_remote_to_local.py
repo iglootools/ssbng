@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from ssb.config import (
+from dab.config import (
     Config,
     DestinationSyncEndpoint,
     LocalVolume,
@@ -16,7 +16,7 @@ from ssb.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ssb.rsync import run_rsync
+from dab.rsync import run_rsync
 
 from .conftest import ssh_exec
 

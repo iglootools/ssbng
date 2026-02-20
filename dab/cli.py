@@ -26,8 +26,8 @@ _REMOVABLE_DEVICE_REASONS = {
 }
 
 app = typer.Typer(
-    name="ssb",
-    help="Simple Safe Backup - An rsync-based backup tool",
+    name="dab",
+    help="Device-Aware Backup",
     no_args_is_help=True,
 )
 
@@ -47,7 +47,7 @@ def status(
         typer.Option(
             "--allow-removable-devices/--no-allow-removable-devices",
             help=(
-                "Treat missing .ssb-src/.ssb-dst markers"
+                "Treat missing .dab-src/.dab-dst markers"
                 " as non-fatal for exit code"
             ),
         ),
@@ -103,7 +103,7 @@ def run(
         typer.Option(
             "--allow-removable-devices/--no-allow-removable-devices",
             help=(
-                "Treat missing .ssb-src/.ssb-dst markers"
+                "Treat missing .dab-src/.dab-dst markers"
                 " as non-fatal for exit code"
             ),
         ),

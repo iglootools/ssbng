@@ -1,11 +1,11 @@
-"""Tests for ssb.rsync."""
+"""Tests for dab.rsync."""
 
 from __future__ import annotations
 
 import io
 from unittest.mock import MagicMock, patch
 
-from ssb.config import (
+from dab.config import (
     Config,
     DestinationSyncEndpoint,
     LocalVolume,
@@ -14,7 +14,7 @@ from ssb.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ssb.rsync import build_rsync_command, run_rsync
+from dab.rsync import build_rsync_command, run_rsync
 
 
 class TestBuildRsyncCommandLocalToLocal:
@@ -277,7 +277,7 @@ class TestBuildRsyncCommandFilters:
             slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
-            filter_file="/etc/ssb/filters.rules",
+            filter_file="/etc/dab/filters.rules",
         )
         config = Config(
             volumes={"src": src, "dst": dst},
@@ -291,7 +291,7 @@ class TestBuildRsyncCommandFilters:
             "--delete",
             "--delete-excluded",
             "--safe-links",
-            "--filter=merge /etc/ssb/filters.rules",
+            "--filter=merge /etc/dab/filters.rules",
             "/mnt/src/",
             "/mnt/dst/latest/",
         ]
@@ -304,7 +304,7 @@ class TestBuildRsyncCommandFilters:
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
             filters=["+ *.jpg"],
-            filter_file="/etc/ssb/filters.rules",
+            filter_file="/etc/dab/filters.rules",
         )
         config = Config(
             volumes={"src": src, "dst": dst},
@@ -319,7 +319,7 @@ class TestBuildRsyncCommandFilters:
             "--delete-excluded",
             "--safe-links",
             "--filter=+ *.jpg",
-            "--filter=merge /etc/ssb/filters.rules",
+            "--filter=merge /etc/dab/filters.rules",
             "/mnt/src/",
             "/mnt/dst/latest/",
         ]
@@ -342,7 +342,7 @@ class TestBuildRsyncCommandFilters:
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
             filters=["+ *.jpg", "- *.tmp"],
-            filter_file="/etc/ssb/filters.rules",
+            filter_file="/etc/dab/filters.rules",
         )
         config = Config(
             rsync_servers={
@@ -357,7 +357,7 @@ class TestBuildRsyncCommandFilters:
         inner = cmd[-1]
         assert "'--filter=+ *.jpg'" in inner
         assert "'--filter=- *.tmp'" in inner
-        assert "'--filter=merge /etc/ssb/filters.rules'" in inner
+        assert "'--filter=merge /etc/dab/filters.rules'" in inner
 
     def test_no_filters(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/src")
@@ -666,7 +666,7 @@ class TestBuildRsyncCommandVerbose:
 
 
 class TestRunRsync:
-    @patch("ssb.rsync.subprocess.run")
+    @patch("dab.rsync.subprocess.run")
     def test_run_rsync(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0, stdout="done", stderr=""
@@ -687,7 +687,7 @@ class TestRunRsync:
         assert result.returncode == 0
         mock_run.assert_called_once()
 
-    @patch("ssb.rsync.subprocess.Popen")
+    @patch("dab.rsync.subprocess.Popen")
     def test_run_rsync_streams_output(self, mock_popen: MagicMock) -> None:
         src = LocalVolume(slug="src", path="/src")
         dst = LocalVolume(slug="dst", path="/dst")

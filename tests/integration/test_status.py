@@ -7,14 +7,14 @@ from typing import Any
 
 import pytest
 
-from ssb.status import (
+from dab.status import (
     SyncReason,
     _check_btrfs_filesystem,
     _check_btrfs_subvolume,
     check_sync,
     check_volume,
 )
-from ssb.config import (
+from dab.config import (
     BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
@@ -34,7 +34,7 @@ class TestLocalVolumeStatus:
     def test_local_volume_active(self, tmp_path: Path) -> None:
         vol_path = tmp_path / "vol"
         vol_path.mkdir()
-        (vol_path / ".ssb-vol").touch()
+        (vol_path / ".dab-vol").touch()
 
         vol = LocalVolume(slug="local", path=str(vol_path))
         config = Config(
@@ -46,7 +46,7 @@ class TestLocalVolumeStatus:
     def test_local_volume_inactive(self, tmp_path: Path) -> None:
         vol_path = tmp_path / "vol"
         vol_path.mkdir()
-        # No .ssb-vol marker
+        # No .dab-vol marker
 
         vol = LocalVolume(slug="local", path=str(vol_path))
         config = Config(
@@ -63,7 +63,7 @@ class TestRemoteVolumeStatus:
         rsync_server: RsyncServer,
         remote_volume: RemoteVolume,
     ) -> None:
-        create_markers(docker_container, "/data", [".ssb-vol"])
+        create_markers(docker_container, "/data", [".dab-vol"])
         config = Config(
             rsync_servers={"test-server": rsync_server},
             volumes={"test-remote": remote_volume},
@@ -97,11 +97,11 @@ class TestSyncStatus:
         # Set up local source volume
         src_path = tmp_path / "src"
         src_path.mkdir()
-        (src_path / ".ssb-vol").touch()
-        (src_path / ".ssb-src").touch()
+        (src_path / ".dab-vol").touch()
+        (src_path / ".dab-src").touch()
 
         # Set up remote destination markers
-        create_markers(docker_container, "/data", [".ssb-vol", ".ssb-dst"])
+        create_markers(docker_container, "/data", [".dab-vol", ".dab-dst"])
 
         src_vol = LocalVolume(slug="src", path=str(src_path))
         sync = SyncConfig(
@@ -221,18 +221,18 @@ class TestSyncStatusBtrfsChecks:
         create_markers(
             docker_container,
             "/mnt/btrfs",
-            [".ssb-vol"],
+            [".dab-vol"],
         )
         create_markers(
             docker_container,
             "/mnt/btrfs/not-a-subvol",
-            [".ssb-dst"],
+            [".dab-dst"],
         )
 
         src_path = tmp_path / "src"
         src_path.mkdir()
-        (src_path / ".ssb-vol").touch()
-        (src_path / ".ssb-src").touch()
+        (src_path / ".dab-vol").touch()
+        (src_path / ".dab-src").touch()
 
         src_vol = LocalVolume(slug="src", path=str(src_path))
         sync = SyncConfig(

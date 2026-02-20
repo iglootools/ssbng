@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from ssb.config import (
+from dab.config import (
     Config,
     DestinationSyncEndpoint,
     LocalVolume,
@@ -57,7 +57,7 @@ def _sample_config() -> Config:
                 ),
                 enabled=True,
                 filters=["+ *.jpg", "- *.tmp"],
-                filter_file=("~/.config/ssb/filters/photos.rules"),
+                filter_file=("~/.config/dab/filters/photos.rules"),
             ),
         },
     )

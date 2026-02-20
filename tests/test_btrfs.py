@@ -1,4 +1,4 @@
-"""Tests for ssb.btrfs."""
+"""Tests for dab.btrfs."""
 
 from __future__ import annotations
 
@@ -6,14 +6,14 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from ssb.btrfs import (
+from dab.btrfs import (
     create_snapshot,
     delete_snapshot,
     get_latest_snapshot,
     list_snapshots,
     prune_snapshots,
 )
-from ssb.config import (
+from dab.config import (
     BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
@@ -74,7 +74,7 @@ def _remote_config() -> tuple[Config, SyncConfig]:
 
 
 class TestCreateSnapshotLocal:
-    @patch("ssb.btrfs.subprocess.run")
+    @patch("dab.btrfs.subprocess.run")
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _local_config()
@@ -94,7 +94,7 @@ class TestCreateSnapshotLocal:
             "/mnt/dst/backup/snapshots/2024-01-15T12:00:00.000Z",
         ]
 
-    @patch("ssb.btrfs.subprocess.run")
+    @patch("dab.btrfs.subprocess.run")
     def test_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=1, stderr="permission denied"
@@ -108,7 +108,7 @@ class TestCreateSnapshotLocal:
 
 
 class TestCreateSnapshotRemote:
-    @patch("ssb.btrfs.run_remote_command")
+    @patch("dab.btrfs.run_remote_command")
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _remote_config()
@@ -131,7 +131,7 @@ class TestCreateSnapshotRemote:
 
 
 class TestGetLatestSnapshotLocal:
-    @patch("ssb.btrfs.subprocess.run")
+    @patch("dab.btrfs.subprocess.run")
     def test_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -142,7 +142,7 @@ class TestGetLatestSnapshotLocal:
         result = get_latest_snapshot(sync, config)
         assert result == ("/mnt/dst/backup/snapshots/20240115T120000Z")
 
-    @patch("ssb.btrfs.subprocess.run")
+    @patch("dab.btrfs.subprocess.run")
     def test_empty(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="")
         config, sync = _local_config()
@@ -150,7 +150,7 @@ class TestGetLatestSnapshotLocal:
         result = get_latest_snapshot(sync, config)
         assert result is None
 
-    @patch("ssb.btrfs.subprocess.run")
+    @patch("dab.btrfs.subprocess.run")
     def test_dir_missing(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=2, stdout="")
         config, sync = _local_config()
@@ -160,7 +160,7 @@ class TestGetLatestSnapshotLocal:
 
 
 class TestGetLatestSnapshotRemote:
-    @patch("ssb.btrfs.run_remote_command")
+    @patch("dab.btrfs.run_remote_command")
     def test_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -225,7 +225,7 @@ def _remote_config_spaces() -> tuple[Config, SyncConfig]:
 
 
 class TestCreateSnapshotLocalSpaces:
-    @patch("ssb.btrfs.subprocess.run")
+    @patch("dab.btrfs.subprocess.run")
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _local_config_spaces()
@@ -248,7 +248,7 @@ class TestCreateSnapshotLocalSpaces:
 
 
 class TestCreateSnapshotRemoteSpaces:
-    @patch("ssb.btrfs.run_remote_command")
+    @patch("dab.btrfs.run_remote_command")
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _remote_config_spaces()
@@ -271,7 +271,7 @@ class TestCreateSnapshotRemoteSpaces:
 
 
 class TestGetLatestSnapshotRemoteSpaces:
-    @patch("ssb.btrfs.run_remote_command")
+    @patch("dab.btrfs.run_remote_command")
     def test_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -288,7 +288,7 @@ class TestGetLatestSnapshotRemoteSpaces:
 
 
 class TestListSnapshotsLocal:
-    @patch("ssb.btrfs.subprocess.run")
+    @patch("dab.btrfs.subprocess.run")
     def test_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -302,7 +302,7 @@ class TestListSnapshotsLocal:
             "/mnt/dst/backup/snapshots/20240115T120000Z",
         ]
 
-    @patch("ssb.btrfs.subprocess.run")
+    @patch("dab.btrfs.subprocess.run")
     def test_empty(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="")
         config, sync = _local_config()
@@ -310,7 +310,7 @@ class TestListSnapshotsLocal:
         result = list_snapshots(sync, config)
         assert result == []
 
-    @patch("ssb.btrfs.subprocess.run")
+    @patch("dab.btrfs.subprocess.run")
     def test_dir_missing(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=2, stdout="")
         config, sync = _local_config()
@@ -320,7 +320,7 @@ class TestListSnapshotsLocal:
 
 
 class TestListSnapshotsRemote:
-    @patch("ssb.btrfs.run_remote_command")
+    @patch("dab.btrfs.run_remote_command")
     def test_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -336,7 +336,7 @@ class TestListSnapshotsRemote:
 
 
 class TestDeleteSnapshotLocal:
-    @patch("ssb.btrfs.subprocess.run")
+    @patch("dab.btrfs.subprocess.run")
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, _ = _local_config()
@@ -360,7 +360,7 @@ class TestDeleteSnapshotLocal:
             ]
         )
 
-    @patch("ssb.btrfs.subprocess.run")
+    @patch("dab.btrfs.subprocess.run")
     def test_failure_on_property_set(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=1, stderr="permission denied"
@@ -375,7 +375,7 @@ class TestDeleteSnapshotLocal:
                 config,
             )
 
-    @patch("ssb.btrfs.subprocess.run")
+    @patch("dab.btrfs.subprocess.run")
     def test_failure_on_delete(self, mock_run: MagicMock) -> None:
         mock_run.side_effect = [
             MagicMock(returncode=0, stderr=""),
@@ -393,7 +393,7 @@ class TestDeleteSnapshotLocal:
 
 
 class TestDeleteSnapshotRemote:
-    @patch("ssb.btrfs.run_remote_command")
+    @patch("dab.btrfs.run_remote_command")
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, _ = _remote_config()
@@ -418,7 +418,7 @@ class TestDeleteSnapshotRemote:
 
 
 class TestPruneSnapshotsLocal:
-    @patch("ssb.btrfs.subprocess.run")
+    @patch("dab.btrfs.subprocess.run")
     def test_prunes_oldest(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -435,7 +435,7 @@ class TestPruneSnapshotsLocal:
         # ls call + 2 × (property set + delete) calls
         assert mock_run.call_count == 5
 
-    @patch("ssb.btrfs.subprocess.run")
+    @patch("dab.btrfs.subprocess.run")
     def test_nothing_to_prune(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -449,7 +449,7 @@ class TestPruneSnapshotsLocal:
         # Only the ls call
         assert mock_run.call_count == 1
 
-    @patch("ssb.btrfs.subprocess.run")
+    @patch("dab.btrfs.subprocess.run")
     def test_dry_run(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -468,7 +468,7 @@ class TestPruneSnapshotsLocal:
 
 
 class TestPruneSnapshotsRemote:
-    @patch("ssb.btrfs.run_remote_command")
+    @patch("dab.btrfs.run_remote_command")
     def test_prunes_oldest(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,

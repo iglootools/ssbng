@@ -1,10 +1,10 @@
-"""Tests for ssb.runner."""
+"""Tests for dab.runner."""
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from ssb.config import (
+from dab.config import (
     BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
@@ -14,13 +14,13 @@ from ssb.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ssb.status import (
+from dab.status import (
     SyncReason,
     SyncStatus,
     VolumeReason,
     VolumeStatus,
 )
-from ssb.runner import run_all_syncs
+from dab.runner import run_all_syncs
 
 
 def _make_local_config() -> Config:
@@ -155,7 +155,7 @@ def _inactive_statuses(
 
 
 class TestRunAllSyncs:
-    @patch("ssb.runner.run_rsync")
+    @patch("dab.runner.run_rsync")
     def test_successful_sync(self, mock_rsync: MagicMock) -> None:
         config = _make_local_config()
         _, sync_statuses = _active_statuses(config)
@@ -177,7 +177,7 @@ class TestRunAllSyncs:
         assert results[0].success is False
         assert "not active" in (results[0].error or "")
 
-    @patch("ssb.runner.run_rsync")
+    @patch("dab.runner.run_rsync")
     def test_rsync_failure(self, mock_rsync: MagicMock) -> None:
         config = _make_local_config()
         _, sync_statuses = _active_statuses(config)
@@ -189,7 +189,7 @@ class TestRunAllSyncs:
         assert results[0].success is False
         assert results[0].rsync_exit_code == 23
 
-    @patch("ssb.runner.run_rsync")
+    @patch("dab.runner.run_rsync")
     def test_filter_by_sync_slug(self, mock_rsync: MagicMock) -> None:
         config = _make_local_config()
         _, sync_statuses = _active_statuses(config)
@@ -202,9 +202,9 @@ class TestRunAllSyncs:
         )
         assert len(results) == 0
 
-    @patch("ssb.runner.create_snapshot")
-    @patch("ssb.runner.get_latest_snapshot")
-    @patch("ssb.runner.run_rsync")
+    @patch("dab.runner.create_snapshot")
+    @patch("dab.runner.get_latest_snapshot")
+    @patch("dab.runner.run_rsync")
     def test_btrfs_snapshot_after_sync(
         self,
         mock_rsync: MagicMock,
@@ -224,8 +224,8 @@ class TestRunAllSyncs:
         assert results[0].snapshot_path == "/dst/snapshots/20240115T120000Z"
         mock_snap.assert_called_once()
 
-    @patch("ssb.runner.get_latest_snapshot")
-    @patch("ssb.runner.run_rsync")
+    @patch("dab.runner.get_latest_snapshot")
+    @patch("dab.runner.run_rsync")
     def test_btrfs_snapshot_skipped_on_dry_run(
         self,
         mock_rsync: MagicMock,
@@ -242,9 +242,9 @@ class TestRunAllSyncs:
         assert results[0].success is True
         assert results[0].snapshot_path is None
 
-    @patch("ssb.runner.create_snapshot")
-    @patch("ssb.runner.get_latest_snapshot")
-    @patch("ssb.runner.run_rsync")
+    @patch("dab.runner.create_snapshot")
+    @patch("dab.runner.get_latest_snapshot")
+    @patch("dab.runner.run_rsync")
     def test_link_dest_from_latest_snapshot(
         self,
         mock_rsync: MagicMock,
@@ -268,9 +268,9 @@ class TestRunAllSyncs:
             == "../../snapshots/20240101T000000Z"
         )
 
-    @patch("ssb.runner.create_snapshot")
-    @patch("ssb.runner.get_latest_snapshot")
-    @patch("ssb.runner.run_rsync")
+    @patch("dab.runner.create_snapshot")
+    @patch("dab.runner.get_latest_snapshot")
+    @patch("dab.runner.run_rsync")
     def test_remote_to_remote_with_btrfs(
         self,
         mock_rsync: MagicMock,
@@ -290,9 +290,9 @@ class TestRunAllSyncs:
         assert results[0].snapshot_path is not None
         mock_snap.assert_called_once()
 
-    @patch("ssb.runner.create_snapshot")
-    @patch("ssb.runner.get_latest_snapshot")
-    @patch("ssb.runner.run_rsync")
+    @patch("dab.runner.create_snapshot")
+    @patch("dab.runner.get_latest_snapshot")
+    @patch("dab.runner.run_rsync")
     def test_snapshot_failure(
         self,
         mock_rsync: MagicMock,
@@ -311,10 +311,10 @@ class TestRunAllSyncs:
         assert results[0].success is False
         assert "Snapshot failed" in (results[0].error or "")
 
-    @patch("ssb.runner.prune_snapshots")
-    @patch("ssb.runner.create_snapshot")
-    @patch("ssb.runner.get_latest_snapshot")
-    @patch("ssb.runner.run_rsync")
+    @patch("dab.runner.prune_snapshots")
+    @patch("dab.runner.create_snapshot")
+    @patch("dab.runner.get_latest_snapshot")
+    @patch("dab.runner.run_rsync")
     def test_auto_prune_after_snapshot(
         self,
         mock_rsync: MagicMock,
@@ -336,10 +336,10 @@ class TestRunAllSyncs:
         assert results[0].pruned_paths == ["/dst/snapshots/old"]
         mock_prune.assert_called_once()
 
-    @patch("ssb.runner.prune_snapshots")
-    @patch("ssb.runner.create_snapshot")
-    @patch("ssb.runner.get_latest_snapshot")
-    @patch("ssb.runner.run_rsync")
+    @patch("dab.runner.prune_snapshots")
+    @patch("dab.runner.create_snapshot")
+    @patch("dab.runner.get_latest_snapshot")
+    @patch("dab.runner.run_rsync")
     def test_no_auto_prune_without_max_snapshots(
         self,
         mock_rsync: MagicMock,

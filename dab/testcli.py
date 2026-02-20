@@ -33,8 +33,8 @@ from .testdata import (
 )
 
 app = typer.Typer(
-    name="ssb-testcli",
-    help="SSB developer test CLI",
+    name="dab-testcli",
+    help="DAB developer test CLI",
     no_args_is_help=True,
 )
 
@@ -84,17 +84,17 @@ def _show_troubleshoot() -> None:
 @app.command()
 def seed() -> None:
     """Create a temp folder with config and test data."""
-    tmp = Path(tempfile.mkdtemp(prefix="ssb-seed-"))
+    tmp = Path(tempfile.mkdtemp(prefix="dab-seed-"))
 
     # Source volume
     src = tmp / "src-data"
     src.mkdir()
-    (src / ".ssb-vol").touch()
-    (src / ".ssb-src").touch()
+    (src / ".dab-vol").touch()
+    (src / ".dab-src").touch()
 
     photos = src / "photos"
     photos.mkdir()
-    (photos / ".ssb-src").touch()
+    (photos / ".dab-src").touch()
     (photos / "vacation.jpg").write_text("fake jpeg data - vacation photo")
     (photos / "family.png").write_text("fake png data - family photo")
 
@@ -110,8 +110,8 @@ def seed() -> None:
     # Destination volume
     dst = tmp / "dst-backup"
     dst.mkdir()
-    (dst / ".ssb-vol").touch()
-    (dst / ".ssb-dst").touch()
+    (dst / ".dab-vol").touch()
+    (dst / ".dab-dst").touch()
     (dst / "latest").mkdir()
 
     # Config file
@@ -146,9 +146,9 @@ def seed() -> None:
     typer.echo(f"Config file:    {config_path}")
     typer.echo()
     typer.echo("Try:")
-    typer.echo(f"  ssb status --config {config_path}")
-    typer.echo(f"  ssb run --config {config_path} --dry-run")
-    typer.echo(f"  ssb run --config {config_path}")
+    typer.echo(f"  poetry run dab status --config {config_path}")
+    typer.echo(f"  poetry run dab run --config {config_path} --dry-run")
+    typer.echo(f"  poetry run dab run --config {config_path}")
 
 
 def main() -> None:

@@ -11,7 +11,7 @@ from typing import Any, Generator
 
 import pytest
 
-from ssb.config import RemoteVolume, RsyncServer
+from dab.config import RemoteVolume, RsyncServer
 
 DOCKER_DIR = Path(__file__).parent / "docker"
 
@@ -39,7 +39,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture(scope="session")
 def ssh_key_pair() -> Generator[tuple[Path, Path], None, None]:
     """Generate an ephemeral ed25519 SSH key pair for tests."""
-    tmpdir = Path(tempfile.mkdtemp(prefix="ssb-test-ssh-"))
+    tmpdir = Path(tempfile.mkdtemp(prefix="dab-test-ssh-"))
     private_key = tmpdir / "id_ed25519"
     public_key = tmpdir / "id_ed25519.pub"
 
@@ -53,7 +53,7 @@ def ssh_key_pair() -> Generator[tuple[Path, Path], None, None]:
             "-N",
             "",
             "-C",
-            "ssb-integration-test",
+            "dab-integration-test",
         ],
         capture_output=True,
         check=True,
@@ -82,7 +82,7 @@ def docker_container(
 
     image = DockerImage(
         path=str(DOCKER_DIR),
-        tag="ssb-test-server:latest",
+        tag="dab-test-server:latest",
     )
     image.build()
 
@@ -244,7 +244,7 @@ def _cleanup_remote(
     ssh_exec(docker_container, "rm -rf /data/src/* /data/latest/*")
     ssh_exec(
         docker_container,
-        "find /data -name '.ssb-*' -delete",
+        "find /data -name '.dab-*' -delete",
     )
     # Recreate latest in case it was removed
     ssh_exec(docker_container, "mkdir -p /data/latest")
@@ -294,5 +294,5 @@ def _cleanup_remote(
     ssh_exec(docker_container, "rm -rf /mnt/btrfs/src/*")
     ssh_exec(
         docker_container,
-        "find /mnt/btrfs -name '.ssb-*' -delete",
+        "find /mnt/btrfs -name '.dab-*' -delete",
     )

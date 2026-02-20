@@ -28,8 +28,8 @@ class SyncReason(str, enum.Enum):
     DISABLED = "disabled"
     SOURCE_UNAVAILABLE = "source unavailable"
     DESTINATION_UNAVAILABLE = "destination unavailable"
-    SOURCE_MARKER_NOT_FOUND = "source marker .ssb-src not found"
-    DESTINATION_MARKER_NOT_FOUND = "destination marker .ssb-dst not found"
+    SOURCE_MARKER_NOT_FOUND = "source marker .dab-src not found"
+    DESTINATION_MARKER_NOT_FOUND = "destination marker .dab-dst not found"
     RSYNC_NOT_FOUND_ON_SOURCE = "rsync not found on source"
     RSYNC_NOT_FOUND_ON_DESTINATION = "rsync not found on destination"
     BTRFS_NOT_FOUND_ON_DESTINATION = "btrfs not found on destination"
@@ -86,8 +86,8 @@ def check_volume(volume: Volume, config: Config) -> VolumeStatus:
 
 
 def _check_local_volume(volume: LocalVolume) -> VolumeStatus:
-    """Check if a local volume is active (.ssb-vol marker exists)."""
-    marker = Path(volume.path) / ".ssb-vol"
+    """Check if a local volume is active (.dab-vol marker exists)."""
+    marker = Path(volume.path) / ".dab-vol"
     reasons: list[VolumeReason] = (
         [] if marker.exists() else [VolumeReason.MARKER_NOT_FOUND]
     )
@@ -99,9 +99,9 @@ def _check_local_volume(volume: LocalVolume) -> VolumeStatus:
 
 
 def _check_remote_volume(volume: RemoteVolume, config: Config) -> VolumeStatus:
-    """Check if a remote volume is active (SSH + .ssb-vol marker)."""
+    """Check if a remote volume is active (SSH + .dab-vol marker)."""
     server = config.rsync_servers[volume.rsync_server]
-    marker_path = f"{volume.path}/.ssb-vol"
+    marker_path = f"{volume.path}/.dab-vol"
     result = run_remote_command(server, ["test", "-f", marker_path])
     reasons: list[VolumeReason] = (
         [] if result.returncode == 0 else [VolumeReason.UNREACHABLE]
@@ -295,7 +295,7 @@ def check_sync(
         # Source checks (only if source volume is active)
         if src_status.active:
             if not _check_endpoint_marker(
-                src_vol, sync.source.subdir, ".ssb-src", config
+                src_vol, sync.source.subdir, ".dab-src", config
             ):
                 reasons.append(SyncReason.SOURCE_MARKER_NOT_FOUND)
             if not _check_command_available(src_vol, "rsync", config):
@@ -306,7 +306,7 @@ def check_sync(
             if not _check_endpoint_marker(
                 dst_vol,
                 sync.destination.subdir,
-                ".ssb-dst",
+                ".dab-dst",
                 config,
             ):
                 reasons.append(SyncReason.DESTINATION_MARKER_NOT_FOUND)

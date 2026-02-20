@@ -20,10 +20,10 @@ format: ## Format code with black
 	poetry run black .
 
 lint: ## Run flake8 linting
-	poetry run flake8 ssb/ tests/
+	poetry run flake8 dab/ tests/
 
 type-check: ## Run mypy type checking
-	poetry run mypy ssb/
+	poetry run mypy dab/
 
 check: format lint type-check test ## Run all checks (format, lint, type-check, test)
 

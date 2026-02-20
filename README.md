@@ -1,4 +1,4 @@
-# SSB (Simple Safe Backup)
+# DAB (Device-Aware Backup)
 
 Effortless, flexible backups anywhere—local or remote, even on removable drives, powered by rsync.
 
@@ -59,7 +59,7 @@ Features:
 - Support for Remote to Remote? How do handle authentication and connectivity checks for both servers? rsync filter files., other problems?
 - Git source support
 - Dry run for both run and status: display all the commands that would be executed. Do we want additional option for that?
-  - Even better? Can generate plain shell script to perform the backup to avoid any dependency on ssb?
+  - Even better? Can generate plain shell script to perform the backup to avoid any dependency on dab?
   - Should work with relative directory for destination, and should run on both linux and mac os X. Should include all the status checks
   - Goals: 1. make it easy to understand what the tool is doing 2. implement custom things without having to contribute to the codebase
   - Actually run rsync with --dry-run, and maybe pass -v automatically during dry-runs to provide more detailed output?
@@ -68,7 +68,7 @@ Features:
 - Make it possible (optional) to perform syncs in parallel when there are no overlapping source or destination volumes.
 
 Build & CI:
-- Rename the tool, repository, and all related files from ssbng to something else (ssb-next? ssb2? ssb-nextgen? ssb-ng? ssb?).
+- Rename the tool, repository, and all related files from dab to something else (dab-next? dab2? dab-nextgen? dab-ng? dab?).
 - Add Github workflows
 - Figure out poetry and asdf integration for Python version management and installation instructions.
 - Makefile: is there a better way?
@@ -87,8 +87,8 @@ Build & CI:
 - packaging and publishing (PyPI) to use as a regular app
 - Add end to end tests with filters, and other more complex configurations.
 - Integration tests
-  - add local tests with btrfs snapshots on docker, with ssb fully installed as an app
-  - add remote to remote tests with two docker containers, with ssh server set up on one of them, and ssb?rsync fully installed as an app on both of them. Test connectivity checks, rsync backup, btrfs snapshots, etc.
+  - add local tests with btrfs snapshots on docker, with dab fully installed as an app
+  - add remote to remote tests with two docker containers, with ssh server set up on one of them, and dab?rsync fully installed as an app on both of them. Test connectivity checks, rsync backup, btrfs snapshots, etc.
 - Make it possible to install and run using tools such as pipx
 - Conventional commit changelog release system / workflow
 - Add `testcli` CLI app:
@@ -101,7 +101,7 @@ Build & CI:
 
 Doc:
 - Use cases instead of features
-  - Provide comparison with borg and restic. Why ssb over these alternatives.
+  - Provide comparison with borg and restic. Why dab over these alternatives.
 - Testing strategy and practices in conventions
 - Architecture: use mermaid diagram, and complete architecture overview
 - Review Features, Usage, Architecture and Concepts sections

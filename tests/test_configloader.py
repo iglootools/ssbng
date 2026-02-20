@@ -1,4 +1,4 @@
-"""Tests for ssb.configloader."""
+"""Tests for dab.configloader."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from ssb.config import (
+from dab.config import (
     Config,
     DestinationSyncEndpoint,
     LocalVolume,
@@ -16,7 +16,7 @@ from ssb.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ssb.configloader import ConfigError, find_config_file, load_config
+from dab.configloader import ConfigError, find_config_file, load_config
 
 
 def _config_to_yaml(config: Config) -> str:
@@ -40,7 +40,7 @@ class TestFindConfigFile:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         xdg = tmp_path / "xdg"
-        cfg = xdg / "ssb" / "config.yaml"
+        cfg = xdg / "dab" / "config.yaml"
         cfg.parent.mkdir(parents=True)
         cfg.write_text("volumes: {}\nsyncs: {}\n")
         monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
@@ -85,7 +85,7 @@ class TestLoadConfig:
         assert sync.rsync_options is None
         assert sync.extra_rsync_options == []
         assert sync.filters == ["+ *.jpg", "- *.tmp"]
-        assert sync.filter_file == "~/.config/ssb/filters/photos.rules"
+        assert sync.filter_file == "~/.config/dab/filters/photos.rules"
 
     def test_minimal_config(self, sample_minimal_config_file: Path) -> None:
         cfg = load_config(str(sample_minimal_config_file))
