@@ -415,10 +415,11 @@ def print_human_troubleshoot(
     console = Console()
     has_issues = False
 
-    for vs in vol_statuses.values():
-        if not vs.reasons:
-            continue
-        has_issues = True
+    failed_vols = [vs for vs in vol_statuses.values() if vs.reasons]
+    failed_syncs = [ss for ss in sync_statuses.values() if ss.reasons]
+    has_issues = bool(failed_vols or failed_syncs)
+
+    for vs in failed_vols:
         console.print(f"\n[bold]Volume {vs.slug!r}:[/bold]")
         vol = vs.config
         for reason in vs.reasons:
@@ -438,10 +439,7 @@ def print_human_troubleshoot(
                             server = config.rsync_servers[vol.rsync_server]
                             _print_ssh_troubleshoot(console, server)
 
-    for ss in sync_statuses.values():
-        if not ss.reasons:
-            continue
-        has_issues = True
+    for ss in failed_syncs:
         console.print(f"\n[bold]Sync {ss.slug!r}:[/bold]")
         for sync_reason in ss.reasons:
             console.print(f"  {sync_reason.value}")
