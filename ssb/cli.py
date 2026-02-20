@@ -39,9 +39,9 @@ def status(
         typer.Option("--config", help="Path to config file"),
     ] = None,
     output: Annotated[
-        str,
-        typer.Option("--output", help="Output format: human or json"),
-    ] = "human",
+        OutputFormat,
+        typer.Option("--output", help="Output format"),
+    ] = OutputFormat.HUMAN,
     allow_removable_devices: Annotated[
         bool,
         typer.Option(
@@ -55,7 +55,7 @@ def status(
 ) -> None:
     """Show status of volumes and syncs."""
     cfg = _load_config_or_exit(config)
-    output_format = OutputFormat(output)
+    output_format = output
     vol_statuses, sync_statuses, has_errors = _check_and_display_status(
         cfg, output_format, allow_removable_devices
     )
@@ -86,9 +86,9 @@ def run(
         typer.Option("--sync", help="Sync name(s) to run"),
     ] = None,
     output: Annotated[
-        str,
-        typer.Option("--output", help="Output format: human or json"),
-    ] = "human",
+        OutputFormat,
+        typer.Option("--output", help="Output format"),
+    ] = OutputFormat.HUMAN,
     verbose: Annotated[
         int,
         typer.Option(
@@ -111,7 +111,7 @@ def run(
 ) -> None:
     """Run backup syncs."""
     cfg = _load_config_or_exit(config)
-    output_format = OutputFormat(output)
+    output_format = output
     vol_statuses, sync_statuses, has_errors = _check_and_display_status(
         cfg, output_format, allow_removable_devices
     )
@@ -186,13 +186,13 @@ def prune(
         typer.Option("--dry-run", "-n", help="Perform a dry run"),
     ] = False,
     output: Annotated[
-        str,
-        typer.Option("--output", help="Output format: human or json"),
-    ] = "human",
+        OutputFormat,
+        typer.Option("--output", help="Output format"),
+    ] = OutputFormat.HUMAN,
 ) -> None:
     """Prune old snapshots beyond max-snapshots limit."""
     cfg = _load_config_or_exit(config)
-    output_format = OutputFormat(output)
+    output_format = output
     _, sync_statuses = check_all_syncs(cfg)
 
     prunable = [
