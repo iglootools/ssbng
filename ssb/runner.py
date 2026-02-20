@@ -39,7 +39,7 @@ def run_all_syncs(
     config: Config,
     sync_statuses: dict[str, SyncStatus],
     dry_run: bool = False,
-    sync_slugs: list[str] | None = None,
+    only_syncs: list[str] | None = None,
     verbose: int = 0,
     on_rsync_output: Callable[[str], None] | None = None,
 ) -> list[SyncResult]:
@@ -50,10 +50,14 @@ def run_all_syncs(
 
     results: list[SyncResult] = []
 
-    for slug, status in sync_statuses.items():
-        if sync_slugs and slug not in sync_slugs:
-            continue
-        elif not status.active:
+    selected = (
+        {s: st for s, st in sync_statuses.items() if s in only_syncs}
+        if only_syncs
+        else sync_statuses
+    )
+
+    for slug, status in selected.items():
+        if not status.active:
             results.append(
                 SyncResult(
                     sync_slug=slug,

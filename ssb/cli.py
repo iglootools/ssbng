@@ -138,7 +138,7 @@ def run(
             cfg,
             sync_statuses,
             dry_run=dry_run,
-            sync_slugs=sync,
+            only_syncs=sync,
             verbose=verbose,
             on_rsync_output=stream_output,
         )

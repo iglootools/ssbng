@@ -465,7 +465,7 @@ class TestRunCommand:
         )
         assert result.exit_code == 0
         call_kwargs = mock_run.call_args
-        assert call_kwargs.kwargs.get("sync_slugs") == ["photos-to-nas"]
+        assert call_kwargs.kwargs.get("only_syncs") == ["photos-to-nas"]
 
     @patch("ssb.cli.run_all_syncs")
     @patch("ssb.cli.check_all_syncs")

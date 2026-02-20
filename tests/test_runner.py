@@ -198,7 +198,7 @@ class TestRunAllSyncs:
         )
 
         results = run_all_syncs(
-            config, sync_statuses, sync_slugs=["nonexistent"]
+            config, sync_statuses, only_syncs=["nonexistent"]
         )
         assert len(results) == 0
 
