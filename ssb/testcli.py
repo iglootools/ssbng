@@ -6,7 +6,15 @@ import tempfile
 from pathlib import Path
 
 import typer
+import yaml
 
+from .config import (
+    Config,
+    DestinationSyncEndpoint,
+    LocalVolume,
+    SyncConfig,
+    SyncEndpoint,
+)
 from .output import (
     print_human_prune_results,
     print_human_results,
@@ -107,30 +115,44 @@ def seed() -> None:
     (dst / "latest").mkdir()
 
     # Config file
-    config_yaml = (
-        "volumes:\n"
-        "  src-data:\n"
-        "    type: local\n"
-        f"    path: {src}\n"
-        "  dst-backup:\n"
-        "    type: local\n"
-        f"    path: {dst}\n"
-        "\n"
-        "syncs:\n"
-        "  photos-backup:\n"
-        "    source:\n"
-        "      volume: src-data\n"
-        "      subdir: photos\n"
-        "    destination:\n"
-        "      volume: dst-backup\n"
-        "  full-backup:\n"
-        "    source:\n"
-        "      volume: src-data\n"
-        "    destination:\n"
-        "      volume: dst-backup\n"
+    config = Config(
+        volumes={
+            "src-data": LocalVolume(
+                slug="src-data", path=str(src)
+            ),
+            "dst-backup": LocalVolume(
+                slug="dst-backup", path=str(dst)
+            ),
+        },
+        syncs={
+            "photos-backup": SyncConfig(
+                slug="photos-backup",
+                source=SyncEndpoint(
+                    volume="src-data", subdir="photos"
+                ),
+                destination=DestinationSyncEndpoint(
+                    volume="dst-backup"
+                ),
+            ),
+            "full-backup": SyncConfig(
+                slug="full-backup",
+                source=SyncEndpoint(
+                    volume="src-data"
+                ),
+                destination=DestinationSyncEndpoint(
+                    volume="dst-backup"
+                ),
+            ),
+        },
     )
     config_path = tmp / "config.yaml"
-    config_path.write_text(config_yaml)
+    config_path.write_text(
+        yaml.safe_dump(
+            config.model_dump(by_alias=True),
+            default_flow_style=False,
+            sort_keys=False,
+        )
+    )
 
     typer.echo(f"Seed directory: {tmp}")
     typer.echo(f"Config file:    {config_path}")

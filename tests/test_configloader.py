@@ -5,9 +5,26 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
-from ssb.config import LocalVolume, RemoteVolume
+from ssb.config import (
+    Config,
+    DestinationSyncEndpoint,
+    LocalVolume,
+    RemoteVolume,
+    RsyncServer,
+    SyncConfig,
+    SyncEndpoint,
+)
 from ssb.configloader import ConfigError, find_config_file, load_config
+
+
+def _config_to_yaml(config: Config) -> str:
+    return yaml.safe_dump(
+        config.model_dump(by_alias=True),
+        default_flow_style=False,
+        sort_keys=False,
+    )
 
 
 class TestFindConfigFile:
@@ -212,52 +229,74 @@ class TestLoadConfig:
         sync = cfg.syncs["s"]
         assert sync.filters == ["+ *.jpg", "- *.tmp", "H .git"]
 
-    def test_rsync_options_override(self, tmp_path: Path) -> None:
-        p = tmp_path / "opts.yaml"
-        p.write_text(
-            "volumes:\n"
-            "  v:\n    type: local\n    path: /x\n"
-            "syncs:\n"
-            "  s:\n"
-            "    source:\n      volume: v\n"
-            "    destination:\n      volume: v\n"
-            "    rsync-options:\n"
-            '      - "-a"\n'
-            '      - "--delete"\n'
+    def test_rsync_options_override(
+        self, tmp_path: Path
+    ) -> None:
+        config = Config(
+            volumes={
+                "v": LocalVolume(slug="v", path="/x"),
+            },
+            syncs={
+                "s": SyncConfig(
+                    slug="s",
+                    source=SyncEndpoint(volume="v"),
+                    destination=DestinationSyncEndpoint(
+                        volume="v"
+                    ),
+                    rsync_options=["-a", "--delete"],
+                ),
+            },
         )
+        p = tmp_path / "opts.yaml"
+        p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
         assert sync.rsync_options == ["-a", "--delete"]
         assert sync.extra_rsync_options == []
 
-    def test_extra_rsync_options(self, tmp_path: Path) -> None:
-        p = tmp_path / "extra.yaml"
-        p.write_text(
-            "volumes:\n"
-            "  v:\n    type: local\n    path: /x\n"
-            "syncs:\n"
-            "  s:\n"
-            "    source:\n      volume: v\n"
-            "    destination:\n      volume: v\n"
-            "    extra-rsync-options:\n"
-            '      - "--compress"\n'
-            '      - "--progress"\n'
+    def test_extra_rsync_options(
+        self, tmp_path: Path
+    ) -> None:
+        config = Config(
+            volumes={
+                "v": LocalVolume(slug="v", path="/x"),
+            },
+            syncs={
+                "s": SyncConfig(
+                    slug="s",
+                    source=SyncEndpoint(volume="v"),
+                    destination=DestinationSyncEndpoint(
+                        volume="v"
+                    ),
+                    extra_rsync_options=[
+                        "--compress",
+                        "--progress",
+                    ],
+                ),
+            },
         )
+        p = tmp_path / "extra.yaml"
+        p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
         assert sync.rsync_options is None
-        assert sync.extra_rsync_options == ["--compress", "--progress"]
+        assert sync.extra_rsync_options == [
+            "--compress",
+            "--progress",
+        ]
 
     def test_connect_timeout(self, tmp_path: Path) -> None:
-        p = tmp_path / "timeout.yaml"
-        p.write_text(
-            "rsync-servers:\n"
-            "  slow:\n"
-            "    host: slow.example.com\n"
-            "    connect-timeout: 30\n"
-            "volumes: {}\n"
-            "syncs: {}\n"
+        config = Config(
+            rsync_servers={
+                "slow": RsyncServer(
+                    slug="slow",
+                    host="slow.example.com",
+                    connect_timeout=30,
+                ),
+            },
         )
+        p = tmp_path / "timeout.yaml"
+        p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
         assert cfg.rsync_servers["slow"].connect_timeout == 30
 
