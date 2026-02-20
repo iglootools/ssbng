@@ -33,6 +33,8 @@ class SyncReason(str, enum.Enum):
     RSYNC_NOT_FOUND_ON_SOURCE = "rsync not found on source"
     RSYNC_NOT_FOUND_ON_DESTINATION = "rsync not found on destination"
     BTRFS_NOT_FOUND_ON_DESTINATION = "btrfs not found on destination"
+    STAT_NOT_FOUND_ON_DESTINATION = "stat not found on destination"
+    FINDMNT_NOT_FOUND_ON_DESTINATION = "findmnt not found on destination"
     DESTINATION_NOT_BTRFS = "destination not on btrfs filesystem"
     DESTINATION_NOT_BTRFS_SUBVOLUME = (
         "destination endpoint is not a btrfs subvolume"
@@ -227,6 +229,36 @@ def _check_btrfs_mount_option(
     return option in options
 
 
+def _check_btrfs_dest(
+    dst_vol: Volume,
+    sync: SyncConfig,
+    config: Config,
+    has_findmnt: bool,
+    reasons: list[SyncReason],
+) -> None:
+    """Run btrfs filesystem, subvolume, and directory checks."""
+    if not _check_btrfs_filesystem(dst_vol, config):
+        reasons.append(SyncReason.DESTINATION_NOT_BTRFS)
+    elif not _check_btrfs_subvolume(
+        dst_vol,
+        sync.destination.subdir,
+        config,
+    ):
+        reasons.append(SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME)
+    else:
+        if has_findmnt and not _check_btrfs_mount_option(
+            dst_vol,
+            "user_subvol_rm_allowed",
+            config,
+        ):
+            reasons.append(SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM)
+        ep = _resolve_endpoint(dst_vol, sync.destination.subdir)
+        if not _check_directory_exists(dst_vol, f"{ep}/latest", config):
+            reasons.append(SyncReason.DESTINATION_LATEST_NOT_FOUND)
+        if not _check_directory_exists(dst_vol, f"{ep}/snapshots", config):
+            reasons.append(SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND)
+
+
 def check_sync(
     sync: SyncConfig,
     config: Config,
@@ -283,33 +315,30 @@ def check_sync(
             if sync.destination.btrfs_snapshots.enabled:
                 if not _check_command_available(dst_vol, "btrfs", config):
                     reasons.append(SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION)
-                elif not _check_btrfs_filesystem(dst_vol, config):
-                    reasons.append(SyncReason.DESTINATION_NOT_BTRFS)
-                elif not _check_btrfs_subvolume(
-                    dst_vol,
-                    sync.destination.subdir,
-                    config,
-                ):
-                    reasons.append(SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME)
                 else:
-                    if not _check_btrfs_mount_option(
-                        dst_vol,
-                        "user_subvol_rm_allowed",
-                        config,
-                    ):
+                    has_stat = _check_command_available(
+                        dst_vol, "stat", config
+                    )
+                    has_findmnt = _check_command_available(
+                        dst_vol, "findmnt", config
+                    )
+
+                    if not has_stat:
                         reasons.append(
-                            SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM
+                            SyncReason.STAT_NOT_FOUND_ON_DESTINATION
                         )
-                    ep = _resolve_endpoint(dst_vol, sync.destination.subdir)
-                    if not _check_directory_exists(
-                        dst_vol, f"{ep}/latest", config
-                    ):
-                        reasons.append(SyncReason.DESTINATION_LATEST_NOT_FOUND)
-                    if not _check_directory_exists(
-                        dst_vol, f"{ep}/snapshots", config
-                    ):
+                    if not has_findmnt:
                         reasons.append(
-                            SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND
+                            SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION
+                        )
+
+                    if has_stat:
+                        _check_btrfs_dest(
+                            dst_vol,
+                            sync,
+                            config,
+                            has_findmnt,
+                            reasons,
                         )
 
         return SyncStatus(

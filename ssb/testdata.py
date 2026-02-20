@@ -219,6 +219,14 @@ def troubleshoot_config() -> Config:
                     btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
                 ),
             ),
+            "tools-missing": SyncConfig(
+                slug="tools-missing",
+                source=SyncEndpoint(volume="laptop"),
+                destination=DestinationSyncEndpoint(
+                    volume="usb-drive",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            ),
         },
     )
 
@@ -307,6 +315,16 @@ def troubleshoot_data(
                 SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM,
                 SyncReason.DESTINATION_LATEST_NOT_FOUND,
                 SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND,
+            ],
+        ),
+        "tools-missing": SyncStatus(
+            slug="tools-missing",
+            config=config.syncs["tools-missing"],
+            source_status=laptop_vs,
+            destination_status=usb_vs,
+            reasons=[
+                SyncReason.STAT_NOT_FOUND_ON_DESTINATION,
+                SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION,
             ],
         ),
     }

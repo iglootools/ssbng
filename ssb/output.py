@@ -252,6 +252,16 @@ _BTRFS_INSTALL = (
     "      Fedora/RHEL:   sudo dnf install btrfs-progs"
 )
 
+_COREUTILS_INSTALL = (
+    "      Ubuntu/Debian: sudo apt install coreutils\n"
+    "      Fedora/RHEL:   sudo dnf install coreutils"
+)
+
+_UTIL_LINUX_INSTALL = (
+    "      Ubuntu/Debian: sudo apt install util-linux\n"
+    "      Fedora/RHEL:   sudo dnf install util-linux"
+)
+
 
 def _print_marker_fix(
     console: Console,
@@ -359,6 +369,16 @@ def _print_sync_reason_fix(
             host = _host_label(dst, config)
             console.print(f"    Install btrfs-progs on {host}:")
             console.print(_BTRFS_INSTALL)
+        case SyncReason.STAT_NOT_FOUND_ON_DESTINATION:
+            dst = config.volumes[sync.destination.volume]
+            host = _host_label(dst, config)
+            console.print(f"    Install coreutils (stat) on {host}:")
+            console.print(_COREUTILS_INSTALL)
+        case SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION:
+            dst = config.volumes[sync.destination.volume]
+            host = _host_label(dst, config)
+            console.print(f"    Install util-linux (findmnt) on {host}:")
+            console.print(_UTIL_LINUX_INSTALL)
         case SyncReason.DESTINATION_NOT_BTRFS:
             console.print(
                 "    The destination is not on a" " btrfs filesystem."
