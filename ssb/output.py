@@ -308,6 +308,24 @@ def _print_sync_reason_fix(
             ]
             for cmd in cmds:
                 console.print(f"    {_wrap_cmd(cmd, dst, config)}")
+        case SyncReason.DESTINATION_LATEST_NOT_FOUND:
+            dst = config.volumes[sync.destination.volume]
+            ep = _endpoint_path(dst, sync.destination.subdir)
+            cmds = [
+                f"sudo btrfs subvolume create {ep}/latest",
+                ("sudo chown <user>:<group>" f" {ep}/latest"),
+            ]
+            for cmd in cmds:
+                console.print(f"    {_wrap_cmd(cmd, dst, config)}")
+        case SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND:
+            dst = config.volumes[sync.destination.volume]
+            ep = _endpoint_path(dst, sync.destination.subdir)
+            cmds = [
+                f"sudo mkdir {ep}/snapshots",
+                ("sudo chown <user>:<group>" f" {ep}/snapshots"),
+            ]
+            for cmd in cmds:
+                console.print(f"    {_wrap_cmd(cmd, dst, config)}")
 
 
 def print_human_troubleshoot(

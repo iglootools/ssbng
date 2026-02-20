@@ -538,6 +538,164 @@ class TestCheckSync:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME in status.reasons
 
+    @patch("ssb.status.subprocess.run")
+    @patch(
+        "ssb.status.shutil.which",
+        return_value="/usr/bin/fake",
+    )
+    def test_destination_latest_not_found(
+        self,
+        mock_which: MagicMock,
+        mock_subprocess: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_active_markers(src, dst)
+        # snapshots exists but latest does not
+        (dst / "backup" / "snapshots").mkdir()
+
+        src_vol = LocalVolume(slug="src", path=str(src))
+        dst_vol = LocalVolume(slug="dst", path=str(dst))
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src", subdir="data"),
+            destination=DestinationSyncEndpoint(
+                volume="dst",
+                subdir="backup",
+                btrfs_snapshots=True,
+            ),
+        )
+        config = Config(
+            volumes={"src": src_vol, "dst": dst_vol},
+            syncs={"s1": sync},
+        )
+        vol_statuses = self._make_active_vol_statuses(config)
+
+        def subprocess_side_effect(
+            cmd: list[str], **kwargs: object
+        ) -> MagicMock:
+            if cmd[:4] == ["stat", "-f", "-c", "%T"]:
+                return MagicMock(returncode=0, stdout="btrfs\n")
+            if cmd[:3] == ["stat", "-c", "%i"]:
+                return MagicMock(returncode=0, stdout="256\n")
+            return MagicMock(returncode=0)
+
+        mock_subprocess.side_effect = subprocess_side_effect
+
+        status = check_sync(sync, config, vol_statuses)
+        assert status.active is False
+        assert SyncReason.DESTINATION_LATEST_NOT_FOUND in status.reasons
+        assert (
+            SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND
+            not in status.reasons
+        )
+
+    @patch("ssb.status.subprocess.run")
+    @patch(
+        "ssb.status.shutil.which",
+        return_value="/usr/bin/fake",
+    )
+    def test_destination_snapshots_dir_not_found(
+        self,
+        mock_which: MagicMock,
+        mock_subprocess: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_active_markers(src, dst)
+        # latest exists but snapshots does not
+        (dst / "backup" / "latest").mkdir()
+
+        src_vol = LocalVolume(slug="src", path=str(src))
+        dst_vol = LocalVolume(slug="dst", path=str(dst))
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src", subdir="data"),
+            destination=DestinationSyncEndpoint(
+                volume="dst",
+                subdir="backup",
+                btrfs_snapshots=True,
+            ),
+        )
+        config = Config(
+            volumes={"src": src_vol, "dst": dst_vol},
+            syncs={"s1": sync},
+        )
+        vol_statuses = self._make_active_vol_statuses(config)
+
+        def subprocess_side_effect(
+            cmd: list[str], **kwargs: object
+        ) -> MagicMock:
+            if cmd[:4] == ["stat", "-f", "-c", "%T"]:
+                return MagicMock(returncode=0, stdout="btrfs\n")
+            if cmd[:3] == ["stat", "-c", "%i"]:
+                return MagicMock(returncode=0, stdout="256\n")
+            return MagicMock(returncode=0)
+
+        mock_subprocess.side_effect = subprocess_side_effect
+
+        status = check_sync(sync, config, vol_statuses)
+        assert status.active is False
+        assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
+        assert SyncReason.DESTINATION_LATEST_NOT_FOUND not in status.reasons
+
+    @patch("ssb.status.subprocess.run")
+    @patch(
+        "ssb.status.shutil.which",
+        return_value="/usr/bin/fake",
+    )
+    def test_destination_latest_and_snapshots_both_missing(
+        self,
+        mock_which: MagicMock,
+        mock_subprocess: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_active_markers(src, dst)
+        # neither latest nor snapshots exist
+
+        src_vol = LocalVolume(slug="src", path=str(src))
+        dst_vol = LocalVolume(slug="dst", path=str(dst))
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src", subdir="data"),
+            destination=DestinationSyncEndpoint(
+                volume="dst",
+                subdir="backup",
+                btrfs_snapshots=True,
+            ),
+        )
+        config = Config(
+            volumes={"src": src_vol, "dst": dst_vol},
+            syncs={"s1": sync},
+        )
+        vol_statuses = self._make_active_vol_statuses(config)
+
+        def subprocess_side_effect(
+            cmd: list[str], **kwargs: object
+        ) -> MagicMock:
+            if cmd[:4] == ["stat", "-f", "-c", "%T"]:
+                return MagicMock(returncode=0, stdout="btrfs\n")
+            if cmd[:3] == ["stat", "-c", "%i"]:
+                return MagicMock(returncode=0, stdout="256\n")
+            return MagicMock(returncode=0)
+
+        mock_subprocess.side_effect = subprocess_side_effect
+
+        status = check_sync(sync, config, vol_statuses)
+        assert status.active is False
+        assert SyncReason.DESTINATION_LATEST_NOT_FOUND in status.reasons
+        assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
+
     @patch(
         "ssb.status.shutil.which",
         return_value="/usr/bin/rsync",
@@ -942,6 +1100,163 @@ class TestCheckSyncRemoteCommands:
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME in status.reasons
+
+    @patch("ssb.status.run_remote_command")
+    @patch(
+        "ssb.status.shutil.which",
+        return_value="/usr/bin/rsync",
+    )
+    def test_destination_latest_not_found_on_remote(
+        self,
+        mock_which: MagicMock,
+        mock_run: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / ".ssb-vol").touch()
+        (src / "data").mkdir()
+        (src / "data" / ".ssb-src").touch()
+
+        dst_server = RsyncServer(slug="dst-server", host="dst.local")
+        src_vol = LocalVolume(slug="src", path=str(src))
+        dst_vol = RemoteVolume(
+            slug="dst",
+            rsync_server="dst-server",
+            path="/backup",
+        )
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src", subdir="data"),
+            destination=DestinationSyncEndpoint(
+                volume="dst",
+                subdir="backup",
+                btrfs_snapshots=True,
+            ),
+        )
+        config = Config(
+            rsync_servers={"dst-server": dst_server},
+            volumes={"src": src_vol, "dst": dst_vol},
+            syncs={"s1": sync},
+        )
+        vol_statuses = {
+            "src": VolumeStatus(
+                slug="src",
+                config=src_vol,
+                reasons=[],
+            ),
+            "dst": VolumeStatus(
+                slug="dst",
+                config=dst_vol,
+                reasons=[],
+            ),
+        }
+
+        def remote_side_effect(
+            server: RsyncServer, cmd: list[str]
+        ) -> MagicMock:
+            if cmd == ["test", "-f", "/backup/backup/.ssb-dst"]:
+                return MagicMock(returncode=0)
+            if cmd == ["which", "rsync"]:
+                return MagicMock(returncode=0)
+            if cmd == ["which", "btrfs"]:
+                return MagicMock(returncode=0)
+            if cmd == ["stat", "-f", "-c", "%T", "/backup"]:
+                return MagicMock(returncode=0, stdout="btrfs\n")
+            if cmd == ["stat", "-c", "%i", "/backup/backup"]:
+                return MagicMock(returncode=0, stdout="256\n")
+            if cmd == ["test", "-d", "/backup/backup/latest"]:
+                return MagicMock(returncode=1)
+            if cmd == ["test", "-d", "/backup/backup/snapshots"]:
+                return MagicMock(returncode=0)
+            return MagicMock(returncode=0)
+
+        mock_run.side_effect = remote_side_effect
+
+        status = check_sync(sync, config, vol_statuses)
+        assert status.active is False
+        assert SyncReason.DESTINATION_LATEST_NOT_FOUND in status.reasons
+        assert (
+            SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND
+            not in status.reasons
+        )
+
+    @patch("ssb.status.run_remote_command")
+    @patch(
+        "ssb.status.shutil.which",
+        return_value="/usr/bin/rsync",
+    )
+    def test_destination_snapshots_dir_not_found_on_remote(
+        self,
+        mock_which: MagicMock,
+        mock_run: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / ".ssb-vol").touch()
+        (src / "data").mkdir()
+        (src / "data" / ".ssb-src").touch()
+
+        dst_server = RsyncServer(slug="dst-server", host="dst.local")
+        src_vol = LocalVolume(slug="src", path=str(src))
+        dst_vol = RemoteVolume(
+            slug="dst",
+            rsync_server="dst-server",
+            path="/backup",
+        )
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src", subdir="data"),
+            destination=DestinationSyncEndpoint(
+                volume="dst",
+                subdir="backup",
+                btrfs_snapshots=True,
+            ),
+        )
+        config = Config(
+            rsync_servers={"dst-server": dst_server},
+            volumes={"src": src_vol, "dst": dst_vol},
+            syncs={"s1": sync},
+        )
+        vol_statuses = {
+            "src": VolumeStatus(
+                slug="src",
+                config=src_vol,
+                reasons=[],
+            ),
+            "dst": VolumeStatus(
+                slug="dst",
+                config=dst_vol,
+                reasons=[],
+            ),
+        }
+
+        def remote_side_effect(
+            server: RsyncServer, cmd: list[str]
+        ) -> MagicMock:
+            if cmd == ["test", "-f", "/backup/backup/.ssb-dst"]:
+                return MagicMock(returncode=0)
+            if cmd == ["which", "rsync"]:
+                return MagicMock(returncode=0)
+            if cmd == ["which", "btrfs"]:
+                return MagicMock(returncode=0)
+            if cmd == ["stat", "-f", "-c", "%T", "/backup"]:
+                return MagicMock(returncode=0, stdout="btrfs\n")
+            if cmd == ["stat", "-c", "%i", "/backup/backup"]:
+                return MagicMock(returncode=0, stdout="256\n")
+            if cmd == ["test", "-d", "/backup/backup/latest"]:
+                return MagicMock(returncode=0)
+            if cmd == ["test", "-d", "/backup/backup/snapshots"]:
+                return MagicMock(returncode=1)
+            return MagicMock(returncode=0)
+
+        mock_run.side_effect = remote_side_effect
+
+        status = check_sync(sync, config, vol_statuses)
+        assert status.active is False
+        assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
+        assert SyncReason.DESTINATION_LATEST_NOT_FOUND not in status.reasons
 
 
 class TestCheckAllSyncs:

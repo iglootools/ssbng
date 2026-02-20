@@ -37,6 +37,10 @@ class SyncReason(str, enum.Enum):
     DESTINATION_NOT_BTRFS_SUBVOLUME = (
         "destination endpoint is not a btrfs subvolume"
     )
+    DESTINATION_LATEST_NOT_FOUND = "destination latest/ directory not found"
+    DESTINATION_SNAPSHOTS_DIR_NOT_FOUND = (
+        "destination snapshots/ directory not found"
+    )
 
 
 class VolumeStatus(BaseModel):
@@ -154,6 +158,25 @@ def _check_btrfs_filesystem(volume: Volume, config: Config) -> bool:
     return result.returncode == 0 and result.stdout.strip() == "btrfs"
 
 
+def _resolve_endpoint(volume: Volume, subdir: str | None) -> str:
+    """Resolve the full endpoint path for a volume."""
+    if subdir:
+        return f"{volume.path}/{subdir}"
+    else:
+        return volume.path
+
+
+def _check_directory_exists(volume: Volume, path: str, config: Config) -> bool:
+    """Check if a directory exists on the volume's host."""
+    match volume:
+        case LocalVolume():
+            return Path(path).is_dir()
+        case RemoteVolume():
+            server = config.rsync_servers[volume.rsync_server]
+            result = run_remote_command(server, ["test", "-d", path])
+            return result.returncode == 0
+
+
 def _check_btrfs_subvolume(
     volume: Volume,
     subdir: str | None,
@@ -163,7 +186,7 @@ def _check_btrfs_subvolume(
 
     On btrfs, subvolumes always have inode number 256.
     """
-    path = f"{volume.path}/{subdir}" if subdir else volume.path
+    path = _resolve_endpoint(volume, subdir)
     cmd = ["stat", "-c", "%i", path]
     match volume:
         case LocalVolume():
@@ -242,6 +265,18 @@ def check_sync(
                     config,
                 ):
                     reasons.append(SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME)
+                else:
+                    ep = _resolve_endpoint(dst_vol, sync.destination.subdir)
+                    if not _check_directory_exists(
+                        dst_vol, f"{ep}/latest", config
+                    ):
+                        reasons.append(SyncReason.DESTINATION_LATEST_NOT_FOUND)
+                    if not _check_directory_exists(
+                        dst_vol, f"{ep}/snapshots", config
+                    ):
+                        reasons.append(
+                            SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND
+                        )
 
         return SyncStatus(
             slug=sync.slug,
