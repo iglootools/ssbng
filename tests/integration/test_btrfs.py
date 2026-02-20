@@ -8,8 +8,14 @@ from typing import Any
 
 import pytest
 
-from ssb.btrfs import create_snapshot, get_latest_snapshot
+from ssb.btrfs import (
+    create_snapshot,
+    get_latest_snapshot,
+    list_snapshots,
+    prune_snapshots,
+)
 from ssb.config import (
+    BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
     LocalVolume,
@@ -45,7 +51,7 @@ def _make_btrfs_config(
         source=SyncEndpoint(volume="src"),
         destination=DestinationSyncEndpoint(
             volume="dst",
-            btrfs_snapshots=True,
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
         ),
     )
     config = Config(
@@ -188,3 +194,103 @@ class TestBtrfsSnapshots:
             [s for s in after.stdout.strip().split("\n") if s.strip()]
         )
         assert count_after == count_before
+
+
+class TestPruneSnapshots:
+    def _create_snapshots(
+        self,
+        sync: SyncConfig,
+        config: Config,
+        count: int,
+    ) -> list[str]:
+        """Create multiple snapshots with distinct timestamps."""
+        paths: list[str] = []
+        for _ in range(count):
+            path = create_snapshot(sync, config)
+            paths.append(path)
+            time.sleep(0.1)  # distinct timestamps
+        return paths
+
+    def test_prune_deletes_oldest_snapshots(
+        self,
+        tmp_path: Path,
+        docker_container: dict[str, Any],
+        rsync_server: RsyncServer,
+        remote_btrfs_volume: RemoteVolume,
+    ) -> None:
+        _setup_btrfs_latest(docker_container)
+
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "data.txt").write_text("prune test")
+
+        sync, config = _make_btrfs_config(
+            str(src), remote_btrfs_volume, rsync_server
+        )
+        run_rsync(sync, config)
+
+        self._create_snapshots(sync, config, 3)
+
+        # Prune to keep only 1
+        deleted = prune_snapshots(sync, config, max_snapshots=1)
+        assert len(deleted) == 2
+
+        # Verify only 1 snapshot remains
+        remaining = list_snapshots(sync, config)
+        assert len(remaining) == 1
+
+    def test_prune_dry_run_keeps_all(
+        self,
+        tmp_path: Path,
+        docker_container: dict[str, Any],
+        rsync_server: RsyncServer,
+        remote_btrfs_volume: RemoteVolume,
+    ) -> None:
+        _setup_btrfs_latest(docker_container)
+
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "data.txt").write_text("dry run prune")
+
+        sync, config = _make_btrfs_config(
+            str(src), remote_btrfs_volume, rsync_server
+        )
+        run_rsync(sync, config)
+
+        self._create_snapshots(sync, config, 3)
+
+        # Dry-run prune
+        deleted = prune_snapshots(sync, config, max_snapshots=1, dry_run=True)
+        assert len(deleted) == 2
+
+        # All 3 snapshots still exist
+        remaining = list_snapshots(sync, config)
+        assert len(remaining) == 3
+
+    def test_prune_noop_when_under_limit(
+        self,
+        tmp_path: Path,
+        docker_container: dict[str, Any],
+        rsync_server: RsyncServer,
+        remote_btrfs_volume: RemoteVolume,
+    ) -> None:
+        _setup_btrfs_latest(docker_container)
+
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "data.txt").write_text("noop prune")
+
+        sync, config = _make_btrfs_config(
+            str(src), remote_btrfs_volume, rsync_server
+        )
+        run_rsync(sync, config)
+
+        self._create_snapshots(sync, config, 2)
+
+        # Prune with limit higher than count
+        deleted = prune_snapshots(sync, config, max_snapshots=5)
+        assert deleted == []
+
+        # All 2 snapshots still exist
+        remaining = list_snapshots(sync, config)
+        assert len(remaining) == 2

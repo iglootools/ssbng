@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from ssb.config import (
+    BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
     LocalVolume,
@@ -434,7 +435,7 @@ class TestCheckSync:
             destination=DestinationSyncEndpoint(
                 volume="dst",
                 subdir="backup",
-                btrfs_snapshots=True,
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
             ),
         )
         config = Config(
@@ -472,7 +473,7 @@ class TestCheckSync:
             destination=DestinationSyncEndpoint(
                 volume="dst",
                 subdir="backup",
-                btrfs_snapshots=True,
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
             ),
         )
         config = Config(
@@ -514,7 +515,7 @@ class TestCheckSync:
             destination=DestinationSyncEndpoint(
                 volume="dst",
                 subdir="backup",
-                btrfs_snapshots=True,
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
             ),
         )
         config = Config(
@@ -565,7 +566,7 @@ class TestCheckSync:
             destination=DestinationSyncEndpoint(
                 volume="dst",
                 subdir="backup",
-                btrfs_snapshots=True,
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
             ),
         )
         config = Config(
@@ -620,7 +621,7 @@ class TestCheckSync:
             destination=DestinationSyncEndpoint(
                 volume="dst",
                 subdir="backup",
-                btrfs_snapshots=True,
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
             ),
         )
         config = Config(
@@ -671,7 +672,7 @@ class TestCheckSync:
             destination=DestinationSyncEndpoint(
                 volume="dst",
                 subdir="backup",
-                btrfs_snapshots=True,
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
             ),
         )
         config = Config(
@@ -916,7 +917,7 @@ class TestCheckSyncRemoteCommands:
             destination=DestinationSyncEndpoint(
                 volume="dst",
                 subdir="backup",
-                btrfs_snapshots=True,
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
             ),
         )
         config = Config(
@@ -984,7 +985,7 @@ class TestCheckSyncRemoteCommands:
             destination=DestinationSyncEndpoint(
                 volume="dst",
                 subdir="backup",
-                btrfs_snapshots=True,
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
             ),
         )
         config = Config(
@@ -1054,7 +1055,7 @@ class TestCheckSyncRemoteCommands:
             destination=DestinationSyncEndpoint(
                 volume="dst",
                 subdir="backup",
-                btrfs_snapshots=True,
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
             ),
         )
         config = Config(
@@ -1131,7 +1132,7 @@ class TestCheckSyncRemoteCommands:
             destination=DestinationSyncEndpoint(
                 volume="dst",
                 subdir="backup",
-                btrfs_snapshots=True,
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
             ),
         )
         config = Config(
@@ -1211,7 +1212,7 @@ class TestCheckSyncRemoteCommands:
             destination=DestinationSyncEndpoint(
                 volume="dst",
                 subdir="backup",
-                btrfs_snapshots=True,
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
             ),
         )
         config = Config(

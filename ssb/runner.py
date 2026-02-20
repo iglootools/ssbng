@@ -6,7 +6,7 @@ from typing import Callable, Optional
 
 from pydantic import BaseModel
 
-from .btrfs import create_snapshot, get_latest_snapshot
+from .btrfs import create_snapshot, get_latest_snapshot, prune_snapshots
 from .config import Config
 from .status import SyncStatus
 from .rsync import run_rsync
@@ -21,6 +21,17 @@ class SyncResult(BaseModel):
     rsync_exit_code: int
     output: str
     snapshot_path: Optional[str] = None
+    pruned_paths: Optional[list[str]] = None
+    error: Optional[str] = None
+
+
+class PruneResult(BaseModel):
+    """Result of pruning snapshots for a sync."""
+
+    sync_slug: str
+    deleted: list[str]
+    kept: int
+    dry_run: bool
     error: Optional[str] = None
 
 
@@ -83,7 +94,7 @@ def _run_single_sync(
 
     # Check for link-dest if btrfs snapshots are configured
     link_dest: str | None = None
-    if sync.destination.btrfs_snapshots:
+    if sync.destination.btrfs_snapshots.enabled:
         latest = get_latest_snapshot(sync, config)
         if latest:
             link_dest = f"../../snapshots/{latest.rsplit('/', 1)[-1]}"
@@ -119,7 +130,9 @@ def _run_single_sync(
     else:
         # Create btrfs snapshot if configured and not dry run
         snapshot_path: str | None = None
-        if sync.destination.btrfs_snapshots and not dry_run:
+        pruned_paths: list[str] | None = None
+        btrfs_cfg = sync.destination.btrfs_snapshots
+        if btrfs_cfg.enabled and not dry_run:
             try:
                 snapshot_path = create_snapshot(sync, config)
             except RuntimeError as e:
@@ -131,6 +144,10 @@ def _run_single_sync(
                     output=proc.stdout,
                     error=f"Snapshot failed: {e}",
                 )
+            if btrfs_cfg.max_snapshots is not None:
+                pruned_paths = prune_snapshots(
+                    sync, config, btrfs_cfg.max_snapshots
+                )
 
         return SyncResult(
             sync_slug=slug,
@@ -139,4 +156,5 @@ def _run_single_sync(
             rsync_exit_code=proc.returncode,
             output=proc.stdout,
             snapshot_path=snapshot_path,
+            pruned_paths=pruned_paths,
         )

@@ -1,6 +1,7 @@
 """Tests for ssb.status and ssb.output."""
 
 from ssb.config import (
+    BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
     LocalVolume,
@@ -108,7 +109,7 @@ class TestSyncConfig:
         )
         assert sc.slug == "sync1"
         assert sc.enabled is True
-        assert sc.destination.btrfs_snapshots is False
+        assert sc.destination.btrfs_snapshots.enabled is False
         assert sc.rsync_options is None
         assert sc.extra_rsync_options == []
         assert sc.filters == []
@@ -121,7 +122,7 @@ class TestSyncConfig:
             destination=DestinationSyncEndpoint(
                 volume="dst",
                 subdir="b",
-                btrfs_snapshots=True,
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
             ),
             enabled=False,
             rsync_options=["-a", "--delete"],
@@ -130,7 +131,7 @@ class TestSyncConfig:
             filter_file="/etc/ssb/filters.rules",
         )
         assert sc.enabled is False
-        assert sc.destination.btrfs_snapshots is True
+        assert sc.destination.btrfs_snapshots.enabled is True
         assert sc.rsync_options == ["-a", "--delete"]
         assert sc.extra_rsync_options == ["--compress"]
         assert sc.filters == ["+ *.jpg", "- *.tmp"]

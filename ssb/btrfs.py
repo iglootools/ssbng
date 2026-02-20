@@ -1,11 +1,11 @@
-"""Btrfs snapshot creation and lookup."""
+"""Btrfs snapshot creation, lookup, and pruning."""
 
 from __future__ import annotations
 
 import subprocess
 from datetime import datetime, timezone
 
-from .config import Config, LocalVolume, RemoteVolume, SyncConfig
+from .config import Config, LocalVolume, RemoteVolume, SyncConfig, Volume
 from .ssh import run_remote_command
 
 
@@ -63,8 +63,8 @@ def create_snapshot(
         return snapshot_path
 
 
-def get_latest_snapshot(sync: SyncConfig, config: Config) -> str | None:
-    """Get the path to the most recent snapshot, or None."""
+def list_snapshots(sync: SyncConfig, config: Config) -> list[str]:
+    """List all snapshot paths sorted oldest-first."""
     dest_path = _resolve_dest_path(sync, config)
     snapshots_dir = f"{dest_path}/snapshots"
 
@@ -81,8 +81,63 @@ def get_latest_snapshot(sync: SyncConfig, config: Config) -> str | None:
             )
 
     if result.returncode != 0 or not result.stdout.strip():
-        return None
+        return []
     else:
         entries = sorted(result.stdout.strip().split("\n"))
-        latest = entries[-1]
-        return f"{snapshots_dir}/{latest}"
+        return [f"{snapshots_dir}/{e}" for e in entries]
+
+
+def get_latest_snapshot(sync: SyncConfig, config: Config) -> str | None:
+    """Get the path to the most recent snapshot, or None."""
+    snapshots = list_snapshots(sync, config)
+    if snapshots:
+        return snapshots[-1]
+    else:
+        return None
+
+
+def delete_snapshot(
+    path: str,
+    volume: Volume,
+    config: Config,
+) -> None:
+    """Delete a single btrfs snapshot subvolume."""
+    cmd = ["btrfs", "subvolume", "delete", path]
+    match volume:
+        case RemoteVolume():
+            server = config.rsync_servers[volume.rsync_server]
+            result = run_remote_command(server, cmd)
+        case LocalVolume():
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+            )
+
+    if result.returncode != 0:
+        raise RuntimeError(f"btrfs delete failed: {result.stderr}")
+
+
+def prune_snapshots(
+    sync: SyncConfig,
+    config: Config,
+    max_snapshots: int,
+    *,
+    dry_run: bool = False,
+) -> list[str]:
+    """Delete oldest snapshots exceeding max_snapshots.
+
+    Returns list of deleted (or would-be-deleted) paths.
+    """
+    snapshots = list_snapshots(sync, config)
+    excess = len(snapshots) - max_snapshots
+    if excess <= 0:
+        return []
+
+    to_delete = snapshots[:excess]
+    if not dry_run:
+        dst_vol = config.volumes[sync.destination.volume]
+        for path in to_delete:
+            delete_snapshot(path, dst_vol, config)
+
+    return to_delete

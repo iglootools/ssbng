@@ -64,7 +64,7 @@ class TestLoadConfig:
         assert sync.destination.volume == "nas"
         assert sync.destination.subdir == "photos-backup"
         assert sync.enabled is True
-        assert sync.destination.btrfs_snapshots is False
+        assert sync.destination.btrfs_snapshots.enabled is False
         assert sync.rsync_options is None
         assert sync.extra_rsync_options == []
         assert sync.filters == ["+ *.jpg", "- *.tmp"]
@@ -74,7 +74,7 @@ class TestLoadConfig:
         cfg = load_config(str(sample_minimal_config_file))
         sync = cfg.syncs["s1"]
         assert sync.enabled is True
-        assert sync.destination.btrfs_snapshots is False
+        assert sync.destination.btrfs_snapshots.enabled is False
         assert sync.source.subdir is None
         assert sync.rsync_options is None
         assert sync.extra_rsync_options == []

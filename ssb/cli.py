@@ -10,13 +10,15 @@ import typer
 from .config import Config
 from .status import SyncReason, SyncStatus, VolumeStatus, check_all_syncs
 from .configloader import ConfigError, load_config
+from .btrfs import list_snapshots, prune_snapshots
 from .output import (
     OutputFormat,
+    print_human_prune_results,
     print_human_results,
     print_human_status,
     print_human_troubleshoot,
 )
-from .runner import run_all_syncs
+from .runner import PruneResult, run_all_syncs
 
 _REMOVABLE_DEVICE_REASONS = {
     SyncReason.SOURCE_MARKER_NOT_FOUND,
@@ -167,6 +169,81 @@ def troubleshoot(
     cfg = _load_config_or_exit(config)
     vol_statuses, sync_statuses = check_all_syncs(cfg)
     print_human_troubleshoot(vol_statuses, sync_statuses, cfg)
+
+
+@app.command()
+def prune(
+    config: Annotated[
+        Optional[str],
+        typer.Option("--config", help="Path to config file"),
+    ] = None,
+    sync: Annotated[
+        Optional[list[str]],
+        typer.Option("--sync", help="Sync name(s) to prune"),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", "-n", help="Perform a dry run"),
+    ] = False,
+    output: Annotated[
+        str,
+        typer.Option("--output", help="Output format: human or json"),
+    ] = "human",
+) -> None:
+    """Prune old snapshots beyond max-snapshots limit."""
+    cfg = _load_config_or_exit(config)
+    output_format = OutputFormat(output)
+    _, sync_statuses = check_all_syncs(cfg)
+
+    prunable = [
+        (slug, status)
+        for slug, status in sync_statuses.items()
+        if (not sync or slug in sync)
+        and status.active
+        and status.config.destination.btrfs_snapshots.enabled
+        and status.config.destination.btrfs_snapshots.max_snapshots
+        is not None
+    ]
+
+    results: list[PruneResult] = []
+    for slug, status in prunable:
+        btrfs_cfg = status.config.destination.btrfs_snapshots
+        assert btrfs_cfg.max_snapshots is not None
+        try:
+            deleted = prune_snapshots(
+                status.config,
+                cfg,
+                btrfs_cfg.max_snapshots,
+                dry_run=dry_run,
+            )
+            remaining = list_snapshots(status.config, cfg)
+            results.append(
+                PruneResult(
+                    sync_slug=slug,
+                    deleted=deleted,
+                    kept=len(remaining) + (len(deleted) if dry_run else 0),
+                    dry_run=dry_run,
+                )
+            )
+        except RuntimeError as e:
+            results.append(
+                PruneResult(
+                    sync_slug=slug,
+                    deleted=[],
+                    kept=0,
+                    dry_run=dry_run,
+                    error=str(e),
+                )
+            )
+
+    match output_format:
+        case OutputFormat.JSON:
+            typer.echo(json.dumps([r.model_dump() for r in results], indent=2))
+        case OutputFormat.HUMAN:
+            print_human_prune_results(results, dry_run)
+
+    if any(r.error for r in results):
+        raise typer.Exit(1)
 
 
 def _load_config_or_exit(config_path: str | None) -> Config:

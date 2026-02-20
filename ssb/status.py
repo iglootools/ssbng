@@ -254,7 +254,7 @@ def check_sync(
                 reasons.append(SyncReason.DESTINATION_MARKER_NOT_FOUND)
             if not _check_command_available(dst_vol, "rsync", config):
                 reasons.append(SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION)
-            if sync.destination.btrfs_snapshots:
+            if sync.destination.btrfs_snapshots.enabled:
                 if not _check_command_available(dst_vol, "btrfs", config):
                     reasons.append(SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION)
                 elif not _check_btrfs_filesystem(dst_vol, config):

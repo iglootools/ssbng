@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from ssb.config import (
+    BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
     LocalVolume,
@@ -44,7 +45,24 @@ def _make_btrfs_config() -> Config:
         source=SyncEndpoint(volume="src"),
         destination=DestinationSyncEndpoint(
             volume="dst",
-            btrfs_snapshots=True,
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+        ),
+    )
+    return Config(
+        volumes={"src": src, "dst": dst},
+        syncs={"s1": sync},
+    )
+
+
+def _make_btrfs_config_with_max() -> Config:
+    src = LocalVolume(slug="src", path="/src")
+    dst = LocalVolume(slug="dst", path="/dst")
+    sync = SyncConfig(
+        slug="s1",
+        source=SyncEndpoint(volume="src"),
+        destination=DestinationSyncEndpoint(
+            volume="dst",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True, max_snapshots=5),
         ),
     )
     return Config(
@@ -75,7 +93,7 @@ def _make_remote_to_remote_config() -> Config:
         source=SyncEndpoint(volume="src"),
         destination=DestinationSyncEndpoint(
             volume="dst",
-            btrfs_snapshots=True,
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
         ),
     )
     return Config(
@@ -292,3 +310,52 @@ class TestRunAllSyncs:
         results = run_all_syncs(config, sync_statuses)
         assert results[0].success is False
         assert "Snapshot failed" in (results[0].error or "")
+
+    @patch("ssb.runner.prune_snapshots")
+    @patch("ssb.runner.create_snapshot")
+    @patch("ssb.runner.get_latest_snapshot")
+    @patch("ssb.runner.run_rsync")
+    def test_auto_prune_after_snapshot(
+        self,
+        mock_rsync: MagicMock,
+        mock_latest: MagicMock,
+        mock_snap: MagicMock,
+        mock_prune: MagicMock,
+    ) -> None:
+        config = _make_btrfs_config_with_max()
+        _, sync_statuses = _active_statuses(config)
+        mock_rsync.return_value = MagicMock(
+            returncode=0, stdout="done\n", stderr=""
+        )
+        mock_latest.return_value = None
+        mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
+        mock_prune.return_value = ["/dst/snapshots/old"]
+
+        results = run_all_syncs(config, sync_statuses)
+        assert results[0].success is True
+        assert results[0].pruned_paths == ["/dst/snapshots/old"]
+        mock_prune.assert_called_once()
+
+    @patch("ssb.runner.prune_snapshots")
+    @patch("ssb.runner.create_snapshot")
+    @patch("ssb.runner.get_latest_snapshot")
+    @patch("ssb.runner.run_rsync")
+    def test_no_auto_prune_without_max_snapshots(
+        self,
+        mock_rsync: MagicMock,
+        mock_latest: MagicMock,
+        mock_snap: MagicMock,
+        mock_prune: MagicMock,
+    ) -> None:
+        config = _make_btrfs_config()
+        _, sync_statuses = _active_statuses(config)
+        mock_rsync.return_value = MagicMock(
+            returncode=0, stdout="done\n", stderr=""
+        )
+        mock_latest.return_value = None
+        mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
+
+        results = run_all_syncs(config, sync_statuses)
+        assert results[0].success is True
+        assert results[0].pruned_paths is None
+        mock_prune.assert_not_called()

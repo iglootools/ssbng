@@ -26,6 +26,16 @@ This is only supported for local sources and destinations that are on btrfs volu
 The latest backup will be stored under ${destination}/latest and snapshots (if enabled and supported) will be stored under ${destination}/snapshots/${iso8601_timestamp}.
 When enabled, a new btrfs snapshot is created each time the backup completes.
 
+The `max-snapshots` field controls the maximum number of snapshots to keep. When set, old snapshots are automatically pruned after each `run`. The `prune` command can also be used to manually prune snapshots.
+
+```yaml
+destination:
+  volume: usb-drive
+  btrfs-snapshots:
+    enabled: true
+    max-snapshots: 10   # optional, omit for unlimited
+```
+
 ### Rsync Local Volume
 
 A reusable configuration for a local source or destination that can be shared between multiple syncs.
@@ -162,7 +172,9 @@ syncs:
       subdir: documents
     destination:
       volume: usb-drive
-      btrfs-snapshots: true     # optional, defaults to false
+      btrfs-snapshots:
+        enabled: true
+        max-snapshots: 10       # optional, omit for unlimited
 
   # Sync with custom rsync options
   music-to-nas:

@@ -43,7 +43,6 @@ syncs:
     destination:
       volume: nas
       subdir: photos-backup
-      btrfs-snapshots: false
     filters:
       - include: "*.jpg"
       - "- *.tmp"
@@ -148,7 +147,6 @@ def sample_config(
                 destination=DestinationSyncEndpoint(
                     volume="nas",
                     subdir="photos-backup",
-                    btrfs_snapshots=False,
                 ),
                 enabled=True,
                 filters=["+ *.jpg", "- *.tmp"],

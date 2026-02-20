@@ -5,6 +5,8 @@ RUN apt-get update && \
     openssh-server \
     rsync \
     btrfs-progs \
+    libcap2-bin \
+    && setcap cap_sys_admin+ep "$(command -v btrfs)" \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd -m -s /bin/bash testuser && \

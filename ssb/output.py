@@ -15,7 +15,7 @@ from .config import (
     RsyncServer,
     SyncConfig,
 )
-from .runner import SyncResult
+from .runner import PruneResult, SyncResult
 from .status import SyncReason, SyncStatus, VolumeReason, VolumeStatus
 
 
@@ -43,8 +43,12 @@ def _sync_options(sync: SyncConfig) -> str:
     opts: list[str] = []
     if sync.filters or sync.filter_file:
         opts.append("rsync-filter")
-    if sync.destination.btrfs_snapshots:
-        opts.append("btrfs-snapshots")
+    if sync.destination.btrfs_snapshots.enabled:
+        btrfs_label = "btrfs-snapshots"
+        max_snap = sync.destination.btrfs_snapshots.max_snapshots
+        if max_snap is not None:
+            btrfs_label += f"(max:{max_snap})"
+        opts.append(btrfs_label)
     return ", ".join(opts)
 
 
@@ -151,6 +155,37 @@ def print_human_results(results: list[SyncResult], dry_run: bool) -> None:
             r.sync_slug,
             status,
             "\n".join(details_parts),
+        )
+
+    console.print(table)
+
+
+def print_human_prune_results(
+    results: list[PruneResult], dry_run: bool
+) -> None:
+    """Print human-readable prune results."""
+    console = Console()
+    mode = " (dry run)" if dry_run else ""
+
+    table = Table(
+        title=f"SSB prune{mode}:",
+    )
+    table.add_column("Name", style="bold")
+    table.add_column("Deleted")
+    table.add_column("Kept")
+    table.add_column("Status")
+
+    for r in results:
+        if r.error:
+            status = Text("FAILED", style="red")
+        else:
+            status = Text("OK", style="green")
+
+        table.add_row(
+            r.sync_slug,
+            str(len(r.deleted)),
+            str(r.kept),
+            status,
         )
 
     console.print(table)

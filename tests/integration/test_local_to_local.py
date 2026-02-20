@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ssb.config import (
+    BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
     LocalVolume,
@@ -19,18 +20,24 @@ def _make_local_config(
     dst_path: str,
     src_subdir: str | None = None,
     dst_subdir: str | None = None,
-    btrfs_snapshots: bool = False,
+    btrfs_snapshots: BtrfsSnapshotConfig | None = None,
 ) -> tuple[SyncConfig, Config]:
     src_vol = LocalVolume(slug="src", path=src_path)
     dst_vol = LocalVolume(slug="dst", path=dst_path)
-    sync = SyncConfig(
-        slug="test-sync",
-        source=SyncEndpoint(volume="src", subdir=src_subdir),
-        destination=DestinationSyncEndpoint(
+    destination = DestinationSyncEndpoint(
+        volume="dst",
+        subdir=dst_subdir,
+    )
+    if btrfs_snapshots is not None:
+        destination = DestinationSyncEndpoint(
             volume="dst",
             subdir=dst_subdir,
             btrfs_snapshots=btrfs_snapshots,
-        ),
+        )
+    sync = SyncConfig(
+        slug="test-sync",
+        source=SyncEndpoint(volume="src", subdir=src_subdir),
+        destination=destination,
     )
     config = Config(
         volumes={"src": src_vol, "dst": dst_vol},

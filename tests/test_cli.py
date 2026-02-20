@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 
 from ssb.cli import app
 from ssb.config import (
+    BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
     LocalVolume,
@@ -571,6 +572,185 @@ class TestRunCommand:
         )
         assert result.exit_code == 1
         mock_run.assert_not_called()
+
+
+def _prune_config() -> Config:
+    src = LocalVolume(slug="src", path="/src")
+    dst = LocalVolume(slug="dst", path="/dst")
+    sync = SyncConfig(
+        slug="s1",
+        source=SyncEndpoint(volume="src"),
+        destination=DestinationSyncEndpoint(
+            volume="dst",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True, max_snapshots=3),
+        ),
+    )
+    return Config(
+        volumes={"src": src, "dst": dst},
+        syncs={"s1": sync},
+    )
+
+
+def _prune_active_statuses(
+    config: Config,
+) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
+    vol_statuses = {
+        name: VolumeStatus(slug=name, config=vol, reasons=[])
+        for name, vol in config.volumes.items()
+    }
+    sync_statuses = {
+        name: SyncStatus(
+            slug=name,
+            config=sync,
+            source_status=vol_statuses[sync.source.volume],
+            destination_status=vol_statuses[sync.destination.volume],
+            reasons=[],
+        )
+        for name, sync in config.syncs.items()
+    }
+    return vol_statuses, sync_statuses
+
+
+class TestPruneCommand:
+    @patch("ssb.cli.list_snapshots")
+    @patch("ssb.cli.prune_snapshots")
+    @patch("ssb.cli.check_all_syncs")
+    @patch("ssb.cli.load_config")
+    def test_successful_prune(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+        mock_prune: MagicMock,
+        mock_list: MagicMock,
+    ) -> None:
+        config = _prune_config()
+        mock_load.return_value = config
+        _, sync_s = _prune_active_statuses(config)
+        mock_checks.return_value = (
+            {
+                name: VolumeStatus(
+                    slug=name,
+                    config=config.volumes[name],
+                    reasons=[],
+                )
+                for name in config.volumes
+            },
+            sync_s,
+        )
+        mock_prune.return_value = ["/dst/snapshots/old1"]
+        mock_list.return_value = [
+            "/dst/snapshots/s2",
+            "/dst/snapshots/s3",
+        ]
+
+        result = runner.invoke(app, ["prune", "--config", "/fake.yaml"])
+        assert result.exit_code == 0
+        assert "OK" in result.output
+        mock_prune.assert_called_once()
+
+    @patch("ssb.cli.list_snapshots")
+    @patch("ssb.cli.prune_snapshots")
+    @patch("ssb.cli.check_all_syncs")
+    @patch("ssb.cli.load_config")
+    def test_dry_run(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+        mock_prune: MagicMock,
+        mock_list: MagicMock,
+    ) -> None:
+        config = _prune_config()
+        mock_load.return_value = config
+        _, sync_s = _prune_active_statuses(config)
+        mock_checks.return_value = (
+            {
+                name: VolumeStatus(
+                    slug=name,
+                    config=config.volumes[name],
+                    reasons=[],
+                )
+                for name in config.volumes
+            },
+            sync_s,
+        )
+        mock_prune.return_value = ["/dst/snapshots/old1"]
+        mock_list.return_value = [
+            "/dst/snapshots/s1",
+            "/dst/snapshots/s2",
+            "/dst/snapshots/s3",
+        ]
+
+        result = runner.invoke(
+            app, ["prune", "--config", "/fake.yaml", "--dry-run"]
+        )
+        assert result.exit_code == 0
+        assert "dry run" in result.output
+        mock_prune.assert_called_once()
+        call_kwargs = mock_prune.call_args
+        assert call_kwargs.kwargs.get("dry_run") is True
+
+    @patch("ssb.cli.list_snapshots")
+    @patch("ssb.cli.prune_snapshots")
+    @patch("ssb.cli.check_all_syncs")
+    @patch("ssb.cli.load_config")
+    def test_json_output(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+        mock_prune: MagicMock,
+        mock_list: MagicMock,
+    ) -> None:
+        config = _prune_config()
+        mock_load.return_value = config
+        _, sync_s = _prune_active_statuses(config)
+        mock_checks.return_value = (
+            {
+                name: VolumeStatus(
+                    slug=name,
+                    config=config.volumes[name],
+                    reasons=[],
+                )
+                for name in config.volumes
+            },
+            sync_s,
+        )
+        mock_prune.return_value = ["/dst/snapshots/old1"]
+        mock_list.return_value = [
+            "/dst/snapshots/s2",
+            "/dst/snapshots/s3",
+        ]
+
+        result = runner.invoke(
+            app,
+            [
+                "prune",
+                "--config",
+                "/fake.yaml",
+                "--output",
+                "json",
+            ],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert len(data) == 1
+        assert data[0]["sync_slug"] == "s1"
+        assert len(data[0]["deleted"]) == 1
+
+    @patch("ssb.cli.check_all_syncs")
+    @patch("ssb.cli.load_config")
+    def test_no_syncs_to_prune(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+    ) -> None:
+        config = _sample_config()  # no btrfs snapshots
+        mock_load.return_value = config
+        vol_s = _sample_all_active_vol_statuses(config)
+        sync_s = _sample_all_active_sync_statuses(config, vol_s)
+        mock_checks.return_value = (vol_s, sync_s)
+
+        result = runner.invoke(app, ["prune", "--config", "/fake.yaml"])
+        assert result.exit_code == 0
 
 
 class TestConfigError:

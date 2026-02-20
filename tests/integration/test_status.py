@@ -15,6 +15,7 @@ from ssb.status import (
     check_volume,
 )
 from ssb.config import (
+    BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
     LocalVolume,
@@ -240,7 +241,7 @@ class TestSyncStatusBtrfsChecks:
             destination=DestinationSyncEndpoint(
                 volume="dst",
                 subdir="not-a-subvol",
-                btrfs_snapshots=True,
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
             ),
         )
         config = Config(

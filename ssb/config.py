@@ -73,10 +73,20 @@ class SyncEndpoint(_BaseModel):
     subdir: Optional[str] = None
 
 
+class BtrfsSnapshotConfig(_BaseModel):
+    """Configuration for btrfs snapshot management."""
+
+    model_config = ConfigDict(frozen=True)
+    enabled: bool = False
+    max_snapshots: Optional[int] = Field(default=None, ge=1)
+
+
 class DestinationSyncEndpoint(SyncEndpoint):
     """A destination sync endpoint with snapshot options."""
 
-    btrfs_snapshots: bool = False
+    btrfs_snapshots: BtrfsSnapshotConfig = Field(
+        default_factory=lambda: BtrfsSnapshotConfig()
+    )
 
 
 class SyncConfig(_BaseModel):
