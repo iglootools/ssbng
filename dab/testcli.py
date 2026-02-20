@@ -32,6 +32,8 @@ from .testdata import (
     troubleshoot_data,
 )
 
+_INDENT = "  "
+
 app = typer.Typer(
     name="dab-testcli",
     help="DAB developer test CLI",
@@ -142,13 +144,16 @@ def seed() -> None:
         )
     )
 
-    typer.echo(f"Seed directory: {tmp}")
-    typer.echo(f"Config file:    {config_path}")
+    seed_label = "Seed directory:"
+    cfg_label = "Config file:"
+    w = max(len(seed_label), len(cfg_label))
+    typer.echo(f"{seed_label:<{w}} {tmp}")
+    typer.echo(f"{cfg_label:<{w}} {config_path}")
     typer.echo()
     typer.echo("Try:")
-    typer.echo(f"  poetry run dab status --config {config_path}")
-    typer.echo(f"  poetry run dab run --config {config_path} --dry-run")
-    typer.echo(f"  poetry run dab run --config {config_path}")
+    typer.echo(f"{_INDENT}poetry run dab status --config {config_path}")
+    typer.echo(f"{_INDENT}poetry run dab run --config {config_path} --dry-run")
+    typer.echo(f"{_INDENT}poetry run dab run --config {config_path}")
 
 
 def main() -> None:
