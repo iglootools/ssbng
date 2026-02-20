@@ -8,7 +8,13 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from .config import Config, LocalVolume, RemoteVolume, SyncConfig
+from .config import (
+    Config,
+    LocalVolume,
+    RemoteVolume,
+    RsyncServer,
+    SyncConfig,
+)
 from .runner import SyncResult
 from .status import SyncReason, SyncStatus, VolumeReason, VolumeStatus
 
@@ -148,3 +154,206 @@ def print_human_results(results: list[SyncResult], dry_run: bool) -> None:
         )
 
     console.print(table)
+
+
+def _ssh_prefix(server: RsyncServer) -> str:
+    """Build human-friendly SSH command prefix."""
+    parts = ["ssh"]
+    if server.port != 22:
+        parts.extend(["-p", str(server.port)])
+    if server.ssh_key:
+        parts.extend(["-i", server.ssh_key])
+    host = f"{server.user}@{server.host}" if server.user else server.host
+    parts.append(host)
+    return " ".join(parts)
+
+
+def _wrap_cmd(
+    cmd: str,
+    vol: LocalVolume | RemoteVolume,
+    config: Config,
+) -> str:
+    """Wrap a shell command for remote execution."""
+    match vol:
+        case LocalVolume():
+            return cmd
+        case RemoteVolume():
+            server = config.rsync_servers[vol.rsync_server]
+            return f"{_ssh_prefix(server)} '{cmd}'"
+
+
+def _endpoint_path(
+    vol: LocalVolume | RemoteVolume,
+    subdir: str | None,
+) -> str:
+    """Resolve the full endpoint path."""
+    if subdir:
+        return f"{vol.path}/{subdir}"
+    else:
+        return vol.path
+
+
+def _host_label(
+    vol: LocalVolume | RemoteVolume,
+    config: Config,
+) -> str:
+    """Human-readable host label for a volume."""
+    match vol:
+        case LocalVolume():
+            return "this machine"
+        case RemoteVolume():
+            server = config.rsync_servers[vol.rsync_server]
+            return server.host
+
+
+_RSYNC_INSTALL = (
+    "      Ubuntu/Debian: sudo apt install rsync\n"
+    "      Fedora/RHEL:   sudo dnf install rsync\n"
+    "      macOS:         brew install rsync"
+)
+
+_BTRFS_INSTALL = (
+    "      Ubuntu/Debian: sudo apt install btrfs-progs\n"
+    "      Fedora/RHEL:   sudo dnf install btrfs-progs"
+)
+
+
+def _print_marker_fix(
+    console: Console,
+    vol: LocalVolume | RemoteVolume,
+    path: str,
+    marker: str,
+    config: Config,
+) -> None:
+    """Print marker creation fix with mount reminder."""
+    console.print("    Ensure the volume is mounted, then:")
+    mkdir_cmd = f"mkdir -p {path}"
+    touch_cmd = f"touch {path}/{marker}"
+    console.print(f"    {_wrap_cmd(mkdir_cmd, vol, config)}")
+    console.print(f"    {_wrap_cmd(touch_cmd, vol, config)}")
+
+
+def _print_sync_reason_fix(
+    console: Console,
+    sync: SyncConfig,
+    reason: SyncReason,
+    config: Config,
+) -> None:
+    """Print fix instructions for a sync reason."""
+    match reason:
+        case SyncReason.DISABLED:
+            console.print("    Enable the sync in the" " configuration file.")
+        case SyncReason.SOURCE_UNAVAILABLE:
+            src = config.volumes[sync.source.volume]
+            match src:
+                case RemoteVolume():
+                    server = config.rsync_servers[src.rsync_server]
+                    console.print(
+                        f"    Server {server.host}" " is unreachable."
+                    )
+                case LocalVolume():
+                    console.print(
+                        "    Source volume"
+                        f" '{sync.source.volume}'"
+                        " is not available."
+                    )
+        case SyncReason.DESTINATION_UNAVAILABLE:
+            dst = config.volumes[sync.destination.volume]
+            match dst:
+                case RemoteVolume():
+                    server = config.rsync_servers[dst.rsync_server]
+                    console.print(
+                        f"    Server {server.host}" " is unreachable."
+                    )
+                case LocalVolume():
+                    console.print(
+                        "    Destination volume"
+                        f" '{sync.destination.volume}'"
+                        " is not available."
+                    )
+        case SyncReason.SOURCE_MARKER_NOT_FOUND:
+            src = config.volumes[sync.source.volume]
+            path = _endpoint_path(src, sync.source.subdir)
+            _print_marker_fix(console, src, path, ".ssb-src", config)
+        case SyncReason.DESTINATION_MARKER_NOT_FOUND:
+            dst = config.volumes[sync.destination.volume]
+            path = _endpoint_path(dst, sync.destination.subdir)
+            _print_marker_fix(console, dst, path, ".ssb-dst", config)
+        case SyncReason.RSYNC_NOT_FOUND_ON_SOURCE:
+            src = config.volumes[sync.source.volume]
+            host = _host_label(src, config)
+            console.print(f"    Install rsync on {host}:")
+            console.print(_RSYNC_INSTALL)
+        case SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION:
+            dst = config.volumes[sync.destination.volume]
+            host = _host_label(dst, config)
+            console.print(f"    Install rsync on {host}:")
+            console.print(_RSYNC_INSTALL)
+        case SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION:
+            dst = config.volumes[sync.destination.volume]
+            host = _host_label(dst, config)
+            console.print(f"    Install btrfs-progs on {host}:")
+            console.print(_BTRFS_INSTALL)
+        case SyncReason.DESTINATION_NOT_BTRFS:
+            console.print(
+                "    The destination is not on a" " btrfs filesystem."
+            )
+        case SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME:
+            dst = config.volumes[sync.destination.volume]
+            ep = _endpoint_path(dst, sync.destination.subdir)
+            cmds = [
+                f"sudo btrfs subvolume create {ep}/latest",
+                f"sudo mkdir {ep}/snapshots",
+                ("sudo chown <user>:<group>" f" {ep}/latest {ep}/snapshots"),
+            ]
+            for cmd in cmds:
+                console.print(f"    {_wrap_cmd(cmd, dst, config)}")
+
+
+def print_human_troubleshoot(
+    vol_statuses: dict[str, VolumeStatus],
+    sync_statuses: dict[str, SyncStatus],
+    config: Config,
+) -> None:
+    """Print troubleshooting instructions."""
+    console = Console()
+    has_issues = False
+
+    for vs in vol_statuses.values():
+        if not vs.reasons:
+            continue
+        has_issues = True
+        console.print(f"\n[bold]Volume {vs.slug!r}:[/bold]")
+        vol = vs.config
+        for reason in vs.reasons:
+            console.print(f"  {reason.value}")
+            match reason:
+                case VolumeReason.MARKER_NOT_FOUND:
+                    _print_marker_fix(
+                        console,
+                        vol,
+                        vol.path,
+                        ".ssb-vol",
+                        config,
+                    )
+                case VolumeReason.UNREACHABLE:
+                    match vol:
+                        case RemoteVolume():
+                            server = config.rsync_servers[vol.rsync_server]
+                            console.print(
+                                "    Server"
+                                f" {server.host}"
+                                " is unreachable."
+                            )
+
+    for ss in sync_statuses.values():
+        if not ss.reasons:
+            continue
+        has_issues = True
+        console.print(f"\n[bold]Sync {ss.slug!r}:[/bold]")
+        for sync_reason in ss.reasons:
+            console.print(f"  {sync_reason.value}")
+            _print_sync_reason_fix(console, ss.config, sync_reason, config)
+
+    if not has_issues:
+        console.print("No issues found." " All volumes and syncs are active.")

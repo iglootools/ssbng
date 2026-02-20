@@ -14,6 +14,7 @@ from .output import (
     OutputFormat,
     print_human_results,
     print_human_status,
+    print_human_troubleshoot,
 )
 from .runner import run_all_syncs
 
@@ -153,6 +154,19 @@ def run(
 
         if any(not r.success for r in results):
             raise typer.Exit(1)
+
+
+@app.command()
+def troubleshoot(
+    config: Annotated[
+        Optional[str],
+        typer.Option("--config", help="Path to config file"),
+    ] = None,
+) -> None:
+    """Diagnose issues and show how to fix them."""
+    cfg = _load_config_or_exit(config)
+    vol_statuses, sync_statuses = check_all_syncs(cfg)
+    print_human_troubleshoot(vol_statuses, sync_statuses, cfg)
 
 
 def _load_config_or_exit(config_path: str | None) -> Config:
