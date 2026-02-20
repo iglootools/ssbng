@@ -37,6 +37,9 @@ class SyncReason(str, enum.Enum):
     DESTINATION_NOT_BTRFS_SUBVOLUME = (
         "destination endpoint is not a btrfs subvolume"
     )
+    DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM = (
+        "destination not mounted with user_subvol_rm_allowed"
+    )
     DESTINATION_LATEST_NOT_FOUND = "destination latest/ directory not found"
     DESTINATION_SNAPSHOTS_DIR_NOT_FOUND = (
         "destination snapshots/ directory not found"
@@ -201,6 +204,29 @@ def _check_btrfs_subvolume(
     return result.returncode == 0 and result.stdout.strip() == "256"
 
 
+def _check_btrfs_mount_option(
+    volume: Volume,
+    option: str,
+    config: Config,
+) -> bool:
+    """Check if the volume is mounted with a specific mount option."""
+    cmd = ["findmnt", "-n", "-o", "OPTIONS", volume.path]
+    match volume:
+        case LocalVolume():
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+            )
+        case RemoteVolume():
+            server = config.rsync_servers[volume.rsync_server]
+            result = run_remote_command(server, cmd)
+    if result.returncode != 0:
+        return False
+    options = result.stdout.strip().split(",")
+    return option in options
+
+
 def check_sync(
     sync: SyncConfig,
     config: Config,
@@ -266,6 +292,14 @@ def check_sync(
                 ):
                     reasons.append(SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME)
                 else:
+                    if not _check_btrfs_mount_option(
+                        dst_vol,
+                        "user_subvol_rm_allowed",
+                        config,
+                    ):
+                        reasons.append(
+                            SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM
+                        )
                     ep = _resolve_endpoint(dst_vol, sync.destination.subdir)
                     if not _check_directory_exists(
                         dst_vol, f"{ep}/latest", config

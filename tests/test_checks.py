@@ -20,6 +20,7 @@ from ssb.status import (
     VolumeReason,
     VolumeStatus,
     _check_btrfs_filesystem,
+    _check_btrfs_mount_option,
     _check_btrfs_subvolume,
     _check_command_available,
     check_all_syncs,
@@ -237,6 +238,74 @@ class TestCheckBtrfsSubvolumeRemote:
         mock_run.return_value = MagicMock(returncode=0, stdout="1234\n")
         vol, config = _remote_config()
         assert _check_btrfs_subvolume(vol, None, config) is False
+
+
+class TestCheckBtrfsMountOptionLocal:
+    @patch("ssb.status.subprocess.run")
+    def test_option_present(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="rw,relatime,user_subvol_rm_allowed\n",
+        )
+        vol = LocalVolume(slug="data", path="/mnt/data")
+        config = Config(volumes={"data": vol})
+        assert (
+            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", config)
+            is True
+        )
+        mock_run.assert_called_once_with(
+            ["findmnt", "-n", "-o", "OPTIONS", "/mnt/data"],
+            capture_output=True,
+            text=True,
+        )
+
+    @patch("ssb.status.subprocess.run")
+    def test_option_missing(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout="rw,relatime\n")
+        vol = LocalVolume(slug="data", path="/mnt/data")
+        config = Config(volumes={"data": vol})
+        assert (
+            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", config)
+            is False
+        )
+
+    @patch("ssb.status.subprocess.run")
+    def test_findmnt_failure(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=1, stdout="")
+        vol = LocalVolume(slug="data", path="/mnt/data")
+        config = Config(volumes={"data": vol})
+        assert (
+            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", config)
+            is False
+        )
+
+
+class TestCheckBtrfsMountOptionRemote:
+    @patch("ssb.status.run_remote_command")
+    def test_option_present(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="rw,relatime,user_subvol_rm_allowed\n",
+        )
+        vol, config = _remote_config()
+        assert (
+            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", config)
+            is True
+        )
+        server = config.rsync_servers["nas-server"]
+        mock_run.assert_called_once_with(
+            server,
+            ["findmnt", "-n", "-o", "OPTIONS", "/backup"],
+        )
+
+    @patch("ssb.status.run_remote_command")
+    def test_option_missing(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout="rw,relatime\n")
+        vol, config = _remote_config()
+        assert (
+            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", config)
+            is False
+        )
 
 
 class TestCheckSync:
@@ -544,6 +613,61 @@ class TestCheckSync:
         "ssb.status.shutil.which",
         return_value="/usr/bin/fake",
     )
+    def test_destination_not_mounted_user_subvol_rm(
+        self,
+        mock_which: MagicMock,
+        mock_subprocess: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_active_markers(src, dst)
+        (dst / "backup" / "latest").mkdir()
+        (dst / "backup" / "snapshots").mkdir()
+
+        src_vol = LocalVolume(slug="src", path=str(src))
+        dst_vol = LocalVolume(slug="dst", path=str(dst))
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src", subdir="data"),
+            destination=DestinationSyncEndpoint(
+                volume="dst",
+                subdir="backup",
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+            ),
+        )
+        config = Config(
+            volumes={"src": src_vol, "dst": dst_vol},
+            syncs={"s1": sync},
+        )
+        vol_statuses = self._make_active_vol_statuses(config)
+
+        def subprocess_side_effect(
+            cmd: list[str], **kwargs: object
+        ) -> MagicMock:
+            if cmd[:4] == ["stat", "-f", "-c", "%T"]:
+                return MagicMock(returncode=0, stdout="btrfs\n")
+            if cmd[:3] == ["stat", "-c", "%i"]:
+                return MagicMock(returncode=0, stdout="256\n")
+            if cmd[0] == "findmnt":
+                return MagicMock(returncode=0, stdout="rw,relatime\n")
+            return MagicMock(returncode=0)
+
+        mock_subprocess.side_effect = subprocess_side_effect
+
+        status = check_sync(sync, config, vol_statuses)
+        assert status.active is False
+        assert (
+            SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.reasons
+        )
+
+    @patch("ssb.status.subprocess.run")
+    @patch(
+        "ssb.status.shutil.which",
+        return_value="/usr/bin/fake",
+    )
     def test_destination_latest_not_found(
         self,
         mock_which: MagicMock,
@@ -582,6 +706,11 @@ class TestCheckSync:
                 return MagicMock(returncode=0, stdout="btrfs\n")
             if cmd[:3] == ["stat", "-c", "%i"]:
                 return MagicMock(returncode=0, stdout="256\n")
+            if cmd[0] == "findmnt":
+                return MagicMock(
+                    returncode=0,
+                    stdout="rw,user_subvol_rm_allowed\n",
+                )
             return MagicMock(returncode=0)
 
         mock_subprocess.side_effect = subprocess_side_effect
@@ -637,6 +766,11 @@ class TestCheckSync:
                 return MagicMock(returncode=0, stdout="btrfs\n")
             if cmd[:3] == ["stat", "-c", "%i"]:
                 return MagicMock(returncode=0, stdout="256\n")
+            if cmd[0] == "findmnt":
+                return MagicMock(
+                    returncode=0,
+                    stdout="rw,user_subvol_rm_allowed\n",
+                )
             return MagicMock(returncode=0)
 
         mock_subprocess.side_effect = subprocess_side_effect
@@ -688,6 +822,11 @@ class TestCheckSync:
                 return MagicMock(returncode=0, stdout="btrfs\n")
             if cmd[:3] == ["stat", "-c", "%i"]:
                 return MagicMock(returncode=0, stdout="256\n")
+            if cmd[0] == "findmnt":
+                return MagicMock(
+                    returncode=0,
+                    stdout="rw,user_subvol_rm_allowed\n",
+                )
             return MagicMock(returncode=0)
 
         mock_subprocess.side_effect = subprocess_side_effect
@@ -1107,6 +1246,82 @@ class TestCheckSyncRemoteCommands:
         "ssb.status.shutil.which",
         return_value="/usr/bin/rsync",
     )
+    def test_destination_not_mounted_user_subvol_rm_on_remote(
+        self,
+        mock_which: MagicMock,
+        mock_run: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / ".ssb-vol").touch()
+        (src / "data").mkdir()
+        (src / "data" / ".ssb-src").touch()
+
+        dst_server = RsyncServer(slug="dst-server", host="dst.local")
+        src_vol = LocalVolume(slug="src", path=str(src))
+        dst_vol = RemoteVolume(
+            slug="dst",
+            rsync_server="dst-server",
+            path="/backup",
+        )
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src", subdir="data"),
+            destination=DestinationSyncEndpoint(
+                volume="dst",
+                subdir="backup",
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+            ),
+        )
+        config = Config(
+            rsync_servers={"dst-server": dst_server},
+            volumes={"src": src_vol, "dst": dst_vol},
+            syncs={"s1": sync},
+        )
+        vol_statuses = {
+            "src": VolumeStatus(
+                slug="src",
+                config=src_vol,
+                reasons=[],
+            ),
+            "dst": VolumeStatus(
+                slug="dst",
+                config=dst_vol,
+                reasons=[],
+            ),
+        }
+
+        def remote_side_effect(
+            server: RsyncServer, cmd: list[str]
+        ) -> MagicMock:
+            if cmd == ["test", "-f", "/backup/backup/.ssb-dst"]:
+                return MagicMock(returncode=0)
+            if cmd == ["which", "rsync"]:
+                return MagicMock(returncode=0)
+            if cmd == ["which", "btrfs"]:
+                return MagicMock(returncode=0)
+            if cmd == ["stat", "-f", "-c", "%T", "/backup"]:
+                return MagicMock(returncode=0, stdout="btrfs\n")
+            if cmd == ["stat", "-c", "%i", "/backup/backup"]:
+                return MagicMock(returncode=0, stdout="256\n")
+            if cmd == ["findmnt", "-n", "-o", "OPTIONS", "/backup"]:
+                return MagicMock(returncode=0, stdout="rw,relatime\n")
+            return MagicMock(returncode=0)
+
+        mock_run.side_effect = remote_side_effect
+
+        status = check_sync(sync, config, vol_statuses)
+        assert status.active is False
+        assert (
+            SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.reasons
+        )
+
+    @patch("ssb.status.run_remote_command")
+    @patch(
+        "ssb.status.shutil.which",
+        return_value="/usr/bin/rsync",
+    )
     def test_destination_latest_not_found_on_remote(
         self,
         mock_which: MagicMock,
@@ -1166,6 +1381,11 @@ class TestCheckSyncRemoteCommands:
                 return MagicMock(returncode=0, stdout="btrfs\n")
             if cmd == ["stat", "-c", "%i", "/backup/backup"]:
                 return MagicMock(returncode=0, stdout="256\n")
+            if cmd == ["findmnt", "-n", "-o", "OPTIONS", "/backup"]:
+                return MagicMock(
+                    returncode=0,
+                    stdout="rw,user_subvol_rm_allowed\n",
+                )
             if cmd == ["test", "-d", "/backup/backup/latest"]:
                 return MagicMock(returncode=1)
             if cmd == ["test", "-d", "/backup/backup/snapshots"]:
@@ -1246,6 +1466,11 @@ class TestCheckSyncRemoteCommands:
                 return MagicMock(returncode=0, stdout="btrfs\n")
             if cmd == ["stat", "-c", "%i", "/backup/backup"]:
                 return MagicMock(returncode=0, stdout="256\n")
+            if cmd == ["findmnt", "-n", "-o", "OPTIONS", "/backup"]:
+                return MagicMock(
+                    returncode=0,
+                    stdout="rw,user_subvol_rm_allowed\n",
+                )
             if cmd == ["test", "-d", "/backup/backup/latest"]:
                 return MagicMock(returncode=0)
             if cmd == ["test", "-d", "/backup/backup/snapshots"]:
