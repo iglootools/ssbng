@@ -12,7 +12,7 @@ fi
 truncate -s 512M /var/btrfs.img
 mkfs.btrfs -f /var/btrfs.img
 mkdir -p /mnt/btrfs
-mount /var/btrfs.img /mnt/btrfs
+mount -o user_subvol_rm_allowed /var/btrfs.img /mnt/btrfs
 
 # Create directory structures
 mkdir -p /data/src /data/latest

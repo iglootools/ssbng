@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -341,28 +341,46 @@ class TestDeleteSnapshotLocal:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, _ = _local_config()
         dst_vol = config.volumes["dst"]
+        path = "/mnt/dst/backup/snapshots/20240101T000000Z"
 
-        delete_snapshot(
-            "/mnt/dst/backup/snapshots/20240101T000000Z",
-            dst_vol,
-            config,
-        )
-        mock_run.assert_called_once_with(
+        delete_snapshot(path, dst_vol, config)
+        assert mock_run.call_count == 2
+        mock_run.assert_has_calls(
             [
-                "btrfs",
-                "subvolume",
-                "delete",
-                "/mnt/dst/backup/snapshots/20240101T000000Z",
-            ],
-            capture_output=True,
-            text=True,
+                call(
+                    ["btrfs", "property", "set", path, "ro", "false"],
+                    capture_output=True,
+                    text=True,
+                ),
+                call(
+                    ["btrfs", "subvolume", "delete", path],
+                    capture_output=True,
+                    text=True,
+                ),
+            ]
         )
 
     @patch("ssb.btrfs.subprocess.run")
-    def test_failure(self, mock_run: MagicMock) -> None:
+    def test_failure_on_property_set(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=1, stderr="permission denied"
         )
+        config, _ = _local_config()
+        dst_vol = config.volumes["dst"]
+
+        with pytest.raises(RuntimeError, match="btrfs property set ro=false"):
+            delete_snapshot(
+                "/mnt/dst/backup/snapshots/20240101T000000Z",
+                dst_vol,
+                config,
+            )
+
+    @patch("ssb.btrfs.subprocess.run")
+    def test_failure_on_delete(self, mock_run: MagicMock) -> None:
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stderr=""),
+            MagicMock(returncode=1, stderr="permission denied"),
+        ]
         config, _ = _local_config()
         dst_vol = config.volumes["dst"]
 
@@ -380,20 +398,22 @@ class TestDeleteSnapshotRemote:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, _ = _remote_config()
         dst_vol = config.volumes["dst"]
+        path = "/backup/data/snapshots/20240101T000000Z"
+        server = config.rsync_servers["nas-server"]
 
-        delete_snapshot(
-            "/backup/data/snapshots/20240101T000000Z",
-            dst_vol,
-            config,
-        )
-        mock_run.assert_called_once_with(
-            config.rsync_servers["nas-server"],
+        delete_snapshot(path, dst_vol, config)
+        assert mock_run.call_count == 2
+        mock_run.assert_has_calls(
             [
-                "btrfs",
-                "subvolume",
-                "delete",
-                "/backup/data/snapshots/20240101T000000Z",
-            ],
+                call(
+                    server,
+                    ["btrfs", "property", "set", path, "ro", "false"],
+                ),
+                call(
+                    server,
+                    ["btrfs", "subvolume", "delete", path],
+                ),
+            ]
         )
 
 
@@ -412,8 +432,8 @@ class TestPruneSnapshotsLocal:
             "/mnt/dst/backup/snapshots/20240101T000000Z",
             "/mnt/dst/backup/snapshots/20240102T000000Z",
         ]
-        # ls call + 2 delete calls
-        assert mock_run.call_count == 3
+        # ls call + 2 × (property set + delete) calls
+        assert mock_run.call_count == 5
 
     @patch("ssb.btrfs.subprocess.run")
     def test_nothing_to_prune(self, mock_run: MagicMock) -> None:
@@ -461,5 +481,5 @@ class TestPruneSnapshotsRemote:
         assert deleted == [
             "/backup/data/snapshots/20240101T000000Z",
         ]
-        # ls call + 1 delete call
-        assert mock_run.call_count == 2
+        # ls call + 1 × (property set + delete) calls
+        assert mock_run.call_count == 3

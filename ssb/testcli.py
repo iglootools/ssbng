@@ -117,31 +117,19 @@ def seed() -> None:
     # Config file
     config = Config(
         volumes={
-            "src-data": LocalVolume(
-                slug="src-data", path=str(src)
-            ),
-            "dst-backup": LocalVolume(
-                slug="dst-backup", path=str(dst)
-            ),
+            "src-data": LocalVolume(slug="src-data", path=str(src)),
+            "dst-backup": LocalVolume(slug="dst-backup", path=str(dst)),
         },
         syncs={
             "photos-backup": SyncConfig(
                 slug="photos-backup",
-                source=SyncEndpoint(
-                    volume="src-data", subdir="photos"
-                ),
-                destination=DestinationSyncEndpoint(
-                    volume="dst-backup"
-                ),
+                source=SyncEndpoint(volume="src-data", subdir="photos"),
+                destination=DestinationSyncEndpoint(volume="dst-backup"),
             ),
             "full-backup": SyncConfig(
                 slug="full-backup",
-                source=SyncEndpoint(
-                    volume="src-data"
-                ),
-                destination=DestinationSyncEndpoint(
-                    volume="dst-backup"
-                ),
+                source=SyncEndpoint(volume="src-data"),
+                destination=DestinationSyncEndpoint(volume="dst-backup"),
             ),
         },
     )

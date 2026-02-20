@@ -229,9 +229,7 @@ class TestLoadConfig:
         sync = cfg.syncs["s"]
         assert sync.filters == ["+ *.jpg", "- *.tmp", "H .git"]
 
-    def test_rsync_options_override(
-        self, tmp_path: Path
-    ) -> None:
+    def test_rsync_options_override(self, tmp_path: Path) -> None:
         config = Config(
             volumes={
                 "v": LocalVolume(slug="v", path="/x"),
@@ -240,9 +238,7 @@ class TestLoadConfig:
                 "s": SyncConfig(
                     slug="s",
                     source=SyncEndpoint(volume="v"),
-                    destination=DestinationSyncEndpoint(
-                        volume="v"
-                    ),
+                    destination=DestinationSyncEndpoint(volume="v"),
                     rsync_options=["-a", "--delete"],
                 ),
             },
@@ -254,9 +250,7 @@ class TestLoadConfig:
         assert sync.rsync_options == ["-a", "--delete"]
         assert sync.extra_rsync_options == []
 
-    def test_extra_rsync_options(
-        self, tmp_path: Path
-    ) -> None:
+    def test_extra_rsync_options(self, tmp_path: Path) -> None:
         config = Config(
             volumes={
                 "v": LocalVolume(slug="v", path="/x"),
@@ -265,9 +259,7 @@ class TestLoadConfig:
                 "s": SyncConfig(
                     slug="s",
                     source=SyncEndpoint(volume="v"),
-                    destination=DestinationSyncEndpoint(
-                        volume="v"
-                    ),
+                    destination=DestinationSyncEndpoint(volume="v"),
                     extra_rsync_options=[
                         "--compress",
                         "--progress",

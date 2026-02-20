@@ -40,9 +40,7 @@ def _sample_config() -> Config:
             ),
         },
         volumes={
-            "local-data": LocalVolume(
-                slug="local-data", path="/mnt/data"
-            ),
+            "local-data": LocalVolume(slug="local-data", path="/mnt/data"),
             "nas": RemoteVolume(
                 slug="nas",
                 rsync_server="nas-server",
@@ -52,18 +50,14 @@ def _sample_config() -> Config:
         syncs={
             "photos-to-nas": SyncConfig(
                 slug="photos-to-nas",
-                source=SyncEndpoint(
-                    volume="local-data", subdir="photos"
-                ),
+                source=SyncEndpoint(volume="local-data", subdir="photos"),
                 destination=DestinationSyncEndpoint(
                     volume="nas",
                     subdir="photos-backup",
                 ),
                 enabled=True,
                 filters=["+ *.jpg", "- *.tmp"],
-                filter_file=(
-                    "~/.config/ssb/filters/photos.rules"
-                ),
+                filter_file=("~/.config/ssb/filters/photos.rules"),
             ),
         },
     )
@@ -80,9 +74,7 @@ def _sample_minimal_config() -> Config:
             "s1": SyncConfig(
                 slug="s1",
                 source=SyncEndpoint(volume="src"),
-                destination=DestinationSyncEndpoint(
-                    volume="dst"
-                ),
+                destination=DestinationSyncEndpoint(volume="dst"),
             ),
         },
     )

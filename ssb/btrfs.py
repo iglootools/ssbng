@@ -96,12 +96,43 @@ def get_latest_snapshot(sync: SyncConfig, config: Config) -> str | None:
         return None
 
 
+def _make_snapshot_writable(
+    path: str,
+    volume: Volume,
+    config: Config,
+) -> None:
+    """Unset the readonly property so the snapshot can be deleted."""
+    cmd = ["btrfs", "property", "set", path, "ro", "false"]
+    match volume:
+        case RemoteVolume():
+            server = config.rsync_servers[volume.rsync_server]
+            result = run_remote_command(server, cmd)
+        case LocalVolume():
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+            )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"btrfs property set ro=false failed: {result.stderr}"
+        )
+
+
 def delete_snapshot(
     path: str,
     volume: Volume,
     config: Config,
 ) -> None:
-    """Delete a single btrfs snapshot subvolume."""
+    """Delete a single btrfs snapshot subvolume.
+
+    First unsets the readonly property (needed when the filesystem
+    is mounted with user_subvol_rm_allowed instead of granting
+    CAP_SYS_ADMIN), then deletes the subvolume.
+    """
+    _make_snapshot_writable(path, volume, config)
+
     cmd = ["btrfs", "subvolume", "delete", path]
     match volume:
         case RemoteVolume():

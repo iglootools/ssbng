@@ -267,12 +267,22 @@ def _cleanup_remote(
             if snap:
                 ssh_exec(
                     docker_container,
+                    "btrfs property set"
+                    f" /mnt/btrfs/snapshots/{snap} ro false"
+                    " 2>/dev/null || true",
+                )
+                ssh_exec(
+                    docker_container,
                     "btrfs subvolume delete"
                     f" /mnt/btrfs/snapshots/{snap}"
                     " 2>/dev/null || true",
                 )
 
     # Delete latest subvolume if it exists
+    ssh_exec(
+        docker_container,
+        "btrfs property set" " /mnt/btrfs/latest ro false 2>/dev/null || true",
+    )
     ssh_exec(
         docker_container,
         "btrfs subvolume delete" " /mnt/btrfs/latest 2>/dev/null || true",
