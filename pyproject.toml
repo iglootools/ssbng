@@ -13,6 +13,7 @@ dependencies = [
 
 [project.scripts]
 ssb = "ssb.cli:main"
+ssb-testcli = "ssb.testcli:main"
 
 [tool.poetry]
 packages = [{include = "ssb"}]

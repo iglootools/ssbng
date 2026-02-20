@@ -201,8 +201,7 @@ def prune(
         if (not sync or slug in sync)
         and status.active
         and status.config.destination.btrfs_snapshots.enabled
-        and status.config.destination.btrfs_snapshots.max_snapshots
-        is not None
+        and status.config.destination.btrfs_snapshots.max_snapshots is not None
     ]
 
     results: list[PruneResult] = []

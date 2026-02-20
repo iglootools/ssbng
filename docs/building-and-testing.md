@@ -4,6 +4,8 @@ The unit tests cover the core logic of the tool, while the integration tests exe
 
 Integration tests exercise the real rsync/SSH/btrfs pipeline against a Docker container.
 
+Additionally, `poetry run ssb-testcli` provides helpers to test with manual testing/QA.
+
 Run automated tests and checks (no external dependencies):
 ```bash
 # Makefile syntax
@@ -30,3 +32,4 @@ The integration test suite uses [testcontainers](https://testcontainers-python.r
 - Builds and starts a Docker container with SSH, rsync, and a btrfs filesystem
 - Runs tests covering local-to-local, local-to-remote, remote-to-local syncs, btrfs snapshots, and status checks
 - Tears down the container on completion
+
