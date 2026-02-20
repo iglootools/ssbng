@@ -46,11 +46,18 @@ def _base_volumes() -> dict[str, LocalVolume | RemoteVolume]:
     }
 
 
+# ── status ──────────────────────────────────────────────────────
+
+
 def status_config() -> Config:
     """Config with local + remote volumes and varied syncs."""
+    volumes = _base_volumes()
+    volumes["external-drive"] = LocalVolume(
+        slug="external-drive", path="/mnt/external"
+    )
     return Config(
         rsync_servers={"nas": _nas_server()},
-        volumes=_base_volumes(),
+        volumes=volumes,
         syncs={
             "photos-to-usb": SyncConfig(
                 slug="photos-to-usb",
@@ -84,6 +91,14 @@ def status_config() -> Config:
                     "--progress",
                 ],
             ),
+            "disabled-backup": SyncConfig(
+                slug="disabled-backup",
+                source=SyncEndpoint(volume="laptop"),
+                destination=DestinationSyncEndpoint(
+                    volume="external-drive",
+                ),
+                enabled=False,
+            ),
         },
     )
 
@@ -107,11 +122,17 @@ def status_data(
         config=config.volumes["nas-backup"],
         reasons=[VolumeReason.UNREACHABLE],
     )
+    external_vs = VolumeStatus(
+        slug="external-drive",
+        config=config.volumes["external-drive"],
+        reasons=[VolumeReason.MARKER_NOT_FOUND],
+    )
 
     vol_statuses = {
         "laptop": laptop_vs,
         "usb-drive": usb_vs,
         "nas-backup": nas_vs,
+        "external-drive": external_vs,
     }
 
     sync_statuses = {
@@ -136,17 +157,42 @@ def status_data(
             destination_status=usb_vs,
             reasons=[],
         ),
+        "disabled-backup": SyncStatus(
+            slug="disabled-backup",
+            config=config.syncs["disabled-backup"],
+            source_status=laptop_vs,
+            destination_status=external_vs,
+            reasons=[SyncReason.DISABLED],
+        ),
     }
 
     return vol_statuses, sync_statuses
 
 
+# ── troubleshoot ────────────────────────────────────────────────
+
+
 def troubleshoot_config() -> Config:
-    """Config designed to trigger many troubleshoot reasons."""
+    """Config designed to trigger every troubleshoot reason."""
     return Config(
         rsync_servers={"nas": _nas_server()},
         volumes=_base_volumes(),
         syncs={
+            "disabled-sync": SyncConfig(
+                slug="disabled-sync",
+                source=SyncEndpoint(volume="laptop"),
+                destination=DestinationSyncEndpoint(
+                    volume="usb-drive",
+                ),
+                enabled=False,
+            ),
+            "unavailable-volumes": SyncConfig(
+                slug="unavailable-volumes",
+                source=SyncEndpoint(volume="laptop"),
+                destination=DestinationSyncEndpoint(
+                    volume="nas-backup",
+                ),
+            ),
             "missing-markers": SyncConfig(
                 slug="missing-markers",
                 source=SyncEndpoint(volume="laptop"),
@@ -157,11 +203,19 @@ def troubleshoot_config() -> Config:
                 source=SyncEndpoint(volume="laptop"),
                 destination=DestinationSyncEndpoint(volume="nas-backup"),
             ),
-            "btrfs-issues": SyncConfig(
-                slug="btrfs-issues",
+            "btrfs-not-detected": SyncConfig(
+                slug="btrfs-not-detected",
                 source=SyncEndpoint(volume="laptop"),
                 destination=DestinationSyncEndpoint(
                     volume="usb-drive",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            ),
+            "btrfs-mount-issues": SyncConfig(
+                slug="btrfs-mount-issues",
+                source=SyncEndpoint(volume="laptop"),
+                destination=DestinationSyncEndpoint(
+                    volume="nas-backup",
                     btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
                 ),
             ),
@@ -172,7 +226,7 @@ def troubleshoot_config() -> Config:
 def troubleshoot_data(
     config: Config,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
-    """Statuses with many failure reasons for troubleshoot."""
+    """Statuses covering every VolumeReason and SyncReason."""
     laptop_vs = VolumeStatus(
         slug="laptop",
         config=config.volumes["laptop"],
@@ -196,6 +250,23 @@ def troubleshoot_data(
     }
 
     sync_statuses = {
+        "disabled-sync": SyncStatus(
+            slug="disabled-sync",
+            config=config.syncs["disabled-sync"],
+            source_status=laptop_vs,
+            destination_status=usb_vs,
+            reasons=[SyncReason.DISABLED],
+        ),
+        "unavailable-volumes": SyncStatus(
+            slug="unavailable-volumes",
+            config=config.syncs["unavailable-volumes"],
+            source_status=laptop_vs,
+            destination_status=nas_vs,
+            reasons=[
+                SyncReason.SOURCE_UNAVAILABLE,
+                SyncReason.DESTINATION_UNAVAILABLE,
+            ],
+        ),
         "missing-markers": SyncStatus(
             slug="missing-markers",
             config=config.syncs["missing-markers"],
@@ -212,18 +283,28 @@ def troubleshoot_data(
             source_status=laptop_vs,
             destination_status=nas_vs,
             reasons=[
-                SyncReason.DESTINATION_UNAVAILABLE,
+                SyncReason.RSYNC_NOT_FOUND_ON_SOURCE,
                 SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION,
             ],
         ),
-        "btrfs-issues": SyncStatus(
-            slug="btrfs-issues",
-            config=config.syncs["btrfs-issues"],
+        "btrfs-not-detected": SyncStatus(
+            slug="btrfs-not-detected",
+            config=config.syncs["btrfs-not-detected"],
             source_status=laptop_vs,
             destination_status=usb_vs,
             reasons=[
                 SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION,
+                SyncReason.DESTINATION_NOT_BTRFS,
                 SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME,
+            ],
+        ),
+        "btrfs-mount-issues": SyncStatus(
+            slug="btrfs-mount-issues",
+            config=config.syncs["btrfs-mount-issues"],
+            source_status=laptop_vs,
+            destination_status=nas_vs,
+            reasons=[
+                SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM,
                 SyncReason.DESTINATION_LATEST_NOT_FOUND,
                 SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND,
             ],
@@ -231,6 +312,9 @@ def troubleshoot_data(
     }
 
     return vol_statuses, sync_statuses
+
+
+# ── run results ─────────────────────────────────────────────────
 
 
 def run_results() -> list[SyncResult]:
@@ -282,6 +366,9 @@ def dry_run_result() -> SyncResult:
         rsync_exit_code=0,
         output="",
     )
+
+
+# ── prune results ───────────────────────────────────────────────
 
 
 def prune_results() -> list[PruneResult]:

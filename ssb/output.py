@@ -373,6 +373,19 @@ def _print_sync_reason_fix(
             ]
             for cmd in cmds:
                 console.print(f"    {_wrap_cmd(cmd, dst, config)}")
+        case SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM:
+            dst = config.volumes[sync.destination.volume]
+            console.print(
+                "    Remount the btrfs volume with" " user_subvol_rm_allowed:"
+            )
+            cmd = "sudo mount -o" f" remount,user_subvol_rm_allowed {dst.path}"
+            console.print(f"    {_wrap_cmd(cmd, dst, config)}")
+            console.print(
+                "    To persist, add"
+                " user_subvol_rm_allowed to"
+                " the mount options in /etc/fstab"
+                f" for {dst.path}."
+            )
         case SyncReason.DESTINATION_LATEST_NOT_FOUND:
             dst = config.volumes[sync.destination.volume]
             ep = _endpoint_path(dst, sync.destination.subdir)
