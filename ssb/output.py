@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import enum
+import textwrap
 
 from rich.console import Console
 from rich.table import Table
@@ -241,25 +242,27 @@ def _host_label(
             return server.host
 
 
+_INDENT = "  "
+
 _RSYNC_INSTALL = (
-    "      Ubuntu/Debian: sudo apt install rsync\n"
-    "      Fedora/RHEL:   sudo dnf install rsync\n"
-    "      macOS:         brew install rsync"
+    "Ubuntu/Debian: sudo apt install rsync\n"
+    "Fedora/RHEL:   sudo dnf install rsync\n"
+    "macOS:         brew install rsync"
 )
 
 _BTRFS_INSTALL = (
-    "      Ubuntu/Debian: sudo apt install btrfs-progs\n"
-    "      Fedora/RHEL:   sudo dnf install btrfs-progs"
+    "Ubuntu/Debian: sudo apt install btrfs-progs\n"
+    "Fedora/RHEL:   sudo dnf install btrfs-progs"
 )
 
 _COREUTILS_INSTALL = (
-    "      Ubuntu/Debian: sudo apt install coreutils\n"
-    "      Fedora/RHEL:   sudo dnf install coreutils"
+    "Ubuntu/Debian: sudo apt install coreutils\n"
+    "Fedora/RHEL:   sudo dnf install coreutils"
 )
 
 _UTIL_LINUX_INSTALL = (
-    "      Ubuntu/Debian: sudo apt install util-linux\n"
-    "      Fedora/RHEL:   sudo dnf install util-linux"
+    "Ubuntu/Debian: sudo apt install util-linux\n"
+    "Fedora/RHEL:   sudo dnf install util-linux"
 )
 
 
@@ -271,11 +274,12 @@ def _print_marker_fix(
     config: Config,
 ) -> None:
     """Print marker creation fix with mount reminder."""
-    console.print("    Ensure the volume is mounted, then:")
+    p2 = _INDENT * 2
+    console.print(f"{p2}Ensure the volume is mounted, then:")
     mkdir_cmd = f"mkdir -p {path}"
     touch_cmd = f"touch {path}/{marker}"
-    console.print(f"    {_wrap_cmd(mkdir_cmd, vol, config)}")
-    console.print(f"    {_wrap_cmd(touch_cmd, vol, config)}")
+    console.print(f"{p2}{_wrap_cmd(mkdir_cmd, vol, config)}")
+    console.print(f"{p2}{_wrap_cmd(touch_cmd, vol, config)}")
 
 
 def _print_ssh_troubleshoot(
@@ -283,17 +287,19 @@ def _print_ssh_troubleshoot(
     server: RsyncServer,
 ) -> None:
     """Print SSH connectivity troubleshooting instructions."""
+    p2 = _INDENT * 2
+    p3 = _INDENT * 3
     ssh_cmd = _ssh_prefix(server)
-    console.print(f"    Server {server.host} is unreachable.")
-    console.print("    Verify connectivity:")
-    console.print(f"      {ssh_cmd} echo ok")
-    console.print("    If authentication fails:")
+    console.print(f"{p2}Server {server.host} is unreachable.")
+    console.print(f"{p2}Verify connectivity:")
+    console.print(f"{p3}{ssh_cmd} echo ok")
+    console.print(f"{p2}If authentication fails:")
     if server.ssh_key:
         console.print(
-            f"      1. Ensure the key exists: ls -l {server.ssh_key}"
+            f"{p3}1. Ensure the key exists:" f" ls -l {server.ssh_key}"
         )
         console.print(
-            "      2. Copy it to the server:"
+            f"{p3}2. Copy it to the server:"
             f" ssh-copy-id"
             f" {'-p ' + str(server.port) + ' ' if server.port != 22 else ''}"
             f"-i {server.ssh_key}"
@@ -301,15 +307,15 @@ def _print_ssh_troubleshoot(
             f"{server.host}"
         )
     else:
-        console.print("      1. Generate a key:" " ssh-keygen -t ed25519")
+        console.print(f"{p3}1. Generate a key:" " ssh-keygen -t ed25519")
         console.print(
-            "      2. Copy it to the server:"
+            f"{p3}2. Copy it to the server:"
             f" ssh-copy-id"
             f" {'-p ' + str(server.port) + ' ' if server.port != 22 else ''}"
             f"{server.user + '@' if server.user else ''}"
             f"{server.host}"
         )
-    console.print("      3. Verify passwordless login:" f" {ssh_cmd} echo ok")
+    console.print(f"{p3}3. Verify passwordless login:" f" {ssh_cmd} echo ok")
 
 
 def _print_sync_reason_fix(
@@ -319,9 +325,11 @@ def _print_sync_reason_fix(
     config: Config,
 ) -> None:
     """Print fix instructions for a sync reason."""
+    p2 = _INDENT * 2
+    p3 = _INDENT * 3
     match reason:
         case SyncReason.DISABLED:
-            console.print("    Enable the sync in the" " configuration file.")
+            console.print(f"{p2}Enable the sync in the" " configuration file.")
         case SyncReason.SOURCE_UNAVAILABLE:
             src = config.volumes[sync.source.volume]
             match src:
@@ -330,7 +338,7 @@ def _print_sync_reason_fix(
                     _print_ssh_troubleshoot(console, server)
                 case LocalVolume():
                     console.print(
-                        "    Source volume"
+                        f"{p2}Source volume"
                         f" '{sync.source.volume}'"
                         " is not available."
                     )
@@ -342,7 +350,7 @@ def _print_sync_reason_fix(
                     _print_ssh_troubleshoot(console, server)
                 case LocalVolume():
                     console.print(
-                        "    Destination volume"
+                        f"{p2}Destination volume"
                         f" '{sync.destination.volume}'"
                         " is not available."
                     )
@@ -357,31 +365,31 @@ def _print_sync_reason_fix(
         case SyncReason.RSYNC_NOT_FOUND_ON_SOURCE:
             src = config.volumes[sync.source.volume]
             host = _host_label(src, config)
-            console.print(f"    Install rsync on {host}:")
-            console.print(_RSYNC_INSTALL)
+            console.print(f"{p2}Install rsync on {host}:")
+            console.print(textwrap.indent(_RSYNC_INSTALL, p3))
         case SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION:
             dst = config.volumes[sync.destination.volume]
             host = _host_label(dst, config)
-            console.print(f"    Install rsync on {host}:")
-            console.print(_RSYNC_INSTALL)
+            console.print(f"{p2}Install rsync on {host}:")
+            console.print(textwrap.indent(_RSYNC_INSTALL, p3))
         case SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION:
             dst = config.volumes[sync.destination.volume]
             host = _host_label(dst, config)
-            console.print(f"    Install btrfs-progs on {host}:")
-            console.print(_BTRFS_INSTALL)
+            console.print(f"{p2}Install btrfs-progs on {host}:")
+            console.print(textwrap.indent(_BTRFS_INSTALL, p3))
         case SyncReason.STAT_NOT_FOUND_ON_DESTINATION:
             dst = config.volumes[sync.destination.volume]
             host = _host_label(dst, config)
-            console.print(f"    Install coreutils (stat) on {host}:")
-            console.print(_COREUTILS_INSTALL)
+            console.print(f"{p2}Install coreutils (stat)" f" on {host}:")
+            console.print(textwrap.indent(_COREUTILS_INSTALL, p3))
         case SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION:
             dst = config.volumes[sync.destination.volume]
             host = _host_label(dst, config)
-            console.print(f"    Install util-linux (findmnt) on {host}:")
-            console.print(_UTIL_LINUX_INSTALL)
+            console.print(f"{p2}Install util-linux (findmnt)" f" on {host}:")
+            console.print(textwrap.indent(_UTIL_LINUX_INSTALL, p3))
         case SyncReason.DESTINATION_NOT_BTRFS:
             console.print(
-                "    The destination is not on a" " btrfs filesystem."
+                f"{p2}The destination is not on" " a btrfs filesystem."
             )
         case SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME:
             dst = config.volumes[sync.destination.volume]
@@ -392,16 +400,20 @@ def _print_sync_reason_fix(
                 ("sudo chown <user>:<group>" f" {ep}/latest {ep}/snapshots"),
             ]
             for cmd in cmds:
-                console.print(f"    {_wrap_cmd(cmd, dst, config)}")
+                console.print(f"{p2}{_wrap_cmd(cmd, dst, config)}")
         case SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM:
             dst = config.volumes[sync.destination.volume]
             console.print(
-                "    Remount the btrfs volume with" " user_subvol_rm_allowed:"
+                f"{p2}Remount the btrfs volume" " with user_subvol_rm_allowed:"
             )
-            cmd = "sudo mount -o" f" remount,user_subvol_rm_allowed {dst.path}"
-            console.print(f"    {_wrap_cmd(cmd, dst, config)}")
+            cmd = (
+                "sudo mount -o"
+                " remount,user_subvol_rm_allowed"
+                f" {dst.path}"
+            )
+            console.print(f"{p2}{_wrap_cmd(cmd, dst, config)}")
             console.print(
-                "    To persist, add"
+                f"{p2}To persist, add"
                 " user_subvol_rm_allowed to"
                 " the mount options in /etc/fstab"
                 f" for {dst.path}."
@@ -414,7 +426,7 @@ def _print_sync_reason_fix(
                 ("sudo chown <user>:<group>" f" {ep}/latest"),
             ]
             for cmd in cmds:
-                console.print(f"    {_wrap_cmd(cmd, dst, config)}")
+                console.print(f"{p2}{_wrap_cmd(cmd, dst, config)}")
         case SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND:
             dst = config.volumes[sync.destination.volume]
             ep = _endpoint_path(dst, sync.destination.subdir)
@@ -423,7 +435,7 @@ def _print_sync_reason_fix(
                 ("sudo chown <user>:<group>" f" {ep}/snapshots"),
             ]
             for cmd in cmds:
-                console.print(f"    {_wrap_cmd(cmd, dst, config)}")
+                console.print(f"{p2}{_wrap_cmd(cmd, dst, config)}")
 
 
 def print_human_troubleshoot(
@@ -443,7 +455,7 @@ def print_human_troubleshoot(
         console.print(f"\n[bold]Volume {vs.slug!r}:[/bold]")
         vol = vs.config
         for reason in vs.reasons:
-            console.print(f"  {reason.value}")
+            console.print(f"{_INDENT}{reason.value}")
             match reason:
                 case VolumeReason.MARKER_NOT_FOUND:
                     _print_marker_fix(
@@ -462,7 +474,7 @@ def print_human_troubleshoot(
     for ss in failed_syncs:
         console.print(f"\n[bold]Sync {ss.slug!r}:[/bold]")
         for sync_reason in ss.reasons:
-            console.print(f"  {sync_reason.value}")
+            console.print(f"{_INDENT}{sync_reason.value}")
             _print_sync_reason_fix(console, ss.config, sync_reason, config)
 
     if not has_issues:
