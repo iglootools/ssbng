@@ -8,14 +8,14 @@ Additionally, `poetry run dab-testcli` provides helpers to test with manual test
 
 Run automated tests and checks (no external dependencies):
 ```bash
-# Makefile syntax
-make check              # Run all checks: format + lint + type-check + unit tests
-make test               # Unit tests only (no Docker)
-make test-integration   # Integration tests only (requires Docker)
-make test-all           # Unit + integration tests
-make format             # black
-make lint               # flake8
-make type-check         # mypy (strict: disallow_untyped_defs)
+# mise tasks
+mise run check              # Run all checks: format + lint + type-check + unit tests
+mise run test               # Unit tests only (no Docker)
+mise run test-integration   # Integration tests only (requires Docker)
+mise run test-all           # Unit + integration tests
+mise run format             # black
+mise run lint               # flake8
+mise run type-check         # mypy (strict: disallow_untyped_defs)
 
 # Using Poetry syntax directly
 poetry run pytest tests/ --ignore=tests/integration/ -v                 # Unit tests only (no Docker)

@@ -1,8 +1,6 @@
 # Setup Development Environment
 
-1. [Install poetry](https://python-poetry.org/docs/#installation)
-
-2. [Install asdf](https://asdf-vm.com/guide/getting-started.html)
+2. [Install and activate mise](https://mise.jdx.dev/installing-mise.html)
 
 3. Install Docker Desktop (or Docker Engine on Linux)
    

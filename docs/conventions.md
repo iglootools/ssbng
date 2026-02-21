@@ -10,6 +10,14 @@
   - Avoid use of mocks when the values can be passed as a parameter (e.g. time)
 - **Console output**
   - Do not hardcode indents in strings, compute the indent at the call site
+- **Version Management**
+  - Pin specific versions of all dependencies or use a lock file (e.g. poetry.lock) to ensure reproducible builds and avoid issues with breaking changes in dependencies.
+  
+    ```bash
+    # examples
+    mise use --pin pipx:poetry
+    ```
+
 
 ## Python Conventions
 - **Typing**: Use type annotations for all functions and methods, including return types. Use `mypy` for static type checking.

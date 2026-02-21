@@ -1,0 +1,65 @@
+[tools]
+python = "3.14.3"
+poetry = "latest"
+
+[env]
+_.python.venv = { path = ".venv", create = true }
+
+[settings]
+lockfile = true
+
+[tasks.install]
+description = "Install dependencies"
+run = "poetry install"
+
+[tasks.test]
+description = "Run unit tests (no Docker)"
+run = "poetry run pytest tests/ --ignore=tests/integration/ -v"
+
+[tasks.test-integration]
+description = "Run integration tests (requires Docker)"
+run = "poetry run pytest tests/integration/ -v"
+
+[tasks.test-all]
+description = "Run all tests"
+run = "poetry run pytest tests/ -v"
+
+[tasks.format]
+description = "Format code with black"
+run = "poetry run black ."
+
+[tasks.lint]
+description = "Run flake8 linting"
+run = "poetry run flake8 dab/ tests/"
+
+[tasks.type-check]
+description = "Run mypy type checking"
+run = "poetry run mypy dab/"
+
+[tasks.check]
+description = "Run all checks (format, lint, type-check, test)"
+depends = ["format", "lint", "type-check", "test"]
+
+[tasks.clean]
+description = "Clean up build artifacts"
+run = """
+rm -rf build/ dist/ *.egg-info/
+find . -type d -name __pycache__ -delete
+find . -type f -name "*.pyc" -delete
+"""
+
+[tasks.build]
+description = "Build the package"
+run = "poetry build"
+
+[tasks.publish]
+description = "Publish to PyPI (requires authentication)"
+run = "poetry publish"
+
+[tasks.example]
+description = "Run the basic usage example"
+run = "poetry run python examples/basic_usage.py"
+
+[tasks.shell]
+description = "Start a Poetry shell"
+run = "poetry shell"
