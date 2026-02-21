@@ -1,12 +1,39 @@
 # Device-Aware Backup (dab)
 
-A flexible, rsync-powered backup tool for local and remote targets using removable drives—optionally leveraging btrfs snapshots and encrypted volumes.
+A robust backup tool powered by rsync, designed for both local and remote targets—including removable drives and intermittently available backup servers. 
+It optionally leverages btrfs snapshots for incremental backups and encrypted volumes for enhanced security.
 
-Rather than reinventing its own storage format, network protocol, and encryption mechanisms, this project leverages existing tools and libraries:
-- rsync (and SSH) for performing the backups locally and remotely, with support for filters, and more
-- no complicated restore process: the backup is just a copy of the source files, so you can restore by simply copying the files back to their original location
-- btrfs snapshots to  performing incremental backups thanks to snapshotting (optional)
-- cryptsetup for encryption (optional). Not directly used by the tool yet, but can be used to create encrypted volumes for storing backups
+## Main Use Cases
+
+While not being limited to these, the tool is primarily designed to address the following backup use cases:
+- **Laptop to Server**: Back up files on your laptop to your home server whenever you are on the home network
+- **Laptop to External Drive**: Back up files on your laptop to an external drive whenever it is connected
+- **Laptop External Drive to Server**: Back up files from an external drive to your home server whenever the drive is connected and you are on the home network
+- **Server to External Drive**: Back up files on your home server to an external drive whenever it is connected
+
+Think of it as a tool replacing the rsync-based shell scripts you would write to back up your data to external drives or to your Raspberry Pi server, but with 
+- Automatic detection of available/mounted source and destination volumes (to account for the fact that backup servers and external drives are not always available)
+- Support for btrfs snapshots (to protect against corrupting the backups with corrupted/deleted data)
+- A more robust configuration model
+- Better error handling
+
+## Philosophy
+
+Guiding Design Principles:
+- Laptop-centric workflows
+- Changing networks
+-	Drives being plugged/unplugged
+- Backups happening when possible
+- Not always-on infrastructure
+- Personal homelab / Raspberry Pi setups
+
+In terms of implementation, rather than reinventing its own storage format, network protocol, and encryption mechanisms, 
+this project leverages existing tools and libraries to keep things simple and reliable:
+- Rsync (and SSH): Perform the backups locally and remotely, with support for filters, and more
+- Plain directory: Files are stored as-is, no complicated restore process
+- Btrfs snapshots: Optionally perform incremental backups thanks to snapshotting capabilities of btrfs, with automatic pruning of old snapshots based on retention policies. 
+  Each snapshot (btrfs read-only subvolume) exposes a plain directory tree
+- Cryptsetup: Optionally encrypt your backups using encrypted volumes
 
 ## Features
 
@@ -74,6 +101,20 @@ Features:
 - Server: ability to use private vs public ip? CLI flag? List of IPs/hostnames to check for connectivity in order?
   `--private vs --public`
 - Make it possible (optional) to perform syncs in parallel when there are no overlapping source or destination volumes.
+- `troubleshoot` command: also provide instructions to help setting up encrypted volumes with cryptsetup, and maybe even trigger mounts using `systemd-run --pipe --wait systemctl start
+  The tool can automatically mount and unmount these volumes, and support for storing encryption keys in the client OS keyring is planned.
+- Add support for APFS snapshots on Mac OS X (APFS). Most likely at the volume level, no filesystem isolation (may require sudo)
+- Add User-friendly error messages with malformed configuration, missing volumes, connectivity issues, etc. with actionable instructions to fix the issues.
+- Dependencies between syncs to handle the use case of laptop -> server mount A. server mount A -> server mount B: we want server mount A -> server mount B to be performed after to sync the most up to date data 
+- Backup log used + alerting of the user if something has not been backed up for a while (could use snapshots as well as a log, but not every backup is snapshot-enabled). add new monitoring config and command?
+  - Store the backup logs in the destination volume
+  - Could have a cache of the backup logs to make it possible to remind the user what backusp need to be done based on their targets/objectives
+  - if we introduce run ids, should the run id be available in the snapshot (name?)?
+  - + functionality to show backup logs and stats about the backups (last backup time, size, etc.)?
+  - `history` command to show the backup logs and stats about the backups (last backup time, size, etc.)?
+- Backups to cloud using other tools?
+- list command to list current syncs
+- status -> scan? status is a bit misleading as it implies that we are checking the status of the syncs, but we are actually scanning for available volumes and connectivity, and then displaying the syncs that can be performed based on that. Maybe `scan` is a better name for that command?
 
 Testing
 - `testcli` CLI app:
