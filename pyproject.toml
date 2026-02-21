@@ -1,6 +1,5 @@
 [project]
 name = "dab"
-version = "0.1.0"
 description = "Device-Aware Backup: A flexible, rsync-powered backup tool for local and remote targets using removable drives—optionally leveraging btrfs snapshots and encrypted volumes."
 authors = [{name = "Sami Dalouche", email = "sami.dalouche@gmail.com"}]
 readme = "README.md"
@@ -10,13 +9,21 @@ dependencies = [
     "pyyaml (>=6.0,<7.0)",
     "pydantic (>=2.12.5,<3.0.0)",
 ]
+dynamic = ["version"]
 
+[tool.poetry.requires-plugins]
+poetry-dynamic-versioning = { version = ">=1.0.0,<2.0.0", extras = ["plugin"] }
+
+
+[tool.poetry-dynamic-versioning]
+enable = true
 [project.scripts]
 dab = "dab.cli:main"
 dab-test = "dab.testcli:main"
 
 [tool.poetry]
 packages = [{include = "dab"}]
+version = "0.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.0"
@@ -27,8 +34,8 @@ types-pyyaml = "^6.0"
 testcontainers = "^4.0.0"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+build-backend = "poetry_dynamic_versioning.backend"
 
 [tool.black]
 line-length = 79
