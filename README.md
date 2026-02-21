@@ -51,6 +51,10 @@ See [docs/setup-development-environment.md](docs/setup-development-environment.m
 
 See [docs/building-and-testing.md](docs/building-and-testing.md) for instructions on how to run unit and integration tests, as well as formatting and linting checks.
 
+### Releasing and Publishing
+
+See [docs/releasing-and-publishing.md](docs/releasing-and-publishing.md) for instructions on how to create new releases and publish the package to PyPI.
+
 ## License
 
 This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
@@ -59,6 +63,7 @@ This project is licensed under the Apache License 2.0 - see the LICENSE file for
 
 
 Features:
+- Dry run: actually call rsync with `--dry-run`
 - Support for Remote to Remote? How do handle authentication and connectivity checks for both servers? rsync filter files., other problems?
 - Git source support
 - Dry run for both run and status: display all the commands that would be executed. Do we want additional option for that?
@@ -70,24 +75,26 @@ Features:
   `--private vs --public`
 - Make it possible (optional) to perform syncs in parallel when there are no overlapping source or destination volumes.
 
-Refactorings:
-- Switch to [paramiko for SSH](https://www.paramiko.org/)?
-
-Build & CI:
-- Add Github workflows
-- packaging and publishing (PyPI) to use as a regular app
-- Conventional commit changelog release system / workflow
-- Add to `testcli` CLI app:
+Testing
+- `testcli` CLI app:
   - set up a docker environment to manually test the generated config and outputs, and to use for development in general?
-- Dry run: actually call rsync with `--dry-run`
-- Distribution
-  - Make it possible to install and run using tools such as pipx
 - Improve automated tests
   - Add end to end tests with filters, and other more complex configurations.
   - add local tests with btrfs snapshots on docker, with dab fully installed as an app
   - add remote to remote tests with two docker containers, with ssh server set up on one of them, and dab?rsync fully installed as an app on both of them. Test connectivity checks, rsync backup, btrfs snapshots, etc.
 
+Refactorings:
+- Switch to [paramiko for SSH](https://www.paramiko.org/)?
+
+Build & CI:
+- Release & Publishing workflows:
+  - Test the workflows using [TestPyPI](https://github.com/pypa/gh-action-pypi-publish#)
+  - Create PyPI account
+  - Enable the release workflows
+- Add support for release branch? (`release/*`)
+
 Doc:
+- Add install instructions (from PyPI and from source) to the README
 - Use cases instead of features
   - Provide comparison with borg and restic. Why dab over these alternatives.
 - Testing strategy and practices in conventions
@@ -108,10 +115,3 @@ Features - Think harder about:
   - Problem: requires sudo permissions, so would need some sort of agent running directly on the machine, or a way to trigger mounts using a different mechanism
   - `systemd-run --pipe --wait systemctl start systemd-cryptsetup@securedata.service`
   - Other checks / troubleshooting instructions needed (cryptsetup, etc?)?
-
-Bugs:
-- can prune work without sudo?
-  Deleting readonly btrfs subvolumes requires either `CAP_SYS_ADMIN` or the `user_subvol_rm_allowed` mount option.
-  The integration test Docker setup uses `mount -o user_subvol_rm_allowed` to allow the unprivileged testuser to delete snapshots.
-  For production use, the btrfs volume should be mounted with `user_subvol_rm_allowed` or the user should have `CAP_SYS_ADMIN`.
-  https://unix.stackexchange.com/questions/88932/why-cant-a-regular-user-delete-a-btrfs-subvolume

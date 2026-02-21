@@ -17,6 +17,7 @@ poetry-dynamic-versioning = { version = ">=1.0.0,<2.0.0", extras = ["plugin"] }
 
 [tool.poetry-dynamic-versioning]
 enable = true
+
 [project.scripts]
 dab = "dab.cli:main"
 dab-test = "dab.testcli:main"

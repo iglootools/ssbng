@@ -70,5 +70,14 @@ run = "poetry shell"
 description = "Run all checks needed on CI"
 run = [
   {task = "install"},
+  {task = "build"},
   {task = "test-all"},
 ]
+
+[tasks.ci-build]
+description = "Run all checks needed on CI"
+run = [
+  {task = "install"},
+  {task = "build"},
+]
+

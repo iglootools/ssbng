@@ -1,7 +1,11 @@
 name: test
 
 on:
+  # Manually trigger the workflow using
+  # gh workflow run test.yml # --ref <branch>
+  # gh run list --workflow test.yml # --branch <branch>
   workflow_dispatch:
+  repository_dispatch:
   pull_request:
   push:
     tags:
