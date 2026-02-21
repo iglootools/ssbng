@@ -1,20 +1,23 @@
-# DAB (Device-Aware Backup)
+# Device-Aware Backup (dab)
 
-Effortless, flexible backups anywhere—local or remote, even on removable drives, powered by rsync.
+A flexible, rsync-powered backup tool for local and remote targets using removable drives—optionally leveraging btrfs snapshots and encrypted volumes.
 
-An rsync-based backup tool supporting local-to-local, local-to-remote, and remote-to-remote backups with source and destination paths possibly being on removable drives.
-
-Rather than reinventing the wheel, this project leverages existing tools and libraries:
-- rsync (and SSH) for performing the backups
-- btrfs for performing incremental backups thanks to snapshotting (optional)
+Rather than reinventing its own storage format, network protocol, and encryption mechanisms, this project leverages existing tools and libraries:
+- rsync (and SSH) for performing the backups locally and remotely, with support for filters, and more
+- no complicated restore process: the backup is just a copy of the source files, so you can restore by simply copying the files back to their original location
+- btrfs snapshots to  performing incremental backups thanks to snapshotting (optional)
 - cryptsetup for encryption (optional). Not directly used by the tool yet, but can be used to create encrypted volumes for storing backups
 
 ## Features
+
+TODO
 
 ### Commands
 
 - run (with support for dry run)
 - status (list the active syncs and volumes)
+
+TODO
 
 #### Outputs
 
@@ -67,22 +70,22 @@ Features:
   `--private vs --public`
 - Make it possible (optional) to perform syncs in parallel when there are no overlapping source or destination volumes.
 
+Refactorings:
+- Switch to [paramiko for SSH](https://www.paramiko.org/)?
+
 Build & CI:
-- Rename the tool, repository, and all related files from dab to something else (dab-next? dab2? dab-nextgen? dab-ng? dab?).
 - Add Github workflows
 - packaging and publishing (PyPI) to use as a regular app
-- Add end to end tests with filters, and other more complex configurations.
-- Integration tests
-  - add local tests with btrfs snapshots on docker, with dab fully installed as an app
-  - add remote to remote tests with two docker containers, with ssh server set up on one of them, and dab?rsync fully installed as an app on both of them. Test connectivity checks, rsync backup, btrfs snapshots, etc.
-
 - Conventional commit changelog release system / workflow
 - Add to `testcli` CLI app:
   - set up a docker environment to manually test the generated config and outputs, and to use for development in general?
 - Dry run: actually call rsync with `--dry-run`
 - Distribution
   - Make it possible to install and run using tools such as pipx
-
+- Improve automated tests
+  - Add end to end tests with filters, and other more complex configurations.
+  - add local tests with btrfs snapshots on docker, with dab fully installed as an app
+  - add remote to remote tests with two docker containers, with ssh server set up on one of them, and dab?rsync fully installed as an app on both of them. Test connectivity checks, rsync backup, btrfs snapshots, etc.
 
 Doc:
 - Use cases instead of features

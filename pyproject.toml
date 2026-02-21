@@ -1,7 +1,7 @@
 [project]
 name = "dab"
 version = "0.1.0"
-description = "Device-Aware Backup - A secure backup solution"
+description = "Device-Aware Backup: A flexible, rsync-powered backup tool for local and remote targets using removable drives—optionally leveraging btrfs snapshots and encrypted volumes."
 authors = [{name = "Sami Dalouche", email = "sami.dalouche@gmail.com"}]
 readme = "README.md"
 requires-python = ">=3.14"
