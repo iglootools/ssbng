@@ -17,3 +17,7 @@ Coding conventions, testing practices, and other guidelines for contributing to 
 ## Build & Test Commands
 
 Instructions on how to run unit and integration tests, as well as formatting and linting checks: @docs/building-and-testing.md
+
+## Releasing and Publishing
+
+Instructions on how to create new releases and publish the package to PyPI: @docs/releasing-and-publishing.md
