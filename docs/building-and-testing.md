@@ -4,7 +4,7 @@ The unit tests cover the core logic of the tool, while the integration tests exe
 
 Integration tests exercise the real rsync/SSH/btrfs pipeline against a Docker container.
 
-Additionally, `poetry run dab-testcli` provides helpers to test with manual testing/QA.
+Additionally, `poetry run dab-test` provides helpers to test with manual testing/QA.
 
 Run automated tests and checks (no external dependencies):
 ```bash

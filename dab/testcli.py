@@ -35,7 +35,7 @@ from .testdata import (
 _INDENT = "  "
 
 app = typer.Typer(
-    name="dab-testcli",
+    name="dab-test",
     help="DAB developer test CLI",
     no_args_is_help=True,
 )

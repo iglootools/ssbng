@@ -13,7 +13,7 @@ dependencies = [
 
 [project.scripts]
 dab = "dab.cli:main"
-dab-testcli = "dab.testcli:main"
+dab-test = "dab.testcli:main"
 
 [tool.poetry]
 packages = [{include = "dab"}]
