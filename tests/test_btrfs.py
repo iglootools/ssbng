@@ -1,0 +1,485 @@
+"""Tests for dab.btrfs."""
+
+from __future__ import annotations
+
+from unittest.mock import MagicMock, call, patch
+
+import pytest
+
+from dab.btrfs import (
+    create_snapshot,
+    delete_snapshot,
+    get_latest_snapshot,
+    list_snapshots,
+    prune_snapshots,
+)
+from dab.config import (
+    BtrfsSnapshotConfig,
+    Config,
+    DestinationSyncEndpoint,
+    LocalVolume,
+    RemoteVolume,
+    RsyncServer,
+    SyncConfig,
+    SyncEndpoint,
+)
+
+
+def _local_config() -> tuple[Config, SyncConfig]:
+    src = LocalVolume(slug="src", path="/mnt/src")
+    dst = LocalVolume(slug="dst", path="/mnt/dst")
+    sync = SyncConfig(
+        slug="s1",
+        source=SyncEndpoint(volume="src"),
+        destination=DestinationSyncEndpoint(
+            volume="dst",
+            subdir="backup",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+        ),
+    )
+    config = Config(
+        volumes={"src": src, "dst": dst},
+        syncs={"s1": sync},
+    )
+    return config, sync
+
+
+def _remote_config() -> tuple[Config, SyncConfig]:
+    src = LocalVolume(slug="src", path="/mnt/src")
+    dst_server = RsyncServer(
+        slug="nas-server",
+        host="nas.local",
+        user="admin",
+    )
+    dst = RemoteVolume(
+        slug="dst",
+        rsync_server="nas-server",
+        path="/backup",
+    )
+    sync = SyncConfig(
+        slug="s1",
+        source=SyncEndpoint(volume="src"),
+        destination=DestinationSyncEndpoint(
+            volume="dst",
+            subdir="data",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+        ),
+    )
+    config = Config(
+        rsync_servers={"nas-server": dst_server},
+        volumes={"src": src, "dst": dst},
+        syncs={"s1": sync},
+    )
+    return config, sync
+
+
+class TestCreateSnapshotLocal:
+    @patch("dab.btrfs.subprocess.run")
+    def test_success(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
+        config, sync = _local_config()
+        from datetime import datetime, timezone
+
+        fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
+        path = create_snapshot(sync, config, now=fixed_now)
+        assert path == ("/mnt/dst/backup/snapshots/2024-01-15T12:00:00.000Z")
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args[0][0]
+        assert call_args == [
+            "btrfs",
+            "subvolume",
+            "snapshot",
+            "-r",
+            "/mnt/dst/backup/latest",
+            "/mnt/dst/backup/snapshots/2024-01-15T12:00:00.000Z",
+        ]
+
+    @patch("dab.btrfs.subprocess.run")
+    def test_failure(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=1, stderr="permission denied"
+        )
+        config, sync = _local_config()
+        from datetime import datetime, timezone
+
+        fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
+        with pytest.raises(RuntimeError, match="btrfs snapshot"):
+            create_snapshot(sync, config, now=fixed_now)
+
+
+class TestCreateSnapshotRemote:
+    @patch("dab.btrfs.run_remote_command")
+    def test_success(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
+        config, sync = _remote_config()
+        from datetime import datetime, timezone
+
+        fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
+        path = create_snapshot(sync, config, now=fixed_now)
+        assert path == ("/backup/data/snapshots/2024-01-15T12:00:00.000Z")
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args
+        assert call_args[0][0] == config.rsync_servers["nas-server"]
+        assert call_args[0][1] == [
+            "btrfs",
+            "subvolume",
+            "snapshot",
+            "-r",
+            "/backup/data/latest",
+            "/backup/data/snapshots/2024-01-15T12:00:00.000Z",
+        ]
+
+
+class TestGetLatestSnapshotLocal:
+    @patch("dab.btrfs.subprocess.run")
+    def test_found(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="20240101T000000Z\n20240115T120000Z\n",
+        )
+        config, sync = _local_config()
+
+        result = get_latest_snapshot(sync, config)
+        assert result == ("/mnt/dst/backup/snapshots/20240115T120000Z")
+
+    @patch("dab.btrfs.subprocess.run")
+    def test_empty(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout="")
+        config, sync = _local_config()
+
+        result = get_latest_snapshot(sync, config)
+        assert result is None
+
+    @patch("dab.btrfs.subprocess.run")
+    def test_dir_missing(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=2, stdout="")
+        config, sync = _local_config()
+
+        result = get_latest_snapshot(sync, config)
+        assert result is None
+
+
+class TestGetLatestSnapshotRemote:
+    @patch("dab.btrfs.run_remote_command")
+    def test_found(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="20240101T000000Z\n20240115T120000Z\n",
+        )
+        config, sync = _remote_config()
+
+        result = get_latest_snapshot(sync, config)
+        assert result == ("/backup/data/snapshots/20240115T120000Z")
+        mock_run.assert_called_once_with(
+            config.rsync_servers["nas-server"],
+            ["ls", "/backup/data/snapshots"],
+        )
+
+
+def _local_config_spaces() -> tuple[Config, SyncConfig]:
+    src = LocalVolume(slug="src", path="/mnt/my src")
+    dst = LocalVolume(slug="dst", path="/mnt/my dst")
+    sync = SyncConfig(
+        slug="s1",
+        source=SyncEndpoint(volume="src"),
+        destination=DestinationSyncEndpoint(
+            volume="dst",
+            subdir="my backup",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+        ),
+    )
+    config = Config(
+        volumes={"src": src, "dst": dst},
+        syncs={"s1": sync},
+    )
+    return config, sync
+
+
+def _remote_config_spaces() -> tuple[Config, SyncConfig]:
+    src = LocalVolume(slug="src", path="/mnt/my src")
+    dst_server = RsyncServer(
+        slug="nas-server",
+        host="nas.local",
+        user="admin",
+    )
+    dst = RemoteVolume(
+        slug="dst",
+        rsync_server="nas-server",
+        path="/my backup",
+    )
+    sync = SyncConfig(
+        slug="s1",
+        source=SyncEndpoint(volume="src"),
+        destination=DestinationSyncEndpoint(
+            volume="dst",
+            subdir="my data",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+        ),
+    )
+    config = Config(
+        rsync_servers={"nas-server": dst_server},
+        volumes={"src": src, "dst": dst},
+        syncs={"s1": sync},
+    )
+    return config, sync
+
+
+class TestCreateSnapshotLocalSpaces:
+    @patch("dab.btrfs.subprocess.run")
+    def test_success(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
+        config, sync = _local_config_spaces()
+        from datetime import datetime, timezone
+
+        fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
+        path = create_snapshot(sync, config, now=fixed_now)
+        assert path == (
+            "/mnt/my dst/my backup/snapshots/" "2024-01-15T12:00:00.000Z"
+        )
+        call_args = mock_run.call_args[0][0]
+        assert call_args == [
+            "btrfs",
+            "subvolume",
+            "snapshot",
+            "-r",
+            "/mnt/my dst/my backup/latest",
+            "/mnt/my dst/my backup/snapshots/" "2024-01-15T12:00:00.000Z",
+        ]
+
+
+class TestCreateSnapshotRemoteSpaces:
+    @patch("dab.btrfs.run_remote_command")
+    def test_success(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
+        config, sync = _remote_config_spaces()
+        from datetime import datetime, timezone
+
+        fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
+        path = create_snapshot(sync, config, now=fixed_now)
+        assert path == (
+            "/my backup/my data/snapshots/" "2024-01-15T12:00:00.000Z"
+        )
+        call_args = mock_run.call_args
+        assert call_args[0][1] == [
+            "btrfs",
+            "subvolume",
+            "snapshot",
+            "-r",
+            "/my backup/my data/latest",
+            "/my backup/my data/snapshots/" "2024-01-15T12:00:00.000Z",
+        ]
+
+
+class TestGetLatestSnapshotRemoteSpaces:
+    @patch("dab.btrfs.run_remote_command")
+    def test_found(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="20240101T000000Z\n20240115T120000Z\n",
+        )
+        config, sync = _remote_config_spaces()
+
+        result = get_latest_snapshot(sync, config)
+        assert result == ("/my backup/my data/snapshots/20240115T120000Z")
+        mock_run.assert_called_once_with(
+            config.rsync_servers["nas-server"],
+            ["ls", "/my backup/my data/snapshots"],
+        )
+
+
+class TestListSnapshotsLocal:
+    @patch("dab.btrfs.subprocess.run")
+    def test_found(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="20240101T000000Z\n20240115T120000Z\n",
+        )
+        config, sync = _local_config()
+
+        result = list_snapshots(sync, config)
+        assert result == [
+            "/mnt/dst/backup/snapshots/20240101T000000Z",
+            "/mnt/dst/backup/snapshots/20240115T120000Z",
+        ]
+
+    @patch("dab.btrfs.subprocess.run")
+    def test_empty(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout="")
+        config, sync = _local_config()
+
+        result = list_snapshots(sync, config)
+        assert result == []
+
+    @patch("dab.btrfs.subprocess.run")
+    def test_dir_missing(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=2, stdout="")
+        config, sync = _local_config()
+
+        result = list_snapshots(sync, config)
+        assert result == []
+
+
+class TestListSnapshotsRemote:
+    @patch("dab.btrfs.run_remote_command")
+    def test_found(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="20240101T000000Z\n20240115T120000Z\n",
+        )
+        config, sync = _remote_config()
+
+        result = list_snapshots(sync, config)
+        assert result == [
+            "/backup/data/snapshots/20240101T000000Z",
+            "/backup/data/snapshots/20240115T120000Z",
+        ]
+
+
+class TestDeleteSnapshotLocal:
+    @patch("dab.btrfs.subprocess.run")
+    def test_success(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
+        config, _ = _local_config()
+        dst_vol = config.volumes["dst"]
+        path = "/mnt/dst/backup/snapshots/20240101T000000Z"
+
+        delete_snapshot(path, dst_vol, config)
+        assert mock_run.call_count == 2
+        mock_run.assert_has_calls(
+            [
+                call(
+                    ["btrfs", "property", "set", path, "ro", "false"],
+                    capture_output=True,
+                    text=True,
+                ),
+                call(
+                    ["btrfs", "subvolume", "delete", path],
+                    capture_output=True,
+                    text=True,
+                ),
+            ]
+        )
+
+    @patch("dab.btrfs.subprocess.run")
+    def test_failure_on_property_set(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=1, stderr="permission denied"
+        )
+        config, _ = _local_config()
+        dst_vol = config.volumes["dst"]
+
+        with pytest.raises(RuntimeError, match="btrfs property set ro=false"):
+            delete_snapshot(
+                "/mnt/dst/backup/snapshots/20240101T000000Z",
+                dst_vol,
+                config,
+            )
+
+    @patch("dab.btrfs.subprocess.run")
+    def test_failure_on_delete(self, mock_run: MagicMock) -> None:
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stderr=""),
+            MagicMock(returncode=1, stderr="permission denied"),
+        ]
+        config, _ = _local_config()
+        dst_vol = config.volumes["dst"]
+
+        with pytest.raises(RuntimeError, match="btrfs delete"):
+            delete_snapshot(
+                "/mnt/dst/backup/snapshots/20240101T000000Z",
+                dst_vol,
+                config,
+            )
+
+
+class TestDeleteSnapshotRemote:
+    @patch("dab.btrfs.run_remote_command")
+    def test_success(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
+        config, _ = _remote_config()
+        dst_vol = config.volumes["dst"]
+        path = "/backup/data/snapshots/20240101T000000Z"
+        server = config.rsync_servers["nas-server"]
+
+        delete_snapshot(path, dst_vol, config)
+        assert mock_run.call_count == 2
+        mock_run.assert_has_calls(
+            [
+                call(
+                    server,
+                    ["btrfs", "property", "set", path, "ro", "false"],
+                ),
+                call(
+                    server,
+                    ["btrfs", "subvolume", "delete", path],
+                ),
+            ]
+        )
+
+
+class TestPruneSnapshotsLocal:
+    @patch("dab.btrfs.subprocess.run")
+    def test_prunes_oldest(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="20240101T000000Z\n20240102T000000Z\n20240103T000000Z\n",
+            stderr="",
+        )
+        config, sync = _local_config()
+
+        deleted = prune_snapshots(sync, config, max_snapshots=1)
+        assert deleted == [
+            "/mnt/dst/backup/snapshots/20240101T000000Z",
+            "/mnt/dst/backup/snapshots/20240102T000000Z",
+        ]
+        # ls call + 2 × (property set + delete) calls
+        assert mock_run.call_count == 5
+
+    @patch("dab.btrfs.subprocess.run")
+    def test_nothing_to_prune(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="20240101T000000Z\n20240102T000000Z\n",
+            stderr="",
+        )
+        config, sync = _local_config()
+
+        deleted = prune_snapshots(sync, config, max_snapshots=5)
+        assert deleted == []
+        # Only the ls call
+        assert mock_run.call_count == 1
+
+    @patch("dab.btrfs.subprocess.run")
+    def test_dry_run(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="20240101T000000Z\n20240102T000000Z\n20240103T000000Z\n",
+            stderr="",
+        )
+        config, sync = _local_config()
+
+        deleted = prune_snapshots(sync, config, max_snapshots=1, dry_run=True)
+        assert deleted == [
+            "/mnt/dst/backup/snapshots/20240101T000000Z",
+            "/mnt/dst/backup/snapshots/20240102T000000Z",
+        ]
+        # Only the ls call, no delete calls
+        assert mock_run.call_count == 1
+
+
+class TestPruneSnapshotsRemote:
+    @patch("dab.btrfs.run_remote_command")
+    def test_prunes_oldest(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="20240101T000000Z\n20240102T000000Z\n20240103T000000Z\n",
+            stderr="",
+        )
+        config, sync = _remote_config()
+
+        deleted = prune_snapshots(sync, config, max_snapshots=2)
+        assert deleted == [
+            "/backup/data/snapshots/20240101T000000Z",
+        ]
+        # ls call + 1 × (property set + delete) calls
+        assert mock_run.call_count == 3
