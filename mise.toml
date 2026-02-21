@@ -63,3 +63,12 @@ run = "poetry run python examples/basic_usage.py"
 [tasks.shell]
 description = "Start a Poetry shell"
 run = "poetry shell"
+
+
+# Tasks used by CI workflows
+[tasks.ci-test]
+description = "Run all checks needed on CI"
+run = [
+  {task = "install"},
+  {task = "test-all"},
+]

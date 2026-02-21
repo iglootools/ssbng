@@ -70,34 +70,19 @@ Features:
 Build & CI:
 - Rename the tool, repository, and all related files from dab to something else (dab-next? dab2? dab-nextgen? dab-ng? dab?).
 - Add Github workflows
-- Figure out poetry and asdf integration for Python version management and installation instructions.
-- Makefile: is there a better way?
-  A Makefile is fine, but for a Poetry-centric Python project there are often cleaner options:
-    - poe the poet (inside Poetry)
-      Define tasks in pyproject.toml under [tool.poe.tasks]
-      Best if most commands already run via poetry run ...
-      Keeps task config in one Python-native file
-    - nox (or tox)
-      Better when you need structured test/lint matrices (Python versions, env combos)
-      More scalable than Make for CI-like orchestration
-    - just (justfile)
-      Like Make but simpler syntax and fewer Make quirks
-      Good if you want a command runner without Python test-matrix features
-    - Plain shell scripts in scripts/
 - packaging and publishing (PyPI) to use as a regular app
 - Add end to end tests with filters, and other more complex configurations.
 - Integration tests
   - add local tests with btrfs snapshots on docker, with dab fully installed as an app
   - add remote to remote tests with two docker containers, with ssh server set up on one of them, and dab?rsync fully installed as an app on both of them. Test connectivity checks, rsync backup, btrfs snapshots, etc.
-- Make it possible to install and run using tools such as pipx
+
 - Conventional commit changelog release system / workflow
-- Add `testcli` CLI app:
+- Add to `testcli` CLI app:
   - set up a docker environment to manually test the generated config and outputs, and to use for development in general?
 - Dry run: actually call rsync with `--dry-run`
-- Investigate use of mise / rtx: https://mise.jdx.dev/:
-  - tools
-  - tasks
-- Investigate use of devenv
+- Distribution
+  - Make it possible to install and run using tools such as pipx
+
 
 Doc:
 - Use cases instead of features
