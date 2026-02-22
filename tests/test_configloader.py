@@ -9,14 +9,16 @@ import yaml
 
 from nbkp.config import (
     Config,
+    ConfigError,
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     RsyncServer,
     SyncConfig,
     SyncEndpoint,
+    find_config_file,
+    load_config,
 )
-from nbkp.configloader import ConfigError, find_config_file, load_config
 
 
 def _config_to_yaml(config: Config) -> str:

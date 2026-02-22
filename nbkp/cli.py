@@ -9,9 +9,8 @@ import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from .config import Config
+from .config import Config, ConfigError, load_config
 from .status import SyncReason, SyncStatus, VolumeStatus, check_all_syncs
-from .configloader import ConfigError, load_config
 from .btrfs import list_snapshots, prune_snapshots
 from .output import (
     OutputFormat,

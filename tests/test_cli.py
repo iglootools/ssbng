@@ -759,7 +759,7 @@ class TestConfigError:
     @patch(
         "nbkp.cli.load_config",
         side_effect=__import__(
-            "nbkp.configloader", fromlist=["ConfigError"]
+            "nbkp.config", fromlist=["ConfigError"]
         ).ConfigError("bad config"),
     )
     def test_status_config_error(self, mock_load: MagicMock) -> None:
@@ -769,7 +769,7 @@ class TestConfigError:
     @patch(
         "nbkp.cli.load_config",
         side_effect=__import__(
-            "nbkp.configloader", fromlist=["ConfigError"]
+            "nbkp.config", fromlist=["ConfigError"]
         ).ConfigError("bad config"),
     )
     def test_run_config_error(self, mock_load: MagicMock) -> None:

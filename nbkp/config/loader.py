@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from .config import Config
+from .protocol import Config
 
 
 class ConfigError(Exception):
