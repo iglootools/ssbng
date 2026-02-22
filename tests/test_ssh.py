@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from nbkp.config import RsyncServer
-from nbkp.sync.ssh import (
+from nbkp.remote import (
     build_ssh_base_args,
     build_ssh_e_option,
     format_remote_path,
@@ -110,7 +110,7 @@ class TestFormatRemotePath:
 
 
 class TestRunRemoteCommand:
-    @patch("nbkp.sync.ssh.subprocess.run")
+    @patch("nbkp.remote.subprocess.run")
     def test_run_remote_command(
         self, mock_run: object, rsync_server: RsyncServer
     ) -> None:

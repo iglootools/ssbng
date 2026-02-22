@@ -5,7 +5,7 @@ from __future__ import annotations
 import shlex
 import subprocess
 
-from ..config import RsyncServer
+from .config import RsyncServer
 
 
 def build_ssh_base_args(server: RsyncServer) -> list[str]:

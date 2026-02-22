@@ -13,7 +13,7 @@ from ..config import (
     RsyncServer,
     SyncConfig,
 )
-from .ssh import (
+from ..remote import (
     build_ssh_base_args,
     build_ssh_e_option,
     format_remote_path,
