@@ -19,7 +19,7 @@ Think of it as a tool replacing the rsync-based shell scripts you would write to
 
 ## Philosophy
 
-Guiding Design Principles:
+**Guiding Design Principles**
 - Laptop-centric workflows
 - Changing networks
 -	Drives being plugged/unplugged
@@ -27,13 +27,30 @@ Guiding Design Principles:
 - Not always-on infrastructure
 - Personal homelab / Raspberry Pi setups
 
-In terms of implementation, rather than reinventing its own storage format, network protocol, and encryption mechanisms, 
-this project leverages existing tools and libraries to keep things simple and reliable:
+**Implementation Principles**
+Rather than reinventing its own storage format, network protocol, and encryption mechanisms, 
+the project leverages existing tools and libraries to keep things simple and reliable:
 - Rsync (and SSH): Perform the backups locally and remotely, with support for filters, and more
 - Plain directory: Files are stored as-is, no complicated restore process
 - Btrfs snapshots: Optionally perform incremental backups thanks to snapshotting capabilities of btrfs, with automatic pruning of old snapshots based on retention policies. 
   Each snapshot (btrfs read-only subvolume) exposes a plain directory tree
 - Cryptsetup: Optionally encrypt your backups using encrypted volumes
+
+**Nomad backup metaphor**
+A nomad:
+- Moves between places
+- Sets up temporary camp
+- Carries essential belongings
+- Adapts to environment
+- Relies on what is present
+
+Which maps to:
+- Laptop
+- External drive
+- Home server
+- Network availability
+- Mount detection
+
 
 ## Features
 
