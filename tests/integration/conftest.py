@@ -11,7 +11,7 @@ from typing import Any, Generator
 
 import pytest
 
-from nbkp.config import RemoteVolume, RsyncServer
+from nbkp.config import RemoteVolume, RsyncServer, SshOptions
 
 DOCKER_DIR = Path(__file__).parent / "docker"
 
@@ -160,10 +160,10 @@ def rsync_server(
         port=docker_container["port"],
         user=docker_container["user"],
         ssh_key=docker_container["private_key"],
-        ssh_options=[
-            "StrictHostKeyChecking=no",
-            "UserKnownHostsFile=/dev/null",
-        ],
+        ssh_options=SshOptions(
+            strict_host_key_checking=False,
+            known_hosts_file="/dev/null",
+        ),
     )
 
 

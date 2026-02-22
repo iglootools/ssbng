@@ -103,7 +103,8 @@ def _check_remote_volume(volume: RemoteVolume, config: Config) -> VolumeStatus:
     """Check if a remote volume is active (SSH + .nbkp-vol marker)."""
     server = config.rsync_servers[volume.rsync_server]
     marker_path = f"{volume.path}/.nbkp-vol"
-    result = run_remote_command(server, ["test", "-f", marker_path])
+    proxy = config.resolve_proxy(server)
+    result = run_remote_command(server, ["test", "-f", marker_path], proxy)
     reasons: list[VolumeReason] = (
         [] if result.returncode == 0 else [VolumeReason.UNREACHABLE]
     )
@@ -131,7 +132,10 @@ def _check_endpoint_marker(
             return Path(rel_path).exists()
         case RemoteVolume():
             server = config.rsync_servers[volume.rsync_server]
-            result = run_remote_command(server, ["test", "-f", rel_path])
+            proxy = config.resolve_proxy(server)
+            result = run_remote_command(
+                server, ["test", "-f", rel_path], proxy
+            )
             return result.returncode == 0
 
 
@@ -144,7 +148,8 @@ def _check_command_available(
             return shutil.which(command) is not None
         case RemoteVolume():
             server = config.rsync_servers[volume.rsync_server]
-            result = run_remote_command(server, ["which", command])
+            proxy = config.resolve_proxy(server)
+            result = run_remote_command(server, ["which", command], proxy)
             return result.returncode == 0
 
 
@@ -160,7 +165,8 @@ def _check_btrfs_filesystem(volume: Volume, config: Config) -> bool:
             )
         case RemoteVolume():
             server = config.rsync_servers[volume.rsync_server]
-            result = run_remote_command(server, cmd)
+            proxy = config.resolve_proxy(server)
+            result = run_remote_command(server, cmd, proxy)
     return result.returncode == 0 and result.stdout.strip() == "btrfs"
 
 
@@ -179,7 +185,8 @@ def _check_directory_exists(volume: Volume, path: str, config: Config) -> bool:
             return Path(path).is_dir()
         case RemoteVolume():
             server = config.rsync_servers[volume.rsync_server]
-            result = run_remote_command(server, ["test", "-d", path])
+            proxy = config.resolve_proxy(server)
+            result = run_remote_command(server, ["test", "-d", path], proxy)
             return result.returncode == 0
 
 
@@ -203,7 +210,8 @@ def _check_btrfs_subvolume(
             )
         case RemoteVolume():
             server = config.rsync_servers[volume.rsync_server]
-            result = run_remote_command(server, cmd)
+            proxy = config.resolve_proxy(server)
+            result = run_remote_command(server, cmd, proxy)
     return result.returncode == 0 and result.stdout.strip() == "256"
 
 
@@ -223,7 +231,8 @@ def _check_btrfs_mount_option(
             )
         case RemoteVolume():
             server = config.rsync_servers[volume.rsync_server]
-            result = run_remote_command(server, cmd)
+            proxy = config.resolve_proxy(server)
+            result = run_remote_command(server, cmd, proxy)
     if result.returncode != 0:
         return False
     options = result.stdout.strip().split(",")

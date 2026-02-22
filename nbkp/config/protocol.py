@@ -41,15 +41,68 @@ class LocalVolume(_BaseModel):
     path: str = Field(..., min_length=1)
 
 
+class SshOptions(_BaseModel):
+    """SSH connection options.
+
+    These fields map to parameters across three layers:
+    - SSH client: ssh(1) -o options
+    - Paramiko: SSHClient.connect() kwargs
+      https://docs.paramiko.org/en/stable/api/client.html
+    - Fabric: Connection() constructor
+      https://docs.fabfile.org/en/stable/api/connection.html
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    # Connection
+    # SSH: ConnectTimeout | Paramiko: timeout | Fabric: connect_timeout
+    connect_timeout: int = Field(default=10, ge=1)
+    # SSH: Compression | Paramiko: compress
+    compress: bool = False
+    # SSH: ServerAliveInterval | Paramiko: transport.set_keepalive()
+    server_alive_interval: Optional[int] = Field(default=None, ge=1)
+
+    # Authentication
+    # Paramiko: allow_agent — use SSH agent for key lookup
+    allow_agent: bool = True
+    # Paramiko: look_for_keys — search ~/.ssh/ for keys
+    look_for_keys: bool = True
+
+    # Timeouts
+    # Paramiko: banner_timeout — wait for SSH banner
+    banner_timeout: Optional[float] = Field(default=None, ge=0)
+    # Paramiko: auth_timeout — wait for auth response
+    auth_timeout: Optional[float] = Field(default=None, ge=0)
+    # Paramiko: channel_timeout — wait for channel open
+    channel_timeout: Optional[float] = Field(default=None, ge=0)
+
+    # Host key verification
+    # SSH: StrictHostKeyChecking
+    # Paramiko: SSHClient.set_missing_host_key_policy()
+    strict_host_key_checking: bool = True
+    # SSH: UserKnownHostsFile
+    # Paramiko: SSHClient.load_host_keys()
+    known_hosts_file: Optional[str] = None
+
+    # Forwarding
+    # SSH: ForwardAgent | Fabric: forward_agent
+    forward_agent: bool = False
+
+    # Algorithm restrictions
+    # Paramiko: disabled_algorithms — disable specific algorithms
+    # (Paramiko/Fabric only — no SSH CLI equivalent)
+    disabled_algorithms: Optional[Dict[str, List[str]]] = None
+
+
 class RsyncServer(_BaseModel):
     model_config = ConfigDict(frozen=True)
     slug: Slug
     host: str = Field(..., min_length=1)
-    port: int = Field(22, ge=1, le=65535)
+    port: int = Field(default=22, ge=1, le=65535)
     user: Optional[str] = None
     ssh_key: Optional[str] = None
-    ssh_options: List[str] = Field(default_factory=list)
-    connect_timeout: int = Field(10, ge=1)
+    ssh_options: SshOptions = Field(default_factory=lambda: SshOptions())
+    proxy_jump: Optional[str] = None
 
 
 class RemoteVolume(_BaseModel):
@@ -171,8 +224,34 @@ class Config(_BaseModel):
             for slug, data in v.items()
         }
 
+    def resolve_proxy(self, server: RsyncServer) -> RsyncServer | None:
+        """Resolve the proxy-jump server, if any."""
+        if server.proxy_jump is not None:
+            return self.rsync_servers[server.proxy_jump]
+        return None
+
     @model_validator(mode="after")
     def validate_cross_references(self) -> Config:
+        for slug, server in self.rsync_servers.items():
+            if server.proxy_jump is not None:
+                if server.proxy_jump not in self.rsync_servers:
+                    raise ValueError(
+                        f"Server '{slug}' references "
+                        f"unknown proxy-jump server "
+                        f"'{server.proxy_jump}'"
+                    )
+                visited: set[str] = {slug}
+                current: str | None = server.proxy_jump
+                while current is not None:
+                    if current in visited:
+                        raise ValueError(
+                            f"Circular proxy-jump chain "
+                            f"detected starting from "
+                            f"server '{slug}'"
+                        )
+                    visited.add(current)
+                    current = self.rsync_servers[current].proxy_jump
+
         for vol_slug, vol in self.volumes.items():
             match vol:
                 case RemoteVolume():

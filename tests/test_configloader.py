@@ -14,6 +14,7 @@ from nbkp.config import (
     LocalVolume,
     RemoteVolume,
     RsyncServer,
+    SshOptions,
     SyncConfig,
     SyncEndpoint,
     find_config_file,
@@ -67,7 +68,7 @@ class TestLoadConfig:
         assert server.port == 5022
         assert server.user == "backup"
         assert server.ssh_key == "~/.ssh/key"
-        assert server.connect_timeout == 10
+        assert server.ssh_options.connect_timeout == 10
         assert "local-data" in cfg.volumes
         assert "nas" in cfg.volumes
         assert "photos-to-nas" in cfg.syncs
@@ -279,20 +280,151 @@ class TestLoadConfig:
             "--progress",
         ]
 
-    def test_connect_timeout(self, tmp_path: Path) -> None:
+    def test_ssh_options(self, tmp_path: Path) -> None:
         config = Config(
             rsync_servers={
                 "slow": RsyncServer(
                     slug="slow",
                     host="slow.example.com",
-                    connect_timeout=30,
+                    ssh_options=SshOptions(
+                        connect_timeout=30,
+                        strict_host_key_checking=False,
+                        known_hosts_file="/dev/null",
+                    ),
                 ),
             },
         )
-        p = tmp_path / "timeout.yaml"
+        p = tmp_path / "ssh_opts.yaml"
         p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
-        assert cfg.rsync_servers["slow"].connect_timeout == 30
+        opts = cfg.rsync_servers["slow"].ssh_options
+        assert opts.connect_timeout == 30
+        assert opts.strict_host_key_checking is False
+        assert opts.known_hosts_file == "/dev/null"
+
+    def test_ssh_options_server_alive_interval(self, tmp_path: Path) -> None:
+        config = Config(
+            rsync_servers={
+                "keepalive": RsyncServer(
+                    slug="keepalive",
+                    host="host.example.com",
+                    ssh_options=SshOptions(
+                        server_alive_interval=60,
+                    ),
+                ),
+            },
+        )
+        p = tmp_path / "keepalive.yaml"
+        p.write_text(_config_to_yaml(config))
+        cfg = load_config(str(p))
+        opts = cfg.rsync_servers["keepalive"].ssh_options
+        assert opts.server_alive_interval == 60
+
+    def test_ssh_options_channel_timeout(self, tmp_path: Path) -> None:
+        config = Config(
+            rsync_servers={
+                "ch-timeout": RsyncServer(
+                    slug="ch-timeout",
+                    host="host.example.com",
+                    ssh_options=SshOptions(
+                        channel_timeout=30.0,
+                    ),
+                ),
+            },
+        )
+        p = tmp_path / "ch_timeout.yaml"
+        p.write_text(_config_to_yaml(config))
+        cfg = load_config(str(p))
+        opts = cfg.rsync_servers["ch-timeout"].ssh_options
+        assert opts.channel_timeout == 30.0
+
+    def test_ssh_options_disabled_algorithms(self, tmp_path: Path) -> None:
+        config = Config(
+            rsync_servers={
+                "restricted": RsyncServer(
+                    slug="restricted",
+                    host="host.example.com",
+                    ssh_options=SshOptions(
+                        disabled_algorithms={
+                            "ciphers": ["aes128-cbc"],
+                        },
+                    ),
+                ),
+            },
+        )
+        p = tmp_path / "disabled_algs.yaml"
+        p.write_text(_config_to_yaml(config))
+        cfg = load_config(str(p))
+        opts = cfg.rsync_servers["restricted"].ssh_options
+        assert opts.disabled_algorithms == {
+            "ciphers": ["aes128-cbc"],
+        }
+
+    def test_proxy_jump_valid(self, tmp_path: Path) -> None:
+        config = Config(
+            rsync_servers={
+                "bastion": RsyncServer(
+                    slug="bastion",
+                    host="bastion.example.com",
+                ),
+                "target": RsyncServer(
+                    slug="target",
+                    host="target.internal",
+                    proxy_jump="bastion",
+                ),
+            },
+        )
+        p = tmp_path / "proxy.yaml"
+        p.write_text(_config_to_yaml(config))
+        cfg = load_config(str(p))
+        assert cfg.rsync_servers["target"].proxy_jump == "bastion"
+        proxy = cfg.resolve_proxy(cfg.rsync_servers["target"])
+        assert proxy is not None
+        assert proxy.host == "bastion.example.com"
+
+    def test_proxy_jump_unknown_server(self, tmp_path: Path) -> None:
+        p = tmp_path / "bad_proxy.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "rsync-servers": {
+                        "target": {
+                            "host": "target.internal",
+                            "proxy-jump": "nonexistent",
+                        },
+                    },
+                }
+            )
+        )
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        cause = excinfo.value.__cause__
+        assert cause is not None
+        assert "unknown proxy-jump server" in str(cause)
+
+    def test_proxy_jump_circular(self, tmp_path: Path) -> None:
+        p = tmp_path / "circular.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "rsync-servers": {
+                        "a": {
+                            "host": "a.example.com",
+                            "proxy-jump": "b",
+                        },
+                        "b": {
+                            "host": "b.example.com",
+                            "proxy-jump": "a",
+                        },
+                    },
+                }
+            )
+        )
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        cause = excinfo.value.__cause__
+        assert cause is not None
+        assert "Circular proxy-jump chain" in str(cause)
 
     def test_invalid_filter_entry(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_filter.yaml"

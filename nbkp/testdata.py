@@ -23,6 +23,14 @@ from .status import (
 _SNAP_BASE = "/mnt/usb-backup/snapshots"
 
 
+def _bastion_server() -> RsyncServer:
+    return RsyncServer(
+        slug="bastion",
+        host="bastion.example.com",
+        user="admin",
+    )
+
+
 def _nas_server() -> RsyncServer:
     return RsyncServer(
         slug="nas",
@@ -30,7 +38,7 @@ def _nas_server() -> RsyncServer:
         port=5022,
         user="backup",
         ssh_key="~/.ssh/nas_ed25519",
-        connect_timeout=10,
+        proxy_jump="bastion",
     )
 
 
@@ -56,7 +64,10 @@ def status_config() -> Config:
         slug="external-drive", path="/mnt/external"
     )
     return Config(
-        rsync_servers={"nas": _nas_server()},
+        rsync_servers={
+            "bastion": _bastion_server(),
+            "nas": _nas_server(),
+        },
         volumes=volumes,
         syncs={
             "photos-to-usb": SyncConfig(
@@ -175,7 +186,10 @@ def status_data(
 def troubleshoot_config() -> Config:
     """Config designed to trigger every troubleshoot reason."""
     return Config(
-        rsync_servers={"nas": _nas_server()},
+        rsync_servers={
+            "bastion": _bastion_server(),
+            "nas": _nas_server(),
+        },
         volumes=_base_volumes(),
         syncs={
             "disabled-sync": SyncConfig(

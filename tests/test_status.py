@@ -12,6 +12,7 @@ from nbkp.config import (
     LocalVolume,
     RemoteVolume,
     RsyncServer,
+    SshOptions,
     SyncConfig,
     SyncEndpoint,
 )
@@ -57,8 +58,8 @@ class TestRsyncServer:
         assert server.port == 22
         assert server.user is None
         assert server.ssh_key is None
-        assert server.ssh_options == []
-        assert server.connect_timeout == 10
+        assert server.ssh_options == SshOptions()
+        assert server.ssh_options.connect_timeout == 10
 
     def test_construction_full(self) -> None:
         server = RsyncServer(
@@ -67,12 +68,24 @@ class TestRsyncServer:
             port=2222,
             user="backup",
             ssh_key="~/.ssh/id_rsa",
-            connect_timeout=30,
+            ssh_options=SshOptions(connect_timeout=30),
         )
         assert server.port == 2222
         assert server.user == "backup"
         assert server.ssh_key == "~/.ssh/id_rsa"
-        assert server.connect_timeout == 30
+        assert server.ssh_options.connect_timeout == 30
+
+    def test_construction_with_proxy_jump(self) -> None:
+        server = RsyncServer(
+            slug="target",
+            host="target.internal",
+            proxy_jump="bastion",
+        )
+        assert server.proxy_jump == "bastion"
+
+    def test_proxy_jump_defaults_to_none(self) -> None:
+        server = RsyncServer(slug="nas-server", host="nas.local")
+        assert server.proxy_jump is None
 
 
 class TestRemoteVolume:
@@ -376,7 +389,7 @@ class TestCheckRemoteVolume:
         assert status.reasons == []
         server = config.rsync_servers["nas-server"]
         mock_run.assert_called_once_with(
-            server, ["test", "-f", "/backup/.nbkp-vol"]
+            server, ["test", "-f", "/backup/.nbkp-vol"], None
         )
 
     @patch("nbkp.status.run_remote_command")
@@ -413,7 +426,7 @@ class TestCheckCommandAvailableRemote:
         vol, config = _remote_config()
         assert _check_command_available(vol, "rsync", config) is True
         server = config.rsync_servers["nas-server"]
-        mock_run.assert_called_once_with(server, ["which", "rsync"])
+        mock_run.assert_called_once_with(server, ["which", "rsync"], None)
 
     @patch("nbkp.status.run_remote_command")
     def test_command_not_found(self, mock_run: MagicMock) -> None:
@@ -421,7 +434,7 @@ class TestCheckCommandAvailableRemote:
         vol, config = _remote_config()
         assert _check_command_available(vol, "btrfs", config) is False
         server = config.rsync_servers["nas-server"]
-        mock_run.assert_called_once_with(server, ["which", "btrfs"])
+        mock_run.assert_called_once_with(server, ["which", "btrfs"], None)
 
 
 class TestCheckBtrfsFilesystemLocal:
@@ -462,6 +475,7 @@ class TestCheckBtrfsFilesystemRemote:
         mock_run.assert_called_once_with(
             server,
             ["stat", "-f", "-c", "%T", "/backup"],
+            None,
         )
 
     @patch("nbkp.status.run_remote_command")
@@ -521,6 +535,7 @@ class TestCheckBtrfsSubvolumeRemote:
         mock_run.assert_called_once_with(
             server,
             ["stat", "-c", "%i", "/backup"],
+            None,
         )
 
     @patch("nbkp.status.run_remote_command")
@@ -532,6 +547,7 @@ class TestCheckBtrfsSubvolumeRemote:
         mock_run.assert_called_once_with(
             server,
             ["stat", "-c", "%i", "/backup/data"],
+            None,
         )
 
     @patch("nbkp.status.run_remote_command")
@@ -597,6 +613,7 @@ class TestCheckBtrfsMountOptionRemote:
         mock_run.assert_called_once_with(
             server,
             ["findmnt", "-n", "-o", "OPTIONS", "/backup"],
+            None,
         )
 
     @patch("nbkp.status.run_remote_command")
@@ -1383,7 +1400,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer, cmd: list[str]
+            server: RsyncServer,
+            cmd: list[str],
+            proxy: RsyncServer | None = None,
         ) -> MagicMock:
             if cmd == ["test", "-f", "/data/data/.nbkp-src"]:
                 return MagicMock(returncode=0)
@@ -1445,7 +1464,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer, cmd: list[str]
+            server: RsyncServer,
+            cmd: list[str],
+            proxy: RsyncServer | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1515,7 +1536,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer, cmd: list[str]
+            server: RsyncServer,
+            cmd: list[str],
+            proxy: RsyncServer | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1587,7 +1610,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer, cmd: list[str]
+            server: RsyncServer,
+            cmd: list[str],
+            proxy: RsyncServer | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1667,7 +1692,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer, cmd: list[str]
+            server: RsyncServer,
+            cmd: list[str],
+            proxy: RsyncServer | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1754,7 +1781,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer, cmd: list[str]
+            server: RsyncServer,
+            cmd: list[str],
+            proxy: RsyncServer | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1851,7 +1880,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer, cmd: list[str]
+            server: RsyncServer,
+            cmd: list[str],
+            proxy: RsyncServer | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1926,7 +1957,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer, cmd: list[str]
+            server: RsyncServer,
+            cmd: list[str],
+            proxy: RsyncServer | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2023,7 +2056,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer, cmd: list[str]
+            server: RsyncServer,
+            cmd: list[str],
+            proxy: RsyncServer | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2137,7 +2172,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer, cmd: list[str]
+            server: RsyncServer,
+            cmd: list[str],
+            proxy: RsyncServer | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2241,4 +2278,5 @@ class TestCheckRemoteVolumeSpaces:
         mock_run.assert_called_once_with(
             server,
             ["test", "-f", "/my backup/.nbkp-vol"],
+            None,
         )

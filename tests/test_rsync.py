@@ -113,7 +113,8 @@ class TestBuildRsyncCommandLocalToRemote:
             "--delete-excluded",
             "--safe-links",
             "-e",
-            "ssh -p 5022 -i ~/.ssh/key",
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+            " -p 5022 -i ~/.ssh/key",
             "/mnt/src/photos/",
             "backup@nas.local:/backup/photos/latest/",
         ]
@@ -151,7 +152,7 @@ class TestBuildRsyncCommandRemoteToLocal:
             "--delete-excluded",
             "--safe-links",
             "-e",
-            "ssh",
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes",
             "admin@server.local:/data/",
             "/mnt/dst/backup/latest/",
         ]
@@ -206,7 +207,10 @@ class TestBuildRsyncCommandRemoteToRemote:
         assert inner.startswith("rsync -a --delete")
         assert "--delete-excluded" in inner
         assert "--safe-links" in inner
-        assert "-e 'ssh -p 2222'" in inner
+        assert (
+            "-e 'ssh -o ConnectTimeout=10"
+            " -o BatchMode=yes -p 2222'" in inner
+        )
         assert "srcuser@src.local:/data/photos/" in inner
         assert "/backup/photos/latest/" in inner
 
@@ -517,6 +521,160 @@ class TestBuildRsyncCommandOptions:
         assert inner.startswith(
             "rsync -a --delete --delete-excluded --safe-links" " --compress"
         )
+
+
+class TestBuildRsyncCommandProxyJump:
+    def test_local_to_remote_with_proxy(self) -> None:
+        bastion = RsyncServer(
+            slug="bastion",
+            host="bastion.example.com",
+            port=2222,
+            user="admin",
+        )
+        nas_server = RsyncServer(
+            slug="nas-server",
+            host="nas.local",
+            port=5022,
+            user="backup",
+            ssh_key="~/.ssh/key",
+            proxy_jump="bastion",
+        )
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = RemoteVolume(
+            slug="dst",
+            rsync_server="nas-server",
+            path="/backup",
+        )
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            rsync_servers={
+                "bastion": bastion,
+                "nas-server": nas_server,
+            },
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        assert cmd == [
+            "rsync",
+            "-a",
+            "--delete",
+            "--delete-excluded",
+            "--safe-links",
+            "-e",
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+            " -p 5022 -i ~/.ssh/key"
+            " -J admin@bastion.example.com:2222",
+            "/mnt/src/",
+            "backup@nas.local:/backup/latest/",
+        ]
+
+    def test_remote_to_local_with_proxy(self) -> None:
+        bastion = RsyncServer(
+            slug="bastion",
+            host="bastion.example.com",
+            user="admin",
+        )
+        server = RsyncServer(
+            slug="server",
+            host="server.internal",
+            user="backup",
+            proxy_jump="bastion",
+        )
+        src = RemoteVolume(
+            slug="src",
+            rsync_server="server",
+            path="/data",
+        )
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            rsync_servers={
+                "bastion": bastion,
+                "server": server,
+            },
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        assert cmd == [
+            "rsync",
+            "-a",
+            "--delete",
+            "--delete-excluded",
+            "--safe-links",
+            "-e",
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+            " -J admin@bastion.example.com",
+            "backup@server.internal:/data/",
+            "/mnt/dst/latest/",
+        ]
+
+    def test_remote_to_remote_with_proxy(self) -> None:
+        bastion = RsyncServer(
+            slug="bastion",
+            host="bastion.example.com",
+            user="admin",
+        )
+        src_server = RsyncServer(
+            slug="src-server",
+            host="src.internal",
+            user="srcuser",
+            proxy_jump="bastion",
+        )
+        dst_server = RsyncServer(
+            slug="dst-server",
+            host="dst.internal",
+            user="dstuser",
+            proxy_jump="bastion",
+        )
+        src = RemoteVolume(
+            slug="src",
+            rsync_server="src-server",
+            path="/data",
+        )
+        dst = RemoteVolume(
+            slug="dst",
+            rsync_server="dst-server",
+            path="/backup",
+        )
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            rsync_servers={
+                "bastion": bastion,
+                "src-server": src_server,
+                "dst-server": dst_server,
+            },
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+
+        # Should SSH into destination host with proxy
+        assert cmd[0] == "ssh"
+        assert "-J" in cmd
+        proxy_idx = cmd.index("-J")
+        assert cmd[proxy_idx + 1] == ("admin@bastion.example.com")
+        assert "dstuser@dst.internal" in cmd
+
+        # Inner rsync should also have proxy for source
+        inner = cmd[-1]
+        assert "-J admin@bastion.example.com" in inner
 
 
 class TestBuildRsyncCommandSpacesInPaths:

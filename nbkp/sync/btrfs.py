@@ -49,7 +49,8 @@ def create_snapshot(
     match dst_vol:
         case RemoteVolume():
             server = config.rsync_servers[dst_vol.rsync_server]
-            result = run_remote_command(server, cmd)
+            proxy = config.resolve_proxy(server)
+            result = run_remote_command(server, cmd, proxy)
         case LocalVolume():
             result = subprocess.run(
                 cmd,
@@ -72,7 +73,8 @@ def list_snapshots(sync: SyncConfig, config: Config) -> list[str]:
     match dst_vol:
         case RemoteVolume():
             server = config.rsync_servers[dst_vol.rsync_server]
-            result = run_remote_command(server, ["ls", snapshots_dir])
+            proxy = config.resolve_proxy(server)
+            result = run_remote_command(server, ["ls", snapshots_dir], proxy)
         case LocalVolume():
             result = subprocess.run(
                 ["ls", snapshots_dir],
@@ -106,7 +108,8 @@ def _make_snapshot_writable(
     match volume:
         case RemoteVolume():
             server = config.rsync_servers[volume.rsync_server]
-            result = run_remote_command(server, cmd)
+            proxy = config.resolve_proxy(server)
+            result = run_remote_command(server, cmd, proxy)
         case LocalVolume():
             result = subprocess.run(
                 cmd,
@@ -137,7 +140,8 @@ def delete_snapshot(
     match volume:
         case RemoteVolume():
             server = config.rsync_servers[volume.rsync_server]
-            result = run_remote_command(server, cmd)
+            proxy = config.resolve_proxy(server)
+            result = run_remote_command(server, cmd, proxy)
         case LocalVolume():
             result = subprocess.run(
                 cmd,

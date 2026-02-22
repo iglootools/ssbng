@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from nbkp.config import RsyncServer
+from nbkp.config import RsyncServer, SshOptions
 from nbkp.remote import (
     build_ssh_base_args,
     build_ssh_e_option,
@@ -12,16 +12,20 @@ from nbkp.remote import (
     run_remote_command,
 )
 
+_DEFAULT_O_OPTIONS = [
+    "-o",
+    "ConnectTimeout=10",
+    "-o",
+    "BatchMode=yes",
+]
+
 
 class TestBuildSshBaseArgs:
     def test_minimal(self, rsync_server_minimal: RsyncServer) -> None:
         args = build_ssh_base_args(rsync_server_minimal)
         assert args == [
             "ssh",
-            "-o",
-            "ConnectTimeout=10",
-            "-o",
-            "BatchMode=yes",
+            *_DEFAULT_O_OPTIONS,
             "nas2.example.com",
         ]
 
@@ -29,10 +33,7 @@ class TestBuildSshBaseArgs:
         args = build_ssh_base_args(rsync_server)
         assert args == [
             "ssh",
-            "-o",
-            "ConnectTimeout=10",
-            "-o",
-            "BatchMode=yes",
+            *_DEFAULT_O_OPTIONS,
             "-p",
             "5022",
             "-i",
@@ -44,18 +45,15 @@ class TestBuildSshBaseArgs:
         server = RsyncServer(
             slug="host-server",
             host="host.example.com",
-            ssh_options=[
-                "StrictHostKeyChecking=no",
-                "UserKnownHostsFile=/dev/null",
-            ],
+            ssh_options=SshOptions(
+                strict_host_key_checking=False,
+                known_hosts_file="/dev/null",
+            ),
         )
         args = build_ssh_base_args(server)
         assert args == [
             "ssh",
-            "-o",
-            "ConnectTimeout=10",
-            "-o",
-            "BatchMode=yes",
+            *_DEFAULT_O_OPTIONS,
             "-o",
             "StrictHostKeyChecking=no",
             "-o",
@@ -67,7 +65,7 @@ class TestBuildSshBaseArgs:
         server = RsyncServer(
             slug="slow-server",
             host="slow.example.com",
-            connect_timeout=30,
+            ssh_options=SshOptions(connect_timeout=30),
         )
         args = build_ssh_base_args(server)
         assert args == [
@@ -79,24 +77,157 @@ class TestBuildSshBaseArgs:
             "slow.example.com",
         ]
 
+    def test_compress(self) -> None:
+        server = RsyncServer(
+            slug="compressed",
+            host="host.example.com",
+            ssh_options=SshOptions(compress=True),
+        )
+        args = build_ssh_base_args(server)
+        assert args == [
+            "ssh",
+            *_DEFAULT_O_OPTIONS,
+            "-o",
+            "Compression=yes",
+            "host.example.com",
+        ]
+
+    def test_forward_agent(self) -> None:
+        server = RsyncServer(
+            slug="forwarded",
+            host="host.example.com",
+            ssh_options=SshOptions(forward_agent=True),
+        )
+        args = build_ssh_base_args(server)
+        assert args == [
+            "ssh",
+            *_DEFAULT_O_OPTIONS,
+            "-o",
+            "ForwardAgent=yes",
+            "host.example.com",
+        ]
+
+    def test_server_alive_interval(self) -> None:
+        server = RsyncServer(
+            slug="keepalive",
+            host="host.example.com",
+            ssh_options=SshOptions(
+                server_alive_interval=60,
+            ),
+        )
+        args = build_ssh_base_args(server)
+        assert args == [
+            "ssh",
+            *_DEFAULT_O_OPTIONS,
+            "-o",
+            "ServerAliveInterval=60",
+            "host.example.com",
+        ]
+
+    def test_proxy_jump_with_user_and_port(self) -> None:
+        server = RsyncServer(
+            slug="target",
+            host="target.example.com",
+        )
+        proxy = RsyncServer(
+            slug="bastion",
+            host="bastion.example.com",
+            port=2222,
+            user="admin",
+        )
+        args = build_ssh_base_args(server, proxy)
+        assert args == [
+            "ssh",
+            *_DEFAULT_O_OPTIONS,
+            "-J",
+            "admin@bastion.example.com:2222",
+            "target.example.com",
+        ]
+
+    def test_proxy_jump_default_port(self) -> None:
+        server = RsyncServer(
+            slug="target",
+            host="target.example.com",
+        )
+        proxy = RsyncServer(
+            slug="bastion",
+            host="bastion.example.com",
+            user="admin",
+        )
+        args = build_ssh_base_args(server, proxy)
+        assert args == [
+            "ssh",
+            *_DEFAULT_O_OPTIONS,
+            "-J",
+            "admin@bastion.example.com",
+            "target.example.com",
+        ]
+
+    def test_proxy_jump_no_user(self) -> None:
+        server = RsyncServer(
+            slug="target",
+            host="target.example.com",
+        )
+        proxy = RsyncServer(
+            slug="bastion",
+            host="bastion.example.com",
+            port=2222,
+        )
+        args = build_ssh_base_args(server, proxy)
+        assert args == [
+            "ssh",
+            *_DEFAULT_O_OPTIONS,
+            "-J",
+            "bastion.example.com:2222",
+            "target.example.com",
+        ]
+
+
+_DEFAULT_E_PREFIX = "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+
 
 class TestBuildSshEOption:
     def test_minimal(self, rsync_server_minimal: RsyncServer) -> None:
         result = build_ssh_e_option(rsync_server_minimal)
-        assert result == ["-e", "ssh"]
+        assert result == ["-e", _DEFAULT_E_PREFIX]
 
     def test_full(self, rsync_server: RsyncServer) -> None:
         result = build_ssh_e_option(rsync_server)
-        assert result == ["-e", "ssh -p 5022 -i ~/.ssh/key"]
+        assert result == [
+            "-e",
+            f"{_DEFAULT_E_PREFIX} -p 5022 -i ~/.ssh/key",
+        ]
 
     def test_with_ssh_options(self) -> None:
         server = RsyncServer(
             slug="host-server",
             host="host.example.com",
-            ssh_options=["StrictHostKeyChecking=no"],
+            ssh_options=SshOptions(
+                strict_host_key_checking=False,
+            ),
         )
         result = build_ssh_e_option(server)
-        assert result == ["-e", "ssh -o StrictHostKeyChecking=no"]
+        assert result == [
+            "-e",
+            f"{_DEFAULT_E_PREFIX}" " -o StrictHostKeyChecking=no",
+        ]
+
+    def test_proxy_jump(self) -> None:
+        server = RsyncServer(
+            slug="target",
+            host="target.example.com",
+        )
+        proxy = RsyncServer(
+            slug="bastion",
+            host="bastion.example.com",
+            port=2222,
+            user="admin",
+        )
+        result = build_ssh_e_option(server, proxy)
+        assert result == [
+            "-e",
+            f"{_DEFAULT_E_PREFIX}" " -J admin@bastion.example.com:2222",
+        ]
 
 
 class TestFormatRemotePath:
@@ -110,28 +241,131 @@ class TestFormatRemotePath:
 
 
 class TestRunRemoteCommand:
-    @patch("nbkp.remote.subprocess.run")
+    @patch("nbkp.remote.fabricssh.paramiko")
+    @patch("nbkp.remote.fabricssh.Connection")
     def test_run_remote_command(
-        self, mock_run: object, rsync_server: RsyncServer
+        self,
+        mock_conn_cls: MagicMock,
+        mock_paramiko: MagicMock,
+        rsync_server: RsyncServer,
     ) -> None:
-        run_remote_command(rsync_server, ["ls", "/tmp"])
-        from unittest.mock import call
+        mock_conn = mock_conn_cls.return_value.__enter__.return_value
+        mock_result = MagicMock(exited=0, stdout="file1\nfile2\n", stderr="")
+        mock_conn.run.return_value = mock_result
 
-        expected_args = [
-            "ssh",
-            "-o",
-            "ConnectTimeout=10",
-            "-o",
-            "BatchMode=yes",
-            "-p",
-            "5022",
-            "-i",
-            "~/.ssh/key",
-            "backup@nas.example.com",
-            "ls /tmp",
-        ]
-        assert mock_run.call_args == call(  # type: ignore[attr-defined]
-            expected_args,
-            capture_output=True,
-            text=True,
+        result = run_remote_command(rsync_server, ["ls", "/tmp"])
+
+        mock_conn_cls.assert_called_once_with(
+            host="nas.example.com",
+            port=5022,
+            user="backup",
+            connect_kwargs={
+                "allow_agent": True,
+                "look_for_keys": True,
+                "compress": False,
+                "key_filename": "~/.ssh/key",
+            },
+            connect_timeout=10,
+            forward_agent=False,
+            gateway=None,
         )
+        mock_conn.run.assert_called_once_with(
+            "ls /tmp",
+            warn=True,
+            hide=True,
+            in_stream=False,
+        )
+        assert result.returncode == 0
+        assert result.stdout == "file1\nfile2\n"
+        assert result.stderr == ""
+
+    @patch("nbkp.remote.fabricssh.paramiko")
+    @patch("nbkp.remote.fabricssh.Connection")
+    def test_channel_timeout_and_disabled_algorithms(
+        self,
+        mock_conn_cls: MagicMock,
+        mock_paramiko: MagicMock,
+    ) -> None:
+        server = RsyncServer(
+            slug="advanced",
+            host="host.example.com",
+            ssh_options=SshOptions(
+                channel_timeout=30.0,
+                disabled_algorithms={
+                    "ciphers": ["aes128-cbc"],
+                },
+            ),
+        )
+        mock_conn = mock_conn_cls.return_value.__enter__.return_value
+        mock_result = MagicMock(exited=0, stdout="ok\n", stderr="")
+        mock_conn.run.return_value = mock_result
+
+        run_remote_command(server, ["echo", "ok"])
+
+        mock_conn_cls.assert_called_once_with(
+            host="host.example.com",
+            port=22,
+            user=None,
+            connect_kwargs={
+                "allow_agent": True,
+                "look_for_keys": True,
+                "compress": False,
+                "channel_timeout": 30.0,
+                "disabled_algorithms": {
+                    "ciphers": ["aes128-cbc"],
+                },
+            },
+            connect_timeout=10,
+            forward_agent=False,
+            gateway=None,
+        )
+
+    @patch("nbkp.remote.fabricssh.paramiko")
+    @patch("nbkp.remote.fabricssh.Connection")
+    def test_server_alive_interval_calls_set_keepalive(
+        self,
+        mock_conn_cls: MagicMock,
+        mock_paramiko: MagicMock,
+    ) -> None:
+        server = RsyncServer(
+            slug="keepalive",
+            host="host.example.com",
+            ssh_options=SshOptions(
+                server_alive_interval=60,
+            ),
+        )
+        mock_conn = mock_conn_cls.return_value.__enter__.return_value
+        mock_result = MagicMock(exited=0, stdout="ok\n", stderr="")
+        mock_conn.run.return_value = mock_result
+
+        run_remote_command(server, ["echo", "ok"])
+
+        mock_conn.transport.set_keepalive.assert_called_once_with(60)
+
+    @patch("nbkp.remote.fabricssh.paramiko")
+    @patch("nbkp.remote.fabricssh.Connection")
+    def test_proxy_server_creates_gateway(
+        self,
+        mock_conn_cls: MagicMock,
+        mock_paramiko: MagicMock,
+    ) -> None:
+        server = RsyncServer(
+            slug="target",
+            host="target.example.com",
+        )
+        proxy = RsyncServer(
+            slug="bastion",
+            host="bastion.example.com",
+            user="admin",
+        )
+        mock_conn = mock_conn_cls.return_value.__enter__.return_value
+        mock_result = MagicMock(exited=0, stdout="ok\n", stderr="")
+        mock_conn.run.return_value = mock_result
+
+        run_remote_command(server, ["echo", "ok"], proxy)
+
+        # Connection is called twice: once for proxy, once
+        # for target
+        assert mock_conn_cls.call_count == 2
+        target_call = mock_conn_cls.call_args_list[1]
+        assert target_call.kwargs["gateway"] is not None

@@ -45,9 +45,40 @@ To be considered active, a local volume must have a `.nbkp-vol` file in the root
 ### Rsync Server
 
 A reusable configuration for an SSH server that can be shared between multiple remote volumes.
-Provides the host, port, user, ssh key, ssh options, and connect timeout.
+Provides the host, port, user, ssh key, structured SSH options, and optional proxy-jump.
 
-The `connect-timeout` field controls the SSH connection timeout in seconds (default: `10`).
+The `proxy-jump` field references another rsync-server by slug, enabling connections through a bastion/jump host. This maps to SSH's `-J` flag and Fabric's `gateway` parameter. Circular proxy-jump chains are detected and rejected at config load time.
+
+```yaml
+rsync-servers:
+  bastion:
+    host: bastion.example.com
+    user: admin
+
+  nas:
+    host: nas.internal
+    user: backup
+    proxy-jump: bastion
+```
+
+The `ssh-options` field is an optional dictionary of typed SSH connection settings. These map to parameters across SSH (`ssh(1) -o`), Paramiko (`SSHClient.connect()`), and Fabric (`Connection()`). Available options:
+
+| Field | Default | Description |
+|---|---|---|
+| `connect-timeout` | `10` | SSH connection timeout in seconds |
+| `compress` | `false` | Enable SSH compression |
+| `server-alive-interval` | `null` | Keepalive interval in seconds (prevents connection drops) |
+| `allow-agent` | `true` | Use SSH agent for key lookup |
+| `look-for-keys` | `true` | Search `~/.ssh/` for keys |
+| `banner-timeout` | `null` | Wait time for SSH banner |
+| `auth-timeout` | `null` | Wait time for auth response |
+| `channel-timeout` | `null` | Wait time for channel open (Paramiko/Fabric only) |
+| `strict-host-key-checking` | `true` | Verify remote host key |
+| `known-hosts-file` | `null` | Custom known hosts file path |
+| `forward-agent` | `false` | Enable SSH agent forwarding |
+| `disabled-algorithms` | `null` | Disable specific SSH algorithms (Paramiko/Fabric only) |
+
+Note: `channel-timeout` and `disabled-algorithms` are only used by the Fabric/Paramiko connection path (status checks, btrfs operations). They have no SSH CLI equivalent and do not affect rsync's `-e` option.
 
 ### Rsync Remote Volume
 
@@ -116,15 +147,28 @@ When both inline `filters` and `filter-file` are present, inline filters are app
 
 ```yaml
 rsync-servers:
-  # SSH connection details for the NAS
+  # Bastion/jump host for reaching internal servers
+  bastion:
+    host: bastion.example.com
+    user: admin
+    ssh-options:
+      server-alive-interval: 60  # keepalive every 60s
+
+  # SSH connection details for the NAS (via bastion)
   nas:
-    host: nas.example.com
+    host: nas.internal
     port: 5022                  # optional, defaults to 22
     user: backup                # optional
     ssh-key: ~/.ssh/nas_ed25519 # optional
-    connect-timeout: 30         # optional, defaults to 10 (seconds)
-    ssh-options:                # optional
-      - StrictHostKeyChecking=no
+    proxy-jump: bastion         # connect through bastion
+    ssh-options:                # optional, all fields have defaults
+      connect-timeout: 30
+      strict-host-key-checking: false
+      known-hosts-file: /dev/null
+      compress: true
+      disabled-algorithms:      # Paramiko/Fabric only
+        ciphers:
+          - aes128-cbc
 
 volumes:
   # Local volume on a removable drive

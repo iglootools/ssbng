@@ -100,12 +100,19 @@ def build_rsync_command(
                 dry_run,
                 link_dest,
                 verbose,
+                src_proxy=config.resolve_proxy(src_server),
+                dst_proxy=config.resolve_proxy(dst_server),
             )
         case (RemoteVolume() as sv, LocalVolume()):
             src_server = config.rsync_servers[sv.rsync_server]
             rsync_args = _base_rsync_args(sync, dry_run, link_dest, verbose)
             rsync_args.extend(_filter_args(sync))
-            rsync_args.extend(build_ssh_e_option(src_server))
+            rsync_args.extend(
+                build_ssh_e_option(
+                    src_server,
+                    config.resolve_proxy(src_server),
+                )
+            )
             rsync_args.append(format_remote_path(src_server, src_path) + "/")
             rsync_args.append(f"{dst_path}/latest/")
             return rsync_args
@@ -113,7 +120,12 @@ def build_rsync_command(
             dst_server = config.rsync_servers[dv.rsync_server]
             rsync_args = _base_rsync_args(sync, dry_run, link_dest, verbose)
             rsync_args.extend(_filter_args(sync))
-            rsync_args.extend(build_ssh_e_option(dst_server))
+            rsync_args.extend(
+                build_ssh_e_option(
+                    dst_server,
+                    config.resolve_proxy(dst_server),
+                )
+            )
             rsync_args.append(f"{src_path}/")
             rsync_args.append(
                 format_remote_path(dst_server, dst_path) + "/latest/"
@@ -136,6 +148,8 @@ def _build_remote_to_remote(
     dry_run: bool,
     link_dest: str | None,
     verbose: int = 0,
+    src_proxy: RsyncServer | None = None,
+    dst_proxy: RsyncServer | None = None,
 ) -> list[str]:
     """Build remote-to-remote rsync command (SSH into dest, rsync from src)."""
     options = (
@@ -154,15 +168,7 @@ def _build_remote_to_remote(
         inner_rsync_parts.append(f"--link-dest={link_dest}")
     inner_rsync_parts.extend(_filter_args(sync))
 
-    # SSH options for source host (from destination's perspective)
-    src_ssh_parts = ["ssh"]
-    if src_server.port != 22:
-        src_ssh_parts.extend(["-p", str(src_server.port)])
-    if src_server.ssh_key:
-        src_ssh_parts.extend(["-i", src_server.ssh_key])
-
-    if len(src_ssh_parts) > 1:
-        inner_rsync_parts.extend(["-e", " ".join(src_ssh_parts)])
+    inner_rsync_parts.extend(build_ssh_e_option(src_server, src_proxy))
 
     src_remote = format_remote_path(src_server, src_path)
     inner_rsync_parts.append(f"{src_remote}/")
@@ -170,7 +176,7 @@ def _build_remote_to_remote(
 
     inner_command = " ".join(shlex.quote(p) for p in inner_rsync_parts)
 
-    return build_ssh_base_args(dst_server) + [inner_command]
+    return build_ssh_base_args(dst_server, dst_proxy) + [inner_command]
 
 
 def run_rsync(
