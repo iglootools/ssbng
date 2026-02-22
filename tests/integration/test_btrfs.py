@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from nbkp.btrfs import (
+from nbkp.sync.btrfs import (
     create_snapshot,
     get_latest_snapshot,
     list_snapshots,

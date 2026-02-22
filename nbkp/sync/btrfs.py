@@ -5,8 +5,8 @@ from __future__ import annotations
 import subprocess
 from datetime import datetime, timezone
 
-from .config import Config, LocalVolume, RemoteVolume, SyncConfig, Volume
-from .sync.ssh import run_remote_command
+from ..config import Config, LocalVolume, RemoteVolume, SyncConfig, Volume
+from .ssh import run_remote_command
 
 
 def _resolve_dest_path(sync: SyncConfig, config: Config) -> str:

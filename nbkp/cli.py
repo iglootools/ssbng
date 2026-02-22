@@ -11,7 +11,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from .config import Config, ConfigError, load_config
 from .status import SyncReason, SyncStatus, VolumeStatus, check_all_syncs
-from .btrfs import list_snapshots, prune_snapshots
+from .sync.btrfs import list_snapshots, prune_snapshots
 from .output import (
     OutputFormat,
     print_human_prune_results,
