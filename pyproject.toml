@@ -3,6 +3,8 @@ name = "nbkp"
 description = "Nomad Backup: A robust backup tool powered by rsync, designed for both local and remote targets—including removable drives and intermittently available backup servers. It optionally leverages btrfs snapshots for incremental backups and encrypted volumes for enhanced security."
 authors = [{name = "Sami Dalouche", email = "sami.dalouche@gmail.com"}]
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.14"
 dependencies = [
     "typer (>=0.24.0,<1.0.0)",
