@@ -1,5 +1,13 @@
 # Nomad Backup (nbkp)
 
+![Stable Version](https://img.shields.io/pypi/v/nbkp?label=stable)
+![Pre-release Version](https://img.shields.io/github/v/release/iglootools/nbkp?label=pre-release&include_prereleases&sort=semver)
+![Python Versions](https://img.shields.io/pypi/pyversions/nbkp)
+![Download Stats](https://img.shields.io/pypi/dm/nbkp)
+![GitHub Stars](https://img.shields.io/github/stars/iglootools/nbkp)
+![License](https://img.shields.io/github/license/iglootools/nbkp)
+![CI Status](https://github.com/iglootools/nbkp/actions/workflows/test.yml/badge.svg?branch=main)
+
 A robust backup tool powered by rsync, designed for both local and remote targets—including removable drives and intermittently available backup servers. 
 It optionally leverages btrfs snapshots for incremental backups and encrypted volumes for enhanced security.
 
@@ -32,7 +40,7 @@ Rather than reinventing its own storage format, network protocol, and encryption
 the project leverages existing tools and libraries to keep things simple and reliable:
 - Rsync (and SSH): Perform the backups locally and remotely, with support for filters, and more
 - Plain directory: Files are stored as-is, no complicated restore process
-- Btrfs snapshots: Optionally perform incremental backups thanks to snapshotting capabilities of btrfs, with automatic pruning of old snapshots based on retention policies. 
+- Btrfs snapshots: Optionally perform incremental backups thanks to the snapshotting capabilities of btrfs, with automatic pruning of old snapshots based on retention policies. 
   Each snapshot (btrfs read-only subvolume) exposes a plain directory tree
 - Cryptsetup: Optionally encrypt your backups using encrypted volumes
 
@@ -71,35 +79,35 @@ All commands provide the following outputs:
 
 ## Usage
 
-See [docs/usage.md](docs/usage.md) for detailed usage instructions for both the CLI and Python API, including examples.
+See [docs/usage.md](https://github.com/iglootools/nbkp/blob/main/docs/usage.md) for detailed usage instructions for both the CLI and Python API, including examples.
 
 ## Architecture
 
-See [docs/architecture.md](docs/architecture.md) for a detailed overview of the architecture, design patterns, and execution flow.
+See [docs/architecture.md](https://github.com/iglootools/nbkp/blob/main/docs/architecture.md) for a detailed overview of the architecture, design patterns, and execution flow.
 
 ## Concepts
 
-See [docs/concepts.md](docs/concepts.md) for explanations of key concepts such as volumes, syncs, and the configuration model.
+See [docs/concepts.md](https://github.com/iglootools/nbkp/blob/main/docs/concepts.md) for explanations of key concepts such as volumes, syncs, and the configuration model.
 
 ## Conventions
 
-See [docs/conventions.md](docs/conventions.md) for coding conventions, testing practices, and other guidelines for contributing to the codebase.
+See [docs/conventions.md](https://github.com/iglootools/nbkp/blob/main/docs/conventions.md) for coding conventions, testing practices, and other guidelines for contributing to the codebase.
 
 ## Development
 
 ### Setup Development Environment
 
-See [docs/setup-development-environment.md](docs/setup-development-environment.md) for instructions on setting up the development environment.
+See [docs/setup-development-environment.md](https://github.com/iglootools/nbkp/blob/main/docs/setup-development-environment.md) for instructions on setting up the development environment.
 
 ### Building and Testing
 
-See [docs/building-and-testing.md](docs/building-and-testing.md) for instructions on how to run unit and integration tests, as well as formatting and linting checks.
+See [docs/building-and-testing.md](https://github.com/iglootools/nbkp/blob/main/docs/building-and-testing.md) for instructions on how to run unit and integration tests, as well as formatting and linting checks.
 
 ### Releasing and Publishing
 
-See [docs/releasing-and-publishing.md](docs/releasing-and-publishing.md) for instructions on how to create new releases and publish the package to PyPI.
+See [docs/releasing-and-publishing.md](https://github.com/iglootools/nbkp/blob/main/docs/releasing-and-publishing.md) for instructions on how to create new releases and publish the package to PyPI.
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
+This project is licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0) - see the LICENSE file for details.
 
