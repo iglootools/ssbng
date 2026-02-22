@@ -1,3 +1,8 @@
+[[tools.github-cli]]
+version = "2.87.2"
+backend = "aqua:cli/cli"
+"platforms.macos-arm64" = { checksum = "sha256:18d90c7ae5b462d47cc665d4c59de61af1e208edb81a9abee1b5a82c94e91d94", url = "https://github.com/cli/cli/releases/download/v2.87.2/gh_2.87.2_macOS_arm64.zip"}
+
 [[tools.poetry]]
 version = "2.3.2"
 backend = "vfox:mise-plugins/vfox-poetry"

@@ -54,4 +54,5 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 
 [virtualenvs]
+# works jointly with mise to ensure the correct Python version is used in the virtualenv
 in-project = true

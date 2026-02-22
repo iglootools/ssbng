@@ -1,17 +1,19 @@
 # Setup Development Environment
 
-2. [Install and activate mise](https://mise.jdx.dev/installing-mise.html)
+1. [Install and activate mise](https://mise.jdx.dev/installing-mise.html)
 
-3. Install Docker Desktop (or Docker Engine on Linux)
-   
-3. Activate the virtual environment:
+2. Install Docker Desktop (or Docker Engine on Linux)
+
+3. Configure github CLI with `gh auth login` and ensure you have access to the repository (optional, for convenience).
+
+4. Activate the virtual environment:
    ```bash
-   asdf install
-   poetry env use $(asdf current python --no-header | awk -F ' ' '{ print $2 }')
-   poetry install
+   # - Install all the tools defined in mise.toml
+   # - Set up the .venv with the correct Python version
+   mise install
 
-   # (Optional) To avoid calling poetry run every time, you can activate the virtualenv in your shell:
-   eval $(poetry env activate)
+   # vscode and poetry should automatically detect and use the .venv created by mise
+   poetry install
 
    # To recreate the virtualenv from scratch:
    poetry env remove --all
