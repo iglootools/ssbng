@@ -24,6 +24,9 @@ nbkp-test = "nbkp.testcli:main"
 
 [tool.poetry]
 packages = [{include = "nbkp"}]
+include = [
+    { path = "docs/**", format = "sdist" }
+]
 version = "0.0.0"
 
 [tool.poetry.group.dev.dependencies]
