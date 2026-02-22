@@ -16,7 +16,7 @@ from .config import (
     RsyncServer,
     SyncConfig,
 )
-from .runner import PruneResult, SyncResult
+from .sync import PruneResult, SyncResult
 from .status import SyncReason, SyncStatus, VolumeReason, VolumeStatus
 
 

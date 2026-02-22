@@ -20,7 +20,7 @@ from .output import (
     print_human_status,
     print_human_troubleshoot,
 )
-from .runner import PruneResult, SyncResult, run_all_syncs
+from .sync import PruneResult, SyncResult, run_all_syncs
 
 _REMOVABLE_DEVICE_REASONS = {
     SyncReason.SOURCE_MARKER_NOT_FOUND,

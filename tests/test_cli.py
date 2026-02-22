@@ -18,7 +18,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.runner import SyncResult
+from nbkp.sync import SyncResult
 from nbkp.status import (
     SyncReason,
     SyncStatus,

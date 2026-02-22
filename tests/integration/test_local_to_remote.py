@@ -16,7 +16,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.rsync import run_rsync
+from nbkp.sync import run_rsync
 
 from .conftest import create_markers, ssh_exec
 

@@ -14,7 +14,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.rsync import build_rsync_command, run_rsync
+from nbkp.sync import build_rsync_command, run_rsync
 
 
 class TestBuildRsyncCommandLocalToLocal:
@@ -666,7 +666,7 @@ class TestBuildRsyncCommandVerbose:
 
 
 class TestRunRsync:
-    @patch("nbkp.rsync.subprocess.run")
+    @patch("nbkp.sync.rsync.subprocess.run")
     def test_run_rsync(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0, stdout="done", stderr=""
@@ -687,7 +687,7 @@ class TestRunRsync:
         assert result.returncode == 0
         mock_run.assert_called_once()
 
-    @patch("nbkp.rsync.subprocess.Popen")
+    @patch("nbkp.sync.rsync.subprocess.Popen")
     def test_run_rsync_streams_output(self, mock_popen: MagicMock) -> None:
         src = LocalVolume(slug="src", path="/src")
         dst = LocalVolume(slug="dst", path="/dst")

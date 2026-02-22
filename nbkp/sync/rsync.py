@@ -6,14 +6,14 @@ import shlex
 import subprocess
 from typing import Callable
 
-from .config import (
+from ..config import (
     Config,
     LocalVolume,
     RemoteVolume,
     RsyncServer,
     SyncConfig,
 )
-from .ssh import (
+from ..ssh import (
     build_ssh_base_args,
     build_ssh_e_option,
     format_remote_path,

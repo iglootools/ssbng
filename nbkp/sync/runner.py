@@ -6,9 +6,9 @@ from typing import Callable, Optional
 
 from pydantic import BaseModel
 
-from .btrfs import create_snapshot, get_latest_snapshot, prune_snapshots
-from .config import Config
-from .status import SyncStatus
+from ..btrfs import create_snapshot, get_latest_snapshot, prune_snapshots
+from ..config import Config
+from ..status import SyncStatus
 from .rsync import run_rsync
 
 

@@ -12,7 +12,7 @@ from .config import (
     SyncConfig,
     SyncEndpoint,
 )
-from .runner import PruneResult, SyncResult
+from .sync import PruneResult, SyncResult
 from .status import (
     SyncReason,
     SyncStatus,
