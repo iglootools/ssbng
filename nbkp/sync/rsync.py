@@ -13,13 +13,13 @@ from ..config import (
     RsyncServer,
     SyncConfig,
 )
-from ..ssh import (
+from .ssh import (
     build_ssh_base_args,
     build_ssh_e_option,
     format_remote_path,
 )
 
-DEFAULT_RSYNC_OPTIONS: list[str] = [
+_DEFAULT_RSYNC_OPTIONS: list[str] = [
     "-a",
     "--delete",
     "--delete-excluded",
@@ -47,7 +47,7 @@ def _base_rsync_args(
     options = (
         sync.rsync_options
         if sync.rsync_options is not None
-        else DEFAULT_RSYNC_OPTIONS
+        else _DEFAULT_RSYNC_OPTIONS
     )
     args = ["rsync"] + list(options) + list(sync.extra_rsync_options)
     if verbose > 0:
@@ -141,7 +141,7 @@ def _build_remote_to_remote(
     options = (
         sync.rsync_options
         if sync.rsync_options is not None
-        else DEFAULT_RSYNC_OPTIONS
+        else _DEFAULT_RSYNC_OPTIONS
     )
     inner_rsync_parts = (
         ["rsync"] + list(options) + list(sync.extra_rsync_options)

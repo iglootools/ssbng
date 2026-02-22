@@ -17,7 +17,7 @@ from .config import (
     SyncConfig,
     Volume,
 )
-from .ssh import run_remote_command
+from .sync.ssh import run_remote_command
 
 
 class VolumeReason(str, enum.Enum):

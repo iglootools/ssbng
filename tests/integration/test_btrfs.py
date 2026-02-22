@@ -24,7 +24,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.sync import run_rsync
+from nbkp.sync.rsync import run_rsync
 
 from .conftest import ssh_exec
 

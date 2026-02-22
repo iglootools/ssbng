@@ -1,13 +1,31 @@
 """Sync orchestration and rsync command building."""
 
-from .rsync import DEFAULT_RSYNC_OPTIONS, build_rsync_command, run_rsync
-from .runner import PruneResult, SyncResult, run_all_syncs
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .runner import PruneResult as PruneResult
+    from .runner import SyncResult as SyncResult
+    from .runner import run_all_syncs as run_all_syncs
 
 __all__ = [
-    "DEFAULT_RSYNC_OPTIONS",
     "PruneResult",
     "SyncResult",
-    "build_rsync_command",
     "run_all_syncs",
-    "run_rsync",
 ]
+
+
+def __getattr__(name: str) -> object:
+    if name in __all__:
+        from . import runner
+
+        globals().update(
+            {
+                "PruneResult": runner.PruneResult,
+                "SyncResult": runner.SyncResult,
+                "run_all_syncs": runner.run_all_syncs,
+            }
+        )
+        return globals()[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

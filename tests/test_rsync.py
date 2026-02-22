@@ -14,7 +14,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.sync import build_rsync_command, run_rsync
+from nbkp.sync.rsync import build_rsync_command, run_rsync
 
 
 class TestBuildRsyncCommandLocalToLocal:
