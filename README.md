@@ -1,4 +1,4 @@
-# Device-Aware Backup (dab)
+# Nomad Backup (nbkp)
 
 A robust backup tool powered by rsync, designed for both local and remote targets—including removable drives and intermittently available backup servers. 
 It optionally leverages btrfs snapshots for incremental backups and encrypted volumes for enhanced security.
@@ -94,7 +94,7 @@ Features:
 - Support for Remote to Remote? How do handle authentication and connectivity checks for both servers? rsync filter files., other problems?
 - Git source support
 - Dry run for both run and status: display all the commands that would be executed. Do we want additional option for that?
-  - Even better? Can generate plain shell script to perform the backup to avoid any dependency on dab?
+  - Even better? Can generate plain shell script to perform the backup to avoid any dependency on nbkp?
   - Should work with relative directory for destination, and should run on both linux and mac os X. Should include all the status checks
   - Goals: 1. make it easy to understand what the tool is doing 2. implement custom things without having to contribute to the codebase
   - Actually run rsync with --dry-run, and maybe pass -v automatically during dry-runs to provide more detailed output?
@@ -121,8 +121,8 @@ Testing
   - set up a docker environment to manually test the generated config and outputs, and to use for development in general?
 - Improve automated tests
   - Add end to end tests with filters, and other more complex configurations.
-  - add local tests with btrfs snapshots on docker, with dab fully installed as an app
-  - add remote to remote tests with two docker containers, with ssh server set up on one of them, and dab?rsync fully installed as an app on both of them. Test connectivity checks, rsync backup, btrfs snapshots, etc.
+  - add local tests with btrfs snapshots on docker, with nbkp fully installed as an app
+  - add remote to remote tests with two docker containers, with ssh server set up on one of them, and nbkp?rsync fully installed as an app on both of them. Test connectivity checks, rsync backup, btrfs snapshots, etc.
 
 Refactorings:
 - Switch to [paramiko for SSH](https://www.paramiko.org/)?
@@ -137,7 +137,7 @@ Build & CI:
 Doc:
 - Add install instructions (from PyPI and from source) to the README
 - Use cases instead of features
-  - Provide comparison with borg and restic. Why dab over these alternatives.
+  - Provide comparison with borg and restic. Why nbkp over these alternatives.
 - Testing strategy and practices in conventions
 - Architecture: use mermaid diagram, and complete architecture overview
 - Review Features, Usage, Architecture and Concepts sections

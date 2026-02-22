@@ -1,6 +1,6 @@
 [project]
-name = "dab"
-description = "Device-Aware Backup: A robust backup tool powered by rsync, designed for both local and remote targets—including removable drives and intermittently available backup servers. It optionally leverages btrfs snapshots for incremental backups and encrypted volumes for enhanced security."
+name = "nbkp"
+description = "Nomad Backup: A robust backup tool powered by rsync, designed for both local and remote targets—including removable drives and intermittently available backup servers. It optionally leverages btrfs snapshots for incremental backups and encrypted volumes for enhanced security."
 authors = [{name = "Sami Dalouche", email = "sami.dalouche@gmail.com"}]
 readme = "README.md"
 requires-python = ">=3.14"
@@ -19,11 +19,11 @@ poetry-dynamic-versioning = { version = ">=1.0.0,<2.0.0", extras = ["plugin"] }
 enable = true
 
 [project.scripts]
-dab = "dab.cli:main"
-dab-test = "dab.testcli:main"
+nbkp = "nbkp.cli:main"
+nbkp-test = "nbkp.testcli:main"
 
 [tool.poetry]
-packages = [{include = "dab"}]
+packages = [{include = "nbkp"}]
 version = "0.0.0"
 
 [tool.poetry.group.dev.dependencies]

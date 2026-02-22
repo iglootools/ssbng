@@ -1,11 +1,11 @@
-"""Tests for dab.status and dab.output."""
+"""Tests for nbkp.status and nbkp.output."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from dab.config import (
+from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
@@ -15,9 +15,9 @@ from dab.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from dab.output import OutputFormat
-from dab.runner import SyncResult
-from dab.status import (
+from nbkp.output import OutputFormat
+from nbkp.runner import SyncResult
+from nbkp.status import (
     SyncReason,
     SyncStatus,
     VolumeReason,
@@ -140,14 +140,14 @@ class TestSyncConfig:
             rsync_options=["-a", "--delete"],
             extra_rsync_options=["--compress"],
             filters=["+ *.jpg", "- *.tmp"],
-            filter_file="/etc/dab/filters.rules",
+            filter_file="/etc/nbkp/filters.rules",
         )
         assert sc.enabled is False
         assert sc.destination.btrfs_snapshots.enabled is True
         assert sc.rsync_options == ["-a", "--delete"]
         assert sc.extra_rsync_options == ["--compress"]
         assert sc.filters == ["+ *.jpg", "- *.tmp"]
-        assert sc.filter_file == "/etc/dab/filters.rules"
+        assert sc.filter_file == "/etc/nbkp/filters.rules"
 
 
 class TestConfig:
@@ -352,7 +352,7 @@ def _remote_config(
 class TestCheckLocalVolume:
     def test_active(self, tmp_path: Path) -> None:
         vol = LocalVolume(slug="data", path=str(tmp_path))
-        (tmp_path / ".dab-vol").touch()
+        (tmp_path / ".nbkp-vol").touch()
         config = Config(volumes={"data": vol})
         status = check_volume(vol, config)
         assert status.active is True
@@ -367,7 +367,7 @@ class TestCheckLocalVolume:
 
 
 class TestCheckRemoteVolume:
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     def test_active(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0)
         vol, config = _remote_config()
@@ -376,10 +376,10 @@ class TestCheckRemoteVolume:
         assert status.reasons == []
         server = config.rsync_servers["nas-server"]
         mock_run.assert_called_once_with(
-            server, ["test", "-f", "/backup/.dab-vol"]
+            server, ["test", "-f", "/backup/.nbkp-vol"]
         )
 
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     def test_inactive(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1)
         vol, config = _remote_config()
@@ -389,7 +389,7 @@ class TestCheckRemoteVolume:
 
 
 class TestCheckCommandAvailableLocal:
-    @patch("dab.status.shutil.which")
+    @patch("nbkp.status.shutil.which")
     def test_command_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = "/usr/bin/rsync"
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -397,7 +397,7 @@ class TestCheckCommandAvailableLocal:
         assert _check_command_available(vol, "rsync", config) is True
         mock_which.assert_called_once_with("rsync")
 
-    @patch("dab.status.shutil.which")
+    @patch("nbkp.status.shutil.which")
     def test_command_not_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = None
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -407,7 +407,7 @@ class TestCheckCommandAvailableLocal:
 
 
 class TestCheckCommandAvailableRemote:
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     def test_command_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0)
         vol, config = _remote_config()
@@ -415,7 +415,7 @@ class TestCheckCommandAvailableRemote:
         server = config.rsync_servers["nas-server"]
         mock_run.assert_called_once_with(server, ["which", "rsync"])
 
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     def test_command_not_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1)
         vol, config = _remote_config()
@@ -425,7 +425,7 @@ class TestCheckCommandAvailableRemote:
 
 
 class TestCheckBtrfsFilesystemLocal:
-    @patch("dab.status.subprocess.run")
+    @patch("nbkp.status.subprocess.run")
     def test_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -437,14 +437,14 @@ class TestCheckBtrfsFilesystemLocal:
             text=True,
         )
 
-    @patch("dab.status.subprocess.run")
+    @patch("nbkp.status.subprocess.run")
     def test_not_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
         config = Config(volumes={"data": vol})
         assert _check_btrfs_filesystem(vol, config) is False
 
-    @patch("dab.status.subprocess.run")
+    @patch("nbkp.status.subprocess.run")
     def test_stat_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -453,7 +453,7 @@ class TestCheckBtrfsFilesystemLocal:
 
 
 class TestCheckBtrfsFilesystemRemote:
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     def test_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
         vol, config = _remote_config()
@@ -464,7 +464,7 @@ class TestCheckBtrfsFilesystemRemote:
             ["stat", "-f", "-c", "%T", "/backup"],
         )
 
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     def test_not_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
         vol, config = _remote_config()
@@ -472,7 +472,7 @@ class TestCheckBtrfsFilesystemRemote:
 
 
 class TestCheckBtrfsSubvolumeLocal:
-    @patch("dab.status.subprocess.run")
+    @patch("nbkp.status.subprocess.run")
     def test_is_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -484,7 +484,7 @@ class TestCheckBtrfsSubvolumeLocal:
             text=True,
         )
 
-    @patch("dab.status.subprocess.run")
+    @patch("nbkp.status.subprocess.run")
     def test_is_subvolume_with_subdir(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -496,14 +496,14 @@ class TestCheckBtrfsSubvolumeLocal:
             text=True,
         )
 
-    @patch("dab.status.subprocess.run")
+    @patch("nbkp.status.subprocess.run")
     def test_not_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="1234\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
         config = Config(volumes={"data": vol})
         assert _check_btrfs_subvolume(vol, None, config) is False
 
-    @patch("dab.status.subprocess.run")
+    @patch("nbkp.status.subprocess.run")
     def test_stat_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -512,7 +512,7 @@ class TestCheckBtrfsSubvolumeLocal:
 
 
 class TestCheckBtrfsSubvolumeRemote:
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     def test_is_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol, config = _remote_config()
@@ -523,7 +523,7 @@ class TestCheckBtrfsSubvolumeRemote:
             ["stat", "-c", "%i", "/backup"],
         )
 
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     def test_is_subvolume_with_subdir(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol, config = _remote_config()
@@ -534,7 +534,7 @@ class TestCheckBtrfsSubvolumeRemote:
             ["stat", "-c", "%i", "/backup/data"],
         )
 
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     def test_not_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="1234\n")
         vol, config = _remote_config()
@@ -542,7 +542,7 @@ class TestCheckBtrfsSubvolumeRemote:
 
 
 class TestCheckBtrfsMountOptionLocal:
-    @patch("dab.status.subprocess.run")
+    @patch("nbkp.status.subprocess.run")
     def test_option_present(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -560,7 +560,7 @@ class TestCheckBtrfsMountOptionLocal:
             text=True,
         )
 
-    @patch("dab.status.subprocess.run")
+    @patch("nbkp.status.subprocess.run")
     def test_option_missing(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="rw,relatime\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -570,7 +570,7 @@ class TestCheckBtrfsMountOptionLocal:
             is False
         )
 
-    @patch("dab.status.subprocess.run")
+    @patch("nbkp.status.subprocess.run")
     def test_findmnt_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -582,7 +582,7 @@ class TestCheckBtrfsMountOptionLocal:
 
 
 class TestCheckBtrfsMountOptionRemote:
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     def test_option_present(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -599,7 +599,7 @@ class TestCheckBtrfsMountOptionRemote:
             ["findmnt", "-n", "-o", "OPTIONS", "/backup"],
         )
 
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     def test_option_missing(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="rw,relatime\n")
         vol, config = _remote_config()
@@ -627,7 +627,7 @@ class TestCheckSync:
         return config, sync
 
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_active_sync(self, mock_which: MagicMock, tmp_path: Path) -> None:
@@ -636,12 +636,12 @@ class TestCheckSync:
         src.mkdir()
         dst.mkdir()
 
-        (src / ".dab-vol").touch()
-        (dst / ".dab-vol").touch()
+        (src / ".nbkp-vol").touch()
+        (dst / ".nbkp-vol").touch()
         (src / "data").mkdir()
-        (src / "data" / ".dab-src").touch()
+        (src / "data" / ".nbkp-src").touch()
         (dst / "backup").mkdir()
-        (dst / "backup" / ".dab-dst").touch()
+        (dst / "backup" / ".nbkp-dst").touch()
 
         config, sync = self._make_config(src, dst)
         vol_statuses = {
@@ -722,7 +722,7 @@ class TestCheckSync:
         dst.mkdir()
         (src / "data").mkdir()
         (dst / "backup").mkdir()
-        (dst / "backup" / ".dab-dst").touch()
+        (dst / "backup" / ".nbkp-dst").touch()
 
         config, sync = self._make_config(src, dst)
         vol_statuses = {
@@ -743,12 +743,12 @@ class TestCheckSync:
         assert SyncReason.SOURCE_MARKER_NOT_FOUND in status.reasons
 
     def _setup_active_markers(self, src: Path, dst: Path) -> None:
-        (src / ".dab-vol").touch()
-        (dst / ".dab-vol").touch()
+        (src / ".nbkp-vol").touch()
+        (dst / ".nbkp-vol").touch()
         (src / "data").mkdir(exist_ok=True)
-        (src / "data" / ".dab-src").touch()
+        (src / "data" / ".nbkp-src").touch()
         (dst / "backup").mkdir(exist_ok=True)
-        (dst / "backup" / ".dab-dst").touch()
+        (dst / "backup" / ".nbkp-dst").touch()
 
     def _make_active_vol_statuses(
         self, config: Config
@@ -766,7 +766,7 @@ class TestCheckSync:
             ),
         }
 
-    @patch("dab.status.shutil.which", return_value=None)
+    @patch("nbkp.status.shutil.which", return_value=None)
     def test_rsync_not_found_on_source(
         self, mock_which: MagicMock, tmp_path: Path
     ) -> None:
@@ -785,7 +785,7 @@ class TestCheckSync:
         assert SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION in status.reasons
 
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         side_effect=lambda cmd: (
             None if cmd == "btrfs" else f"/usr/bin/{cmd}"
         ),
@@ -821,7 +821,7 @@ class TestCheckSync:
         assert SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION in status.reasons
 
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         side_effect=lambda cmd: (None if cmd == "stat" else f"/usr/bin/{cmd}"),
     )
     def test_stat_not_found_on_destination(
@@ -856,9 +856,9 @@ class TestCheckSync:
         assert SyncReason.DESTINATION_NOT_BTRFS not in status.reasons
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.reasons
 
-    @patch("dab.status.subprocess.run")
+    @patch("nbkp.status.subprocess.run")
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         side_effect=lambda cmd: (
             None if cmd == "findmnt" else f"/usr/bin/{cmd}"
         ),
@@ -914,7 +914,7 @@ class TestCheckSync:
         )
 
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         side_effect=lambda cmd: (
             None if cmd in ("stat", "findmnt") else f"/usr/bin/{cmd}"
         ),
@@ -950,9 +950,9 @@ class TestCheckSync:
         assert SyncReason.STAT_NOT_FOUND_ON_DESTINATION in status.reasons
         assert SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION in status.reasons
 
-    @patch("dab.status.subprocess.run")
+    @patch("nbkp.status.subprocess.run")
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         return_value="/usr/bin/fake",
     )
     def test_destination_not_btrfs_filesystem(
@@ -992,9 +992,9 @@ class TestCheckSync:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS in status.reasons
 
-    @patch("dab.status.subprocess.run")
+    @patch("nbkp.status.subprocess.run")
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         return_value="/usr/bin/fake",
     )
     def test_destination_not_btrfs_subvolume(
@@ -1041,9 +1041,9 @@ class TestCheckSync:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME in status.reasons
 
-    @patch("dab.status.subprocess.run")
+    @patch("nbkp.status.subprocess.run")
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         return_value="/usr/bin/fake",
     )
     def test_destination_not_mounted_user_subvol_rm(
@@ -1096,9 +1096,9 @@ class TestCheckSync:
             SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.reasons
         )
 
-    @patch("dab.status.subprocess.run")
+    @patch("nbkp.status.subprocess.run")
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         return_value="/usr/bin/fake",
     )
     def test_destination_latest_not_found(
@@ -1156,9 +1156,9 @@ class TestCheckSync:
             not in status.reasons
         )
 
-    @patch("dab.status.subprocess.run")
+    @patch("nbkp.status.subprocess.run")
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         return_value="/usr/bin/fake",
     )
     def test_destination_snapshots_dir_not_found(
@@ -1213,9 +1213,9 @@ class TestCheckSync:
         assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
         assert SyncReason.DESTINATION_LATEST_NOT_FOUND not in status.reasons
 
-    @patch("dab.status.subprocess.run")
+    @patch("nbkp.status.subprocess.run")
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         return_value="/usr/bin/fake",
     )
     def test_destination_latest_and_snapshots_both_missing(
@@ -1270,7 +1270,7 @@ class TestCheckSync:
         assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
 
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_btrfs_check_skipped_when_not_enabled(
@@ -1289,7 +1289,7 @@ class TestCheckSync:
         assert status.active is True
         assert status.reasons == []
 
-    @patch("dab.status.shutil.which", return_value=None)
+    @patch("nbkp.status.shutil.which", return_value=None)
     def test_multiple_failures_accumulated(
         self, mock_which: MagicMock, tmp_path: Path
     ) -> None:
@@ -1298,12 +1298,12 @@ class TestCheckSync:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        (src / ".dab-vol").touch()
-        (dst / ".dab-vol").touch()
+        (src / ".nbkp-vol").touch()
+        (dst / ".nbkp-vol").touch()
         (src / "data").mkdir()
-        # No .dab-src marker
+        # No .nbkp-src marker
         (dst / "backup").mkdir()
-        (dst / "backup" / ".dab-dst").touch()
+        (dst / "backup" / ".nbkp-dst").touch()
 
         config, sync = self._make_config(src, dst)
         vol_statuses = self._make_active_vol_statuses(config)
@@ -1342,15 +1342,15 @@ class TestCheckSync:
 
 
 class TestCheckSyncRemoteCommands:
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     def test_rsync_not_found_on_remote_source(
         self, mock_run: MagicMock, tmp_path: Path
     ) -> None:
         dst = tmp_path / "dst"
         dst.mkdir()
-        (dst / ".dab-vol").touch()
+        (dst / ".nbkp-vol").touch()
         (dst / "backup").mkdir()
-        (dst / "backup" / ".dab-dst").touch()
+        (dst / "backup" / ".nbkp-dst").touch()
 
         src_server = RsyncServer(slug="src-server", host="src.local")
         src_vol = RemoteVolume(
@@ -1385,7 +1385,7 @@ class TestCheckSyncRemoteCommands:
         def remote_side_effect(
             server: RsyncServer, cmd: list[str]
         ) -> MagicMock:
-            if cmd == ["test", "-f", "/data/data/.dab-src"]:
+            if cmd == ["test", "-f", "/data/data/.nbkp-src"]:
                 return MagicMock(returncode=0)
             if cmd == ["which", "rsync"]:
                 return MagicMock(returncode=1)
@@ -1397,9 +1397,9 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.RSYNC_NOT_FOUND_ON_SOURCE in status.reasons
 
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_rsync_not_found_on_remote_destination(
@@ -1410,9 +1410,9 @@ class TestCheckSyncRemoteCommands:
     ) -> None:
         src = tmp_path / "src"
         src.mkdir()
-        (src / ".dab-vol").touch()
+        (src / ".nbkp-vol").touch()
         (src / "data").mkdir()
-        (src / "data" / ".dab-src").touch()
+        (src / "data" / ".nbkp-src").touch()
 
         dst_server = RsyncServer(slug="dst-server", host="dst.local")
         src_vol = LocalVolume(slug="src", path=str(src))
@@ -1450,7 +1450,7 @@ class TestCheckSyncRemoteCommands:
             if cmd == [
                 "test",
                 "-f",
-                "/backup/backup/.dab-dst",
+                "/backup/backup/.nbkp-dst",
             ]:
                 return MagicMock(returncode=0)
             if cmd == ["which", "rsync"]:
@@ -1463,9 +1463,9 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION in status.reasons
 
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_btrfs_not_found_on_remote_destination(
@@ -1476,9 +1476,9 @@ class TestCheckSyncRemoteCommands:
     ) -> None:
         src = tmp_path / "src"
         src.mkdir()
-        (src / ".dab-vol").touch()
+        (src / ".nbkp-vol").touch()
         (src / "data").mkdir()
-        (src / "data" / ".dab-src").touch()
+        (src / "data" / ".nbkp-src").touch()
 
         dst_server = RsyncServer(slug="dst-server", host="dst.local")
         src_vol = LocalVolume(slug="src", path=str(src))
@@ -1520,7 +1520,7 @@ class TestCheckSyncRemoteCommands:
             if cmd == [
                 "test",
                 "-f",
-                "/backup/backup/.dab-dst",
+                "/backup/backup/.nbkp-dst",
             ]:
                 return MagicMock(returncode=0)
             if cmd == ["which", "rsync"]:
@@ -1535,9 +1535,9 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION in status.reasons
 
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_destination_not_btrfs_on_remote(
@@ -1548,9 +1548,9 @@ class TestCheckSyncRemoteCommands:
     ) -> None:
         src = tmp_path / "src"
         src.mkdir()
-        (src / ".dab-vol").touch()
+        (src / ".nbkp-vol").touch()
         (src / "data").mkdir()
-        (src / "data" / ".dab-src").touch()
+        (src / "data" / ".nbkp-src").touch()
 
         dst_server = RsyncServer(slug="dst-server", host="dst.local")
         src_vol = LocalVolume(slug="src", path=str(src))
@@ -1592,7 +1592,7 @@ class TestCheckSyncRemoteCommands:
             if cmd == [
                 "test",
                 "-f",
-                "/backup/backup/.dab-dst",
+                "/backup/backup/.nbkp-dst",
             ]:
                 return MagicMock(returncode=0)
             if cmd == ["which", "rsync"]:
@@ -1615,9 +1615,9 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS in status.reasons
 
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_destination_not_subvolume_on_remote(
@@ -1628,9 +1628,9 @@ class TestCheckSyncRemoteCommands:
     ) -> None:
         src = tmp_path / "src"
         src.mkdir()
-        (src / ".dab-vol").touch()
+        (src / ".nbkp-vol").touch()
         (src / "data").mkdir()
-        (src / "data" / ".dab-src").touch()
+        (src / "data" / ".nbkp-src").touch()
 
         dst_server = RsyncServer(slug="dst-server", host="dst.local")
         src_vol = LocalVolume(slug="src", path=str(src))
@@ -1672,7 +1672,7 @@ class TestCheckSyncRemoteCommands:
             if cmd == [
                 "test",
                 "-f",
-                "/backup/backup/.dab-dst",
+                "/backup/backup/.nbkp-dst",
             ]:
                 return MagicMock(returncode=0)
             if cmd == ["which", "rsync"]:
@@ -1702,9 +1702,9 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME in status.reasons
 
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_destination_not_mounted_user_subvol_rm_on_remote(
@@ -1715,9 +1715,9 @@ class TestCheckSyncRemoteCommands:
     ) -> None:
         src = tmp_path / "src"
         src.mkdir()
-        (src / ".dab-vol").touch()
+        (src / ".nbkp-vol").touch()
         (src / "data").mkdir()
-        (src / "data" / ".dab-src").touch()
+        (src / "data" / ".nbkp-src").touch()
 
         dst_server = RsyncServer(slug="dst-server", host="dst.local")
         src_vol = LocalVolume(slug="src", path=str(src))
@@ -1759,7 +1759,7 @@ class TestCheckSyncRemoteCommands:
             if cmd == [
                 "test",
                 "-f",
-                "/backup/backup/.dab-dst",
+                "/backup/backup/.nbkp-dst",
             ]:
                 return MagicMock(returncode=0)
             if cmd == ["which", "rsync"]:
@@ -1799,9 +1799,9 @@ class TestCheckSyncRemoteCommands:
             SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.reasons
         )
 
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_stat_not_found_on_remote_destination(
@@ -1812,9 +1812,9 @@ class TestCheckSyncRemoteCommands:
     ) -> None:
         src = tmp_path / "src"
         src.mkdir()
-        (src / ".dab-vol").touch()
+        (src / ".nbkp-vol").touch()
         (src / "data").mkdir()
-        (src / "data" / ".dab-src").touch()
+        (src / "data" / ".nbkp-src").touch()
 
         dst_server = RsyncServer(slug="dst-server", host="dst.local")
         src_vol = LocalVolume(slug="src", path=str(src))
@@ -1856,7 +1856,7 @@ class TestCheckSyncRemoteCommands:
             if cmd == [
                 "test",
                 "-f",
-                "/backup/backup/.dab-dst",
+                "/backup/backup/.nbkp-dst",
             ]:
                 return MagicMock(returncode=0)
             if cmd == ["which", "rsync"]:
@@ -1874,9 +1874,9 @@ class TestCheckSyncRemoteCommands:
         assert SyncReason.STAT_NOT_FOUND_ON_DESTINATION in status.reasons
         assert SyncReason.DESTINATION_NOT_BTRFS not in status.reasons
 
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_findmnt_not_found_on_remote_destination(
@@ -1887,9 +1887,9 @@ class TestCheckSyncRemoteCommands:
     ) -> None:
         src = tmp_path / "src"
         src.mkdir()
-        (src / ".dab-vol").touch()
+        (src / ".nbkp-vol").touch()
         (src / "data").mkdir()
-        (src / "data" / ".dab-src").touch()
+        (src / "data" / ".nbkp-src").touch()
 
         dst_server = RsyncServer(slug="dst-server", host="dst.local")
         src_vol = LocalVolume(slug="src", path=str(src))
@@ -1931,7 +1931,7 @@ class TestCheckSyncRemoteCommands:
             if cmd == [
                 "test",
                 "-f",
-                "/backup/backup/.dab-dst",
+                "/backup/backup/.nbkp-dst",
             ]:
                 return MagicMock(returncode=0)
             if cmd == ["which", "rsync"]:
@@ -1971,9 +1971,9 @@ class TestCheckSyncRemoteCommands:
             not in status.reasons
         )
 
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_destination_latest_not_found_on_remote(
@@ -1984,9 +1984,9 @@ class TestCheckSyncRemoteCommands:
     ) -> None:
         src = tmp_path / "src"
         src.mkdir()
-        (src / ".dab-vol").touch()
+        (src / ".nbkp-vol").touch()
         (src / "data").mkdir()
-        (src / "data" / ".dab-src").touch()
+        (src / "data" / ".nbkp-src").touch()
 
         dst_server = RsyncServer(slug="dst-server", host="dst.local")
         src_vol = LocalVolume(slug="src", path=str(src))
@@ -2028,7 +2028,7 @@ class TestCheckSyncRemoteCommands:
             if cmd == [
                 "test",
                 "-f",
-                "/backup/backup/.dab-dst",
+                "/backup/backup/.nbkp-dst",
             ]:
                 return MagicMock(returncode=0)
             if cmd == ["which", "rsync"]:
@@ -2085,9 +2085,9 @@ class TestCheckSyncRemoteCommands:
             not in status.reasons
         )
 
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_destination_snapshots_dir_not_found_on_remote(
@@ -2098,9 +2098,9 @@ class TestCheckSyncRemoteCommands:
     ) -> None:
         src = tmp_path / "src"
         src.mkdir()
-        (src / ".dab-vol").touch()
+        (src / ".nbkp-vol").touch()
         (src / "data").mkdir()
-        (src / "data" / ".dab-src").touch()
+        (src / "data" / ".nbkp-src").touch()
 
         dst_server = RsyncServer(slug="dst-server", host="dst.local")
         src_vol = LocalVolume(slug="src", path=str(src))
@@ -2142,7 +2142,7 @@ class TestCheckSyncRemoteCommands:
             if cmd == [
                 "test",
                 "-f",
-                "/backup/backup/.dab-dst",
+                "/backup/backup/.nbkp-dst",
             ]:
                 return MagicMock(returncode=0)
             if cmd == ["which", "rsync"]:
@@ -2199,7 +2199,7 @@ class TestCheckSyncRemoteCommands:
 
 class TestCheckAllSyncs:
     @patch(
-        "dab.status.shutil.which",
+        "nbkp.status.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_check_all(self, mock_which: MagicMock, tmp_path: Path) -> None:
@@ -2207,10 +2207,10 @@ class TestCheckAllSyncs:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        (src / ".dab-vol").touch()
-        (dst / ".dab-vol").touch()
-        (src / ".dab-src").touch()
-        (dst / ".dab-dst").touch()
+        (src / ".nbkp-vol").touch()
+        (dst / ".nbkp-vol").touch()
+        (src / ".nbkp-src").touch()
+        (dst / ".nbkp-dst").touch()
 
         src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = LocalVolume(slug="dst", path=str(dst))
@@ -2231,7 +2231,7 @@ class TestCheckAllSyncs:
 
 
 class TestCheckRemoteVolumeSpaces:
-    @patch("dab.status.run_remote_command")
+    @patch("nbkp.status.run_remote_command")
     def test_active(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0)
         vol, config = _remote_config(path="/my backup")
@@ -2240,5 +2240,5 @@ class TestCheckRemoteVolumeSpaces:
         server = config.rsync_servers["nas-server"]
         mock_run.assert_called_once_with(
             server,
-            ["test", "-f", "/my backup/.dab-vol"],
+            ["test", "-f", "/my backup/.nbkp-vol"],
         )

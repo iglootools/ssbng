@@ -30,11 +30,11 @@ run = "poetry run black ."
 
 [tasks.lint]
 description = "Run flake8 linting"
-run = "poetry run flake8 dab/ tests/"
+run = "poetry run flake8 nbkp/ tests/"
 
 [tasks.type-check]
 description = "Run mypy type checking"
-run = "poetry run mypy dab/"
+run = "poetry run mypy nbkp/"
 
 [tasks.check]
 description = "Run all checks (format, lint, type-check, test)"

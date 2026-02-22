@@ -1,11 +1,11 @@
-"""Tests for dab.ssh."""
+"""Tests for nbkp.ssh."""
 
 from __future__ import annotations
 
 from unittest.mock import patch
 
-from dab.config import RsyncServer
-from dab.ssh import (
+from nbkp.config import RsyncServer
+from nbkp.ssh import (
     build_ssh_base_args,
     build_ssh_e_option,
     format_remote_path,
@@ -110,7 +110,7 @@ class TestFormatRemotePath:
 
 
 class TestRunRemoteCommand:
-    @patch("dab.ssh.subprocess.run")
+    @patch("nbkp.ssh.subprocess.run")
     def test_run_remote_command(
         self, mock_run: object, rsync_server: RsyncServer
     ) -> None:

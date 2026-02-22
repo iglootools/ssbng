@@ -1,4 +1,4 @@
-"""Integration test fixtures — Docker SSH server with rsync + btrfs."""
+"""Integration test fixtures -- Docker SSH server with rsync + btrfs."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Any, Generator
 
 import pytest
 
-from dab.config import RemoteVolume, RsyncServer
+from nbkp.config import RemoteVolume, RsyncServer
 
 DOCKER_DIR = Path(__file__).parent / "docker"
 
@@ -39,7 +39,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture(scope="session")
 def ssh_key_pair() -> Generator[tuple[Path, Path], None, None]:
     """Generate an ephemeral ed25519 SSH key pair for tests."""
-    tmpdir = Path(tempfile.mkdtemp(prefix="dab-test-ssh-"))
+    tmpdir = Path(tempfile.mkdtemp(prefix="nbkp-test-ssh-"))
     private_key = tmpdir / "id_ed25519"
     public_key = tmpdir / "id_ed25519.pub"
 
@@ -53,7 +53,7 @@ def ssh_key_pair() -> Generator[tuple[Path, Path], None, None]:
             "-N",
             "",
             "-C",
-            "dab-integration-test",
+            "nbkp-integration-test",
         ],
         capture_output=True,
         check=True,
@@ -82,7 +82,7 @@ def docker_container(
 
     image = DockerImage(
         path=str(DOCKER_DIR),
-        tag="dab-test-server:latest",
+        tag="nbkp-test-server:latest",
     )
     image.build()
 
@@ -244,7 +244,7 @@ def _cleanup_remote(
     ssh_exec(docker_container, "rm -rf /data/src/* /data/latest/*")
     ssh_exec(
         docker_container,
-        "find /data -name '.dab-*' -delete",
+        "find /data -name '.nbkp-*' -delete",
     )
     # Recreate latest in case it was removed
     ssh_exec(docker_container, "mkdir -p /data/latest")
@@ -294,5 +294,5 @@ def _cleanup_remote(
     ssh_exec(docker_container, "rm -rf /mnt/btrfs/src/*")
     ssh_exec(
         docker_container,
-        "find /mnt/btrfs -name '.dab-*' -delete",
+        "find /mnt/btrfs -name '.nbkp-*' -delete",
     )

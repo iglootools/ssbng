@@ -123,7 +123,7 @@ class SyncConfig(_BaseModel):
 
 
 class Config(_BaseModel):
-    """Top-level DAB configuration."""
+    """Top-level NBKP configuration."""
 
     rsync_servers: Dict[str, RsyncServer] = Field(default_factory=dict)
 

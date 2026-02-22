@@ -1,6 +1,6 @@
 # Architecture
 
-DAB is an rsync-based backup tool. The execution flow is:
+NBKP is an rsync-based backup tool. The execution flow is:
 
 ```
 CLI (cli.py) → Runner (runner.py) → Status (status.py) + Rsync (rsync.py) + Btrfs (btrfs.py)
@@ -18,7 +18,7 @@ All modules resolve volumes from `Config.volumes[name]` and dispatch on volume t
 
 ## Sync flow (runner.py)
 
-1. `check_all_syncs()` — verifies volumes are reachable and marker files exist (`.dab-vol`, `.dab-src`, `.dab-dst`)
+1. `check_all_syncs()` — verifies volumes are reachable and marker files exist (`.nbkp-vol`, `.nbkp-src`, `.nbkp-dst`)
 2. For each active sync: get latest btrfs snapshot (if enabled) → `run_rsync()` with optional `--link-dest` → `create_snapshot()` (if btrfs enabled and not dry run)
 3. rsync always writes to `{destination}/latest/`; snapshots go to `{destination}/snapshots/{ISO8601Z}`
 
@@ -30,4 +30,4 @@ All modules resolve volumes from `Config.volumes[name]` and dispatch on volume t
 
 ## Config resolution (config.py)
 
-Search order: explicit path → `$XDG_CONFIG_HOME/dab/config.yaml` → `/etc/dab/config.yaml`. Raises `ConfigError` on validation failure.
+Search order: explicit path → `$XDG_CONFIG_HOME/nbkp/config.yaml` → `/etc/nbkp/config.yaml`. Raises `ConfigError` on validation failure.

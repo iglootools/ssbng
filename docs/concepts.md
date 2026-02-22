@@ -2,7 +2,7 @@
 
 ## Backup Config
 
-Expressed in YAML. Sourced from the regular locations (e.g. `/etc/dab/config.yaml`, `~/.config/dab/config.yaml`, etc) and can also be provided as an argument when calling the backup tool.
+Expressed in YAML. Sourced from the regular locations (e.g. `/etc/nbkp/config.yaml`, `~/.config/nbkp/config.yaml`, etc) and can also be provided as an argument when calling the backup tool.
 
 ### Sync
 
@@ -10,7 +10,7 @@ A sync describes a source and destination pair with the relevant config (type of
 Both the source and destination can be local or remote, and can be on removable drives.
 The only supported backup type for now is rsync, but other backup types will be added in the future (e.g. git, etc).
 
-For a sync to be considered active, both the source and the destination must provide a `.dab-src` and `.dab-dst` file respectively.
+For a sync to be considered active, both the source and the destination must provide a `.nbkp-src` and `.nbkp-dst` file respectively.
 For remote sources/destinations, the server must be reachable for the corresponding sync to be active.
 
 This is to ensure that when using removable drives, both the source and destinations are currently mounted / available to prevent data loss
@@ -40,7 +40,7 @@ destination:
 
 A reusable configuration for a local source or destination that can be shared between multiple syncs.
 
-To be considered active, a local volume must have a `.dab-vol` file in the root of the volume.
+To be considered active, a local volume must have a `.nbkp-vol` file in the root of the volume.
 
 ### Rsync Server
 
@@ -54,7 +54,7 @@ The `connect-timeout` field controls the SSH connection timeout in seconds (defa
 A reusable configuration for a remote source or destination that can be shared between multiple syncs.
 References an rsync server by name and provides the path to the remote volume.
 
-To be considered active, a remote volume must have a `.dab-vol` file in the root of the volume, and the server must be reachable.
+To be considered active, a remote volume must have a `.nbkp-vol` file in the root of the volume, and the server must be reachable.
 
 ### Rsync Options
 
@@ -107,7 +107,7 @@ Structured and raw filters can be mixed freely in the same list. They are applie
 **External filter file** — a path to a file containing rsync filter rules in native rsync syntax, applied via `--filter=merge FILE`:
 
 ```yaml
-filter-file: ~/.config/dab/filters/photos.rules
+filter-file: ~/.config/nbkp/filters/photos.rules
 ```
 
 When both inline `filters` and `filter-file` are present, inline filters are applied first, followed by the filter file.
@@ -163,7 +163,7 @@ syncs:
       - include: "*.png"
       - exclude: "*.tmp"        # structured exclude rule
       - "H .git"                # raw rsync filter string
-    filter-file: ~/.config/dab/filters/photos.rules  # optional
+    filter-file: ~/.config/nbkp/filters/photos.rules  # optional
 
   # Local-to-local sync with btrfs snapshots
   documents-to-usb:

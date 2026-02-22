@@ -4,7 +4,7 @@ The unit tests cover the core logic of the tool, while the integration tests exe
 
 Integration tests exercise the real rsync/SSH/btrfs pipeline against a Docker container.
 
-Additionally, `poetry run dab-test` provides helpers to test with manual testing/QA.
+Additionally, `poetry run nbkp-test` provides helpers to test with manual testing/QA.
 
 Run automated tests and checks (no external dependencies):
 ```bash
@@ -22,8 +22,8 @@ poetry run pytest tests/ --ignore=tests/integration/ -v                 # Unit t
 poetry run pytest tests/integration/ -v                                 # Integration tests only (requires Docker)
 poetry run pytest tests/ -v                                             # Unit + integration tests
 poetry run black .                                                      # formatting
-poetry run flake8 dab/ tests/                                           # linting
-poetry run mypy dab/ tests/                                             # type-checking
+poetry run flake8 nbkp/ tests/                                          # linting
+poetry run mypy nbkp/ tests/                                            # type-checking
 poetry run pytest tests/test_ssh.py::TestBuildSshBaseArgs::test_full -v # run a single test
 ```
 

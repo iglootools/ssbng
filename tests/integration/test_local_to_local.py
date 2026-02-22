@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dab.config import (
+from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
@@ -12,7 +12,7 @@ from dab.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from dab.rsync import run_rsync
+from nbkp.rsync import run_rsync
 
 
 def _make_local_config(

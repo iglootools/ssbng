@@ -131,7 +131,7 @@ def print_human_results(results: list[SyncResult], dry_run: bool) -> None:
     mode = " (dry run)" if dry_run else ""
 
     table = Table(
-        title=f"DAB run{mode}:",
+        title=f"NBKP run{mode}:",
     )
     table.add_column("Name", style="bold")
     table.add_column("Status")
@@ -169,7 +169,7 @@ def print_human_prune_results(
     mode = " (dry run)" if dry_run else ""
 
     table = Table(
-        title=f"DAB prune{mode}:",
+        title=f"NBKP prune{mode}:",
     )
     table.add_column("Name", style="bold")
     table.add_column("Deleted")
@@ -357,11 +357,11 @@ def _print_sync_reason_fix(
         case SyncReason.SOURCE_MARKER_NOT_FOUND:
             src = config.volumes[sync.source.volume]
             path = _endpoint_path(src, sync.source.subdir)
-            _print_marker_fix(console, src, path, ".dab-src", config)
+            _print_marker_fix(console, src, path, ".nbkp-src", config)
         case SyncReason.DESTINATION_MARKER_NOT_FOUND:
             dst = config.volumes[sync.destination.volume]
             path = _endpoint_path(dst, sync.destination.subdir)
-            _print_marker_fix(console, dst, path, ".dab-dst", config)
+            _print_marker_fix(console, dst, path, ".nbkp-dst", config)
         case SyncReason.RSYNC_NOT_FOUND_ON_SOURCE:
             src = config.volumes[sync.source.volume]
             host = _host_label(src, config)
@@ -462,7 +462,7 @@ def print_human_troubleshoot(
                         console,
                         vol,
                         vol.path,
-                        ".dab-vol",
+                        ".nbkp-vol",
                         config,
                     )
                 case VolumeReason.UNREACHABLE:

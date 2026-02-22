@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from dab.config import (
+from nbkp.config import (
     Config,
     DestinationSyncEndpoint,
     LocalVolume,
@@ -57,7 +57,7 @@ def _sample_config() -> Config:
                 ),
                 enabled=True,
                 filters=["+ *.jpg", "- *.tmp"],
-                filter_file=("~/.config/dab/filters/photos.rules"),
+                filter_file=("~/.config/nbkp/filters/photos.rules"),
             ),
         },
     )

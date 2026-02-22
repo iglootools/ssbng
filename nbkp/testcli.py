@@ -35,8 +35,8 @@ from .testdata import (
 _INDENT = "  "
 
 app = typer.Typer(
-    name="dab-test",
-    help="DAB developer test CLI",
+    name="nbkp-test",
+    help="NBKP developer test CLI",
     no_args_is_help=True,
 )
 
@@ -86,17 +86,17 @@ def _show_troubleshoot() -> None:
 @app.command()
 def seed() -> None:
     """Create a temp folder with config and test data."""
-    tmp = Path(tempfile.mkdtemp(prefix="dab-seed-"))
+    tmp = Path(tempfile.mkdtemp(prefix="nbkp-seed-"))
 
     # Source volume
     src = tmp / "src-data"
     src.mkdir()
-    (src / ".dab-vol").touch()
-    (src / ".dab-src").touch()
+    (src / ".nbkp-vol").touch()
+    (src / ".nbkp-src").touch()
 
     photos = src / "photos"
     photos.mkdir()
-    (photos / ".dab-src").touch()
+    (photos / ".nbkp-src").touch()
     (photos / "vacation.jpg").write_text("fake jpeg data - vacation photo")
     (photos / "family.png").write_text("fake png data - family photo")
 
@@ -112,8 +112,8 @@ def seed() -> None:
     # Destination volume
     dst = tmp / "dst-backup"
     dst.mkdir()
-    (dst / ".dab-vol").touch()
-    (dst / ".dab-dst").touch()
+    (dst / ".nbkp-vol").touch()
+    (dst / ".nbkp-dst").touch()
     (dst / "latest").mkdir()
 
     # Config file
@@ -151,9 +151,9 @@ def seed() -> None:
     typer.echo(f"{cfg_label:<{w}} {config_path}")
     typer.echo()
     typer.echo("Try:")
-    typer.echo(f"{_INDENT}poetry run dab status --config {config_path}")
-    typer.echo(f"{_INDENT}poetry run dab run --config {config_path} --dry-run")
-    typer.echo(f"{_INDENT}poetry run dab run --config {config_path}")
+    typer.echo(f"{_INDENT}poetry run nbk pstatus --config {config_path}")
+    typer.echo(f"{_INDENT}poetry run nbk prun --config {config_path} --dry-run")
+    typer.echo(f"{_INDENT}poetry run nbk prun --config {config_path}")
 
 
 def main() -> None:

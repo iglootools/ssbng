@@ -17,7 +17,7 @@ class ConfigError(Exception):
 def find_config_file(config_path: str | None = None) -> Path:
     """Find the configuration file using search order.
 
-    Order: explicit path > XDG_CONFIG_HOME > /etc/dab/
+    Order: explicit path > XDG_CONFIG_HOME > /etc/nbkp/
     """
     if config_path is not None:
         p = Path(config_path)
@@ -30,8 +30,8 @@ def find_config_file(config_path: str | None = None) -> Path:
             "XDG_CONFIG_HOME",
             os.path.expanduser("~/.config"),
         )
-        xdg_path = Path(xdg) / "dab" / "config.yaml"
-        etc_path = Path("/etc/dab/config.yaml")
+        xdg_path = Path(xdg) / "nbkp" / "config.yaml"
+        etc_path = Path("/etc/nbkp/config.yaml")
         if xdg_path.is_file():
             return xdg_path
         elif etc_path.is_file():
@@ -39,7 +39,7 @@ def find_config_file(config_path: str | None = None) -> Path:
         else:
             raise ConfigError(
                 "No config file found. Searched: "
-                f"{xdg_path}, /etc/dab/config.yaml"
+                f"{xdg_path}, /etc/nbkp/config.yaml"
             )
 
 

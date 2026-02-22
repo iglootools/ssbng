@@ -11,7 +11,7 @@ TODO: add system requirements:
 
 ### Get help:
 ```bash
-dab --help
+nbkp --help
 ```
 
 ## Python API

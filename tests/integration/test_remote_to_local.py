@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from dab.config import (
+from nbkp.config import (
     Config,
     DestinationSyncEndpoint,
     LocalVolume,
@@ -16,7 +16,7 @@ from dab.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from dab.rsync import run_rsync
+from nbkp.rsync import run_rsync
 
 from .conftest import ssh_exec
 

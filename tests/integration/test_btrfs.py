@@ -8,13 +8,13 @@ from typing import Any
 
 import pytest
 
-from dab.btrfs import (
+from nbkp.btrfs import (
     create_snapshot,
     get_latest_snapshot,
     list_snapshots,
     prune_snapshots,
 )
-from dab.config import (
+from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
@@ -24,7 +24,7 @@ from dab.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from dab.rsync import run_rsync
+from nbkp.rsync import run_rsync
 
 from .conftest import ssh_exec
 

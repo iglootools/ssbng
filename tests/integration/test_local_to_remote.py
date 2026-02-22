@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from dab.config import (
+from nbkp.config import (
     Config,
     DestinationSyncEndpoint,
     LocalVolume,
@@ -16,7 +16,7 @@ from dab.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from dab.rsync import run_rsync
+from nbkp.rsync import run_rsync
 
 from .conftest import create_markers, ssh_exec
 
@@ -32,7 +32,7 @@ class TestLocalToRemote:
         remote_volume: RemoteVolume,
     ) -> None:
         # Create markers on remote
-        create_markers(docker_container, "/data", [".dab-vol", ".dab-dst"])
+        create_markers(docker_container, "/data", [".nbkp-vol", ".nbkp-dst"])
 
         # Create local source files
         src_dir = tmp_path / "src"
@@ -68,8 +68,8 @@ class TestLocalToRemote:
     ) -> None:
         # Create remote subdir structure and markers
         ssh_exec(docker_container, "mkdir -p /data/photos-backup/latest")
-        create_markers(docker_container, "/data", [".dab-vol"])
-        create_markers(docker_container, "/data/photos-backup", [".dab-dst"])
+        create_markers(docker_container, "/data", [".nbkp-vol"])
+        create_markers(docker_container, "/data/photos-backup", [".nbkp-dst"])
 
         # Create local source with subdir
         src_dir = tmp_path / "src" / "photos"
