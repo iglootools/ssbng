@@ -151,9 +151,12 @@ def seed() -> None:
     typer.echo(f"{cfg_label:<{w}} {config_path}")
     typer.echo()
     typer.echo("Try:")
-    typer.echo(f"{_INDENT}poetry run nbk pstatus --config {config_path}")
-    typer.echo(f"{_INDENT}poetry run nbk prun --config {config_path} --dry-run")
-    typer.echo(f"{_INDENT}poetry run nbk prun --config {config_path}")
+    typer.echo(f"{_INDENT}poetry run nbkp status --config {config_path}")
+    typer.echo(
+        f"{_INDENT}poetry run nbkp run --config {config_path} --dry-run"
+    )
+    typer.echo(f"{_INDENT}poetry run nbkp run --config {config_path}")
+    typer.echo(f"{_INDENT}poetry run nbkp prune --config {config_path}")
 
 
 def main() -> None:

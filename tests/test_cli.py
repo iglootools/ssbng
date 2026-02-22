@@ -291,7 +291,9 @@ class TestRunCommand:
         assert "photos-to-nas" in result.output
         assert "OK" in result.output
         call_kwargs = mock_run.call_args
-        assert callable(call_kwargs.kwargs.get("on_rsync_output"))
+        assert call_kwargs.kwargs.get("on_rsync_output") is None
+        assert callable(call_kwargs.kwargs.get("on_sync_start"))
+        assert callable(call_kwargs.kwargs.get("on_sync_end"))
 
     @patch("nbkp.cli.run_all_syncs")
     @patch("nbkp.cli.check_all_syncs")

@@ -6,6 +6,8 @@ import json
 from typing import Annotated, Optional
 
 import typer
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from .config import Config
 from .status import SyncReason, SyncStatus, VolumeStatus, check_all_syncs
@@ -18,7 +20,7 @@ from .output import (
     print_human_status,
     print_human_troubleshoot,
 )
-from .runner import PruneResult, run_all_syncs
+from .runner import PruneResult, SyncResult, run_all_syncs
 
 _REMOVABLE_DEVICE_REASONS = {
     SyncReason.SOURCE_MARKER_NOT_FOUND,
@@ -129,11 +131,33 @@ def run(
         if output_format is OutputFormat.HUMAN:
             typer.echo("")
 
+        use_spinner = output_format is OutputFormat.HUMAN and verbose == 0
         stream_output = (
             (lambda chunk: typer.echo(chunk, nl=False))
-            if output_format is OutputFormat.HUMAN
+            if output_format is OutputFormat.HUMAN and not use_spinner
             else None
         )
+
+        console = Console() if use_spinner else None
+        status_display = None
+
+        def on_sync_start(slug: str) -> None:
+            nonlocal status_display
+            if console is not None:
+                status_display = console.status(f"Syncing {slug}...")
+                status_display.start()
+
+        def on_sync_end(slug: str, result: SyncResult) -> None:
+            nonlocal status_display
+            if status_display is not None:
+                status_display.stop()
+                status_display = None
+            if console is not None:
+                icon = (
+                    "[green]✓[/green]" if result.success else ("[red]✗[/red]")
+                )
+                console.print(f"{icon} {slug}")
+
         results = run_all_syncs(
             cfg,
             sync_statuses,
@@ -141,6 +165,8 @@ def run(
             only_syncs=sync,
             verbose=verbose,
             on_rsync_output=stream_output,
+            on_sync_start=on_sync_start if use_spinner else None,
+            on_sync_end=on_sync_end if use_spinner else None,
         )
 
         match output_format:
@@ -152,6 +178,7 @@ def run(
                 }
                 typer.echo(json.dumps(data, indent=2))
             case OutputFormat.HUMAN:
+                typer.echo("")
                 print_human_results(results, dry_run)
 
         if any(not r.success for r in results):
@@ -167,7 +194,9 @@ def troubleshoot(
 ) -> None:
     """Diagnose issues and show how to fix them."""
     cfg = _load_config_or_exit(config)
-    vol_statuses, sync_statuses = check_all_syncs(cfg)
+    vol_statuses, sync_statuses = _check_all_with_progress(
+        cfg, use_progress=True
+    )
     print_human_troubleshoot(vol_statuses, sync_statuses, cfg)
 
 
@@ -193,7 +222,9 @@ def prune(
     """Prune old snapshots beyond max-snapshots limit."""
     cfg = _load_config_or_exit(config)
     output_format = output
-    _, sync_statuses = check_all_syncs(cfg)
+    _, sync_statuses = _check_all_with_progress(
+        cfg, use_progress=output_format is OutputFormat.HUMAN
+    )
 
     prunable = [
         (slug, status)
@@ -254,6 +285,29 @@ def _load_config_or_exit(config_path: str | None) -> Config:
         raise typer.Exit(2)
 
 
+def _check_all_with_progress(
+    cfg: Config,
+    use_progress: bool,
+) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
+    """Run check_all_syncs with an optional progress bar."""
+    total = len(cfg.volumes) + len(cfg.syncs)
+    if not use_progress or total == 0:
+        return check_all_syncs(cfg)
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        TextColumn("{task.completed}/{task.total}"),
+        transient=True,
+    ) as progress:
+        task = progress.add_task("Checking volumes and syncs...", total=total)
+
+        def on_progress(_slug: str) -> None:
+            progress.advance(task)
+
+        return check_all_syncs(cfg, on_progress=on_progress)
+
+
 def _check_and_display_status(
     cfg: Config,
     output_format: OutputFormat,
@@ -268,7 +322,9 @@ def _check_and_display_status(
     Returns volume statuses, sync statuses, and whether there are
     fatal errors.
     """
-    vol_statuses, sync_statuses = check_all_syncs(cfg)
+    vol_statuses, sync_statuses = _check_all_with_progress(
+        cfg, use_progress=output_format is OutputFormat.HUMAN
+    )
 
     if output_format is OutputFormat.HUMAN:
         print_human_status(vol_statuses, sync_statuses, cfg)

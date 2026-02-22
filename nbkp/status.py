@@ -6,6 +6,7 @@ import enum
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Callable
 
 from pydantic import BaseModel, computed_field
 
@@ -352,14 +353,19 @@ def check_sync(
 
 def check_all_syncs(
     config: Config,
+    on_progress: Callable[[str], None] | None = None,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     """Check all volumes and syncs, caching volume checks."""
-    volume_statuses = {
-        slug: check_volume(volume, config)
-        for slug, volume in config.volumes.items()
-    }
-    sync_statuses = {
-        slug: check_sync(sync, config, volume_statuses)
-        for slug, sync in config.syncs.items()
-    }
+    volume_statuses: dict[str, VolumeStatus] = {}
+    for slug, volume in config.volumes.items():
+        volume_statuses[slug] = check_volume(volume, config)
+        if on_progress:
+            on_progress(slug)
+
+    sync_statuses: dict[str, SyncStatus] = {}
+    for slug, sync in config.syncs.items():
+        sync_statuses[slug] = check_sync(sync, config, volume_statuses)
+        if on_progress:
+            on_progress(slug)
+
     return volume_statuses, sync_statuses

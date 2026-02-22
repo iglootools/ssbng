@@ -42,6 +42,8 @@ def run_all_syncs(
     only_syncs: list[str] | None = None,
     verbose: int = 0,
     on_rsync_output: Callable[[str], None] | None = None,
+    on_sync_start: Callable[[str], None] | None = None,
+    on_sync_end: Callable[[str, SyncResult], None] | None = None,
 ) -> list[SyncResult]:
     """Run all (or selected) syncs.
 
@@ -57,19 +59,20 @@ def run_all_syncs(
     )
 
     for slug, status in selected.items():
+        if on_sync_start:
+            on_sync_start(slug)
+
         if not status.active:
-            results.append(
-                SyncResult(
-                    sync_slug=slug,
-                    success=False,
-                    dry_run=dry_run,
-                    rsync_exit_code=-1,
-                    output="",
-                    error=(
-                        "Sync not active: "
-                        + ", ".join(r.value for r in status.reasons)
-                    ),
-                )
+            result = SyncResult(
+                sync_slug=slug,
+                success=False,
+                dry_run=dry_run,
+                rsync_exit_code=-1,
+                output="",
+                error=(
+                    "Sync not active: "
+                    + ", ".join(r.value for r in status.reasons)
+                ),
             )
         else:
             result = _run_single_sync(
@@ -80,7 +83,10 @@ def run_all_syncs(
                 verbose,
                 on_rsync_output,
             )
-            results.append(result)
+
+        results.append(result)
+        if on_sync_end:
+            on_sync_end(slug, result)
 
     return results
 
