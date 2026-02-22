@@ -33,3 +33,5 @@ The integration test suite uses [testcontainers](https://testcontainers-python.r
 - Runs tests covering local-to-local, local-to-remote, remote-to-local syncs, btrfs snapshots, and status checks
 - Tears down the container on completion
 
+The `check-links` workflow runs a link checker against the documentation to catch broken links. 
+It is scheduled to run weekly, but can also be triggered manually using `gh workflow run check-links.yml`.
