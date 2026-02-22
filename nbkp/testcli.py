@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+from typing import Annotated
 
 import typer
 import yaml
@@ -83,9 +84,33 @@ def _show_troubleshoot() -> None:
     print_human_troubleshoot(vol_statuses, sync_statuses, config)
 
 
+_CHUNK_SIZE = 1024 * 1024  # 1 MB
+
+
+def _write_zeroed_file(path: Path, size_bytes: int) -> None:
+    """Write a zeroed file in chunks to avoid large allocations."""
+    chunk = b"\x00" * min(_CHUNK_SIZE, size_bytes)
+    with path.open("wb") as f:
+        remaining = size_bytes
+        while remaining > 0:
+            f.write(chunk[:remaining])
+            remaining -= len(chunk)
+
+
 @app.command()
-def seed() -> None:
+def seed(
+    big_file_size: Annotated[
+        int,
+        typer.Option(
+            "--big-file-size",
+            help="Size in MB for large files (e.g. 100, 1024)."
+            " When set, vacation.jpg and report.pdf"
+            " are written at this size to slow down syncs.",
+        ),
+    ] = 0,
+) -> None:
     """Create a temp folder with config and test data."""
+    size_bytes = big_file_size * 1024 * 1024
     tmp = Path(tempfile.mkdtemp(prefix="nbkp-seed-"))
 
     # Source volume
@@ -97,7 +122,10 @@ def seed() -> None:
     photos = src / "photos"
     photos.mkdir()
     (photos / ".nbkp-src").touch()
-    (photos / "vacation.jpg").write_text("fake jpeg data - vacation photo")
+    if big_file_size:
+        _write_zeroed_file(photos / "vacation.jpg", size_bytes)
+    else:
+        (photos / "vacation.jpg").write_text("fake jpeg data - vacation photo")
     (photos / "family.png").write_text("fake png data - family photo")
 
     docs = src / "documents"
@@ -107,7 +135,10 @@ def seed() -> None:
         "- Review backup strategy\n"
         "- Test rsync filters\n"
     )
-    (docs / "report.pdf").write_text("fake pdf data - quarterly report")
+    if big_file_size:
+        _write_zeroed_file(docs / "report.pdf", size_bytes)
+    else:
+        (docs / "report.pdf").write_text("fake pdf data - quarterly report")
 
     # Destination volume
     dst = tmp / "dst-backup"
