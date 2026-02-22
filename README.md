@@ -9,25 +9,27 @@
 ![CI Status](https://github.com/iglootools/nbkp/actions/workflows/test.yml/badge.svg?branch=main)
 
 A robust backup tool powered by rsync, designed for both local and remote targets—including removable drives and intermittently available backup servers. 
-It optionally leverages btrfs snapshots for incremental backups and encrypted volumes for enhanced security.
+It optionally leverages btrfs snapshots to retain historical backups space-efficiently, and encrypted volumes for enhanced security.
 
 ## Main Use Cases
 
-While not being limited to these, the tool is primarily designed to address the following backup use cases:
-- **Laptop to Server**: Back up files on your laptop to your home server whenever you are on the home network
-- **Laptop to External Drive**: Back up files on your laptop to an external drive whenever it is connected
-- **Laptop External Drive to Server**: Back up files from an external drive to your home server whenever the drive is connected and you are on the home network
-- **Server to External Drive**: Back up files on your home server to an external drive whenever it is connected
+The tool is primarily designed for the following backup scenarios:
+- **Laptop to Server** — back up to your home server whenever you're on the home network
+- **Laptop to External Drive** — back up to an external drive whenever it's connected
+- **External Drive to Server** — replicate an external drive to your home server when both are available
+- **Server to External Drive** — back up your home server to an external drive, piloted from your laptop
 
-Think of it as a tool replacing the rsync-based shell scripts you would write to back up your data to external drives or to your Raspberry Pi server, but with 
-- Automatic detection of available/mounted source and destination volumes (to account for the fact that backup servers and external drives are not always available)
-- Support for btrfs snapshots (to protect against corrupting the backups with corrupted/deleted data)
-- A more robust configuration model
-- Better error handling
+It replaces the rsync shell scripts you'd normally maintain, adding:
+- **Volume detection** — only runs when sources and destinations are actually available
+- **Btrfs snapshots** — keeps point-in-time copies so a bad sync can't wipe good backups
+- **Declarative config** — one YAML file describes all your backup pairs
+- **Structured output** — human-readable and JSON output for scripting and automation
+
+Full feature list: [docs/features.md](https://github.com/iglootools/nbkp/blob/main/docs/features.md).
 
 ## Philosophy
 
-**Guiding Design Principles**
+**Design Principles**
 - Laptop-centric workflows
 - Changing networks
 -	Drives being plugged/unplugged
@@ -36,13 +38,11 @@ Think of it as a tool replacing the rsync-based shell scripts you would write to
 - Personal homelab / Raspberry Pi setups
 
 **Implementation Principles**
-Rather than reinventing its own storage format, network protocol, and encryption mechanisms, 
-the project leverages existing tools and libraries to keep things simple and reliable:
-- Rsync (and SSH): Perform the backups locally and remotely, with support for filters, and more
-- Plain directory: Files are stored as-is, no complicated restore process
-- Btrfs snapshots: Optionally perform incremental backups thanks to the snapshotting capabilities of btrfs, with automatic pruning of old snapshots based on retention policies. 
-  Each snapshot (btrfs read-only subvolume) exposes a plain directory tree
-- Cryptsetup: Optionally encrypt your backups using encrypted volumes
+No custom storage format, protocol, or encryption — just proven tools composed together:
+- **rsync + SSH** — handles the actual file transfer, locally or remotely
+- **Plain directories** — files are stored as-is; restoring is just a copy
+- **Btrfs snapshot (optional)s** — space-efficient point-in-time copies via copy-on-write, with automatic pruning. Each snapshot is a read-only subvolume exposing a plain directory tree
+- **cryptsetup (optional)** — full-volume encryption for backup destinations
 
 **Nomad backup metaphor**
 A nomad:
@@ -59,53 +59,63 @@ Which maps to:
 - Network availability
 - Mount detection
 
+## Installation
 
-## Features
-
-TODO
-
-### Commands
-
-- run (with support for dry run)
-- status (list the active syncs and volumes)
-
-TODO
-
-#### Outputs
-
-All commands provide the following outputs:
-- Human-readable logs (default)
-- JSON
+See [docs/installation.md](https://github.com/iglootools/nbkp/blob/main/docs/installation.md).
 
 ## Usage
 
-See [docs/usage.md](https://github.com/iglootools/nbkp/blob/main/docs/usage.md) for detailed usage instructions for both the CLI and Python API, including examples.
-
-## Architecture
-
-See [docs/architecture.md](https://github.com/iglootools/nbkp/blob/main/docs/architecture.md) for a detailed overview of the architecture, design patterns, and execution flow.
+See [docs/usage.md](https://github.com/iglootools/nbkp/blob/main/docs/usage.md).
 
 ## Concepts
 
-See [docs/concepts.md](https://github.com/iglootools/nbkp/blob/main/docs/concepts.md) for explanations of key concepts such as volumes, syncs, and the configuration model.
+See [docs/concepts.md](https://github.com/iglootools/nbkp/blob/main/docs/concepts.md).
 
-## Conventions
+## Contribute
+- [docs/architecture.md](https://github.com/iglootools/nbkp/blob/main/docs/architecture.md) - architecture overview
+- [docs/conventions.md](https://github.com/iglootools/nbkp/blob/main/docs/conventions.md) — coding conventions and guidelines
+- [docs/setup-development-environment.md](https://github.com/iglootools/nbkp/blob/main/docs/setup-development-environment.md) — development setup
+- [docs/building-and-testing.md](https://github.com/iglootools/nbkp/blob/main/docs/building-and-testing.md) — running tests and checks
+- [docs/releasing-and-publishing.md](https://github.com/iglootools/nbkp/blob/main/docs/releasing-and-publishing.md) — releases and PyPI publishing
 
-See [docs/conventions.md](https://github.com/iglootools/nbkp/blob/main/docs/conventions.md) for coding conventions, testing practices, and other guidelines for contributing to the codebase.
+## Resources
+- [Releases](https://pypi.org/project/nbkp/#history)
+- [Issue Tracker](https://github.com/iglootools/nbkp/issues)
 
-## Development
+## Related Projects
 
-### Setup Development Environment
+### Dependencies
+- [rsync](https://rsync.samba.org/) — the underlying file synchronization tool
+- [btrfs](https://btrfs.wiki.kernel.org/index.php/Main_Page) — for space-efficient point-in-time copies via copy-on-write
+- [cryptsetup](https://gitlab.com/cryptsetup/cryptsetup) — for full-volume encryption
+- [typer](https://typer.tiangolo.com/) — for building the CLI interface
+- [pydantic](https://pydantic.dev/) — for data modeling and validation
 
-See [docs/setup-development-environment.md](https://github.com/iglootools/nbkp/blob/main/docs/setup-development-environment.md) for instructions on setting up the development environment.
+### Similar Tools
 
-### Building and Testing
+There are a number of open source backup tools that use rsync, btrfs, or similar principles. This section describes how `nbkp` compares to some of the popular ones.
+If you believe that the representation is inaccurate or if there are other tools that should be included in this list, please submit an issue or PR to update this section.
 
-See [docs/building-and-testing.md](https://github.com/iglootools/nbkp/blob/main/docs/building-and-testing.md) for instructions on how to run unit and integration tests, as well as formatting and linting checks.
+#### Rsync-based
 
-### Releasing and Publishing
+- **[rsnapshot](https://rsnapshot.org/)** — periodic snapshots via rsync + hard links (hourly/daily/weekly/monthly). Designed for server/cron use with no awareness of removable or intermittent targets. Files stored as plain directories.
+- **[Back In Time](https://github.com/bit-team/backintime)** — GUI/CLI tool using rsync + hard links with scheduling and encfs encryption. Provides a Qt interface; uses hard links instead of btrfs snapshots; no marker-file mechanism for removable drives.
+- **[rsync-time-backup](https://github.com/laurent22/rsync-time-backup)** — Time Machine-style shell script using rsync `--link-dest`. Single script, no config file; uses hard links instead of btrfs snapshots; no volume detection.
+- **[rdiff-backup](https://rdiff-backup.net/)** — keeps the latest backup as a plain mirror, stores reverse diffs for older versions. Older versions require the tool to reconstruct; no removable-drive awareness.
+- **[Dirvish](https://dirvish.org/)** — rotating network backup system using rsync + hard links. Oriented toward server-pull workflows; no removable-drive detection or btrfs support.
 
-See [docs/releasing-and-publishing.md](https://github.com/iglootools/nbkp/blob/main/docs/releasing-and-publishing.md) for instructions on how to create new releases and publish the package to PyPI.
+#### Deduplicating
+
+- **[BorgBackup](https://www.borgbackup.org/)** — chunk-level deduplication with compression and authenticated encryption. Proprietary repository format (not plain directories); requires `borg` on the remote side; no removable-drive detection.
+- **[Restic](https://restic.net/)** — content-addressable backups with encryption by default, supporting many backends (local, S3, SFTP, B2). Proprietary format; restoring requires the restic tool; no volume detection.
+- **[Duplicity](https://duplicity.us/)** — GPG-encrypted tar volumes with librsync incremental transfers. Not browsable as plain directories; full+incremental chain model; no btrfs integration.
+- **[Kopia](https://kopia.io/)** — content-addressable storage with encryption, compression, and both CLI/GUI. Proprietary format; includes an optional scheduling server; no removable-drive or btrfs support.
+
+#### Btrfs / snapshot-focused
+
+- **[btrbk](https://github.com/digint/btrbk)** — btrfs-native snapshot management with send/receive for remote transfers. Btrfs-only (no rsync); more sophisticated retention policies (hourly/daily/weekly/monthly); no non-btrfs filesystem support.
+- **[Snapper](http://snapper.io/)** — automated btrfs snapshot creation with timeline-based retention and rollback. Local snapshot management only; no rsync or remote transfer; no external backup targets.
+- **[Timeshift](https://github.com/linuxmint/timeshift)** — system restore via rsync + hard links or btrfs snapshots. Targets root filesystem for system-level rollback; excludes user data by default; no remote backup.
 
 ## License
 
