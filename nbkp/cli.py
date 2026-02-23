@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import stat
 from pathlib import Path
 from typing import Annotated, Optional
@@ -201,13 +202,51 @@ def sh(
             help="Write script to file (made executable)",
         ),
     ] = None,
+    relative_src: Annotated[
+        bool,
+        typer.Option(
+            "--relative-src",
+            help=(
+                "Make source paths relative to script location"
+                " (requires --output-file)"
+            ),
+        ),
+    ] = False,
+    relative_dst: Annotated[
+        bool,
+        typer.Option(
+            "--relative-dst",
+            help=(
+                "Make destination paths relative to script location"
+                " (requires --output-file)"
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Generate a standalone backup shell script.
-    
-    This is useful for deploying to systems without Python, or auditing what commands will run.
+
+    This is useful for deploying to systems without Python,
+    or auditing what commands will run.
     """
+    if (relative_src or relative_dst) and output_file is None:
+        typer.echo(
+            "Error: --relative-src/--relative-dst" " require --output-file",
+            err=True,
+        )
+        raise typer.Exit(2)
+
     cfg = _load_config_or_exit(config)
-    script = generate_script(cfg, ScriptOptions(config_path=config))
+    script = generate_script(
+        cfg,
+        ScriptOptions(
+            config_path=config,
+            output_file=(
+                os.path.abspath(output_file) if output_file else None
+            ),
+            relative_src=relative_src,
+            relative_dst=relative_dst,
+        ),
+    )
     if output_file is not None:
         path = Path(output_file)
         path.write_text(script, encoding="utf-8")

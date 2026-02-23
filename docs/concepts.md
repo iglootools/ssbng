@@ -262,6 +262,20 @@ bash -n backup.sh  # syntax check
 
 The generated script supports `--dry-run` (`-n`) and `--verbose` (`-v`, `-vv`, `-vvv`) as runtime arguments — these are not baked in at generation time.
 
+### Relative paths
+
+The `--relative-src` and `--relative-dst` flags make local source and/or destination paths relative to the script location. These flags require `--output-file` so the script knows where it lives. Remote volume paths are always absolute (they live on remote hosts).
+
+```bash
+# Store the script next to the backups — destination paths become relative
+nbkp sh --config backup.yaml -o /mnt/backups/backup.sh --relative-dst
+
+# Both source and destination relative
+nbkp sh --config backup.yaml -o /mnt/data/backup.sh --relative-src --relative-dst
+```
+
+The generated script resolves its own directory at runtime via `NBKP_SCRIPT_DIR` and uses it to compute the actual paths. This makes the script portable — it works regardless of where the drive is mounted.
+
 **What is preserved from `nbkp run`:**
 - All 4 rsync command variants (local-to-local, local-to-remote, remote-to-local, remote-to-remote)
 - SSH options (port, key, `-o` options, proxy jump `-J`)

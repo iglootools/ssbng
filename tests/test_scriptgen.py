@@ -770,3 +770,183 @@ class TestRemoteBtrfs:
             text=True,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+
+
+class TestRelativePaths:
+    """Tests for --relative-src / --relative-dst path handling."""
+
+    def test_relative_dst_local_to_local(self) -> None:
+        config = _local_to_local_config()
+        options = ScriptOptions(
+            config_path="/etc/nbkp/config.yaml",
+            output_file="/mnt/dst/backup.sh",
+            relative_dst=True,
+        )
+        script = generate_script(config, options, now=_NOW)
+        # Source stays absolute
+        assert "/mnt/src/photos/" in script
+        # Dest uses NBKP_SCRIPT_DIR-relative path
+        assert "${NBKP_SCRIPT_DIR}" in script
+        assert "/mnt/dst/backup/latest/" not in script
+
+    def test_relative_src_local_to_local(self) -> None:
+        config = _local_to_local_config()
+        options = ScriptOptions(
+            config_path="/etc/nbkp/config.yaml",
+            output_file="/mnt/src/backup.sh",
+            relative_src=True,
+        )
+        script = generate_script(config, options, now=_NOW)
+        # Source uses NBKP_SCRIPT_DIR-relative path
+        assert "${NBKP_SCRIPT_DIR}" in script
+        # Dest stays absolute
+        assert "/mnt/dst/backup/latest/" in script
+
+    def test_relative_both(self) -> None:
+        config = _local_to_local_config()
+        options = ScriptOptions(
+            config_path="/etc/nbkp/config.yaml",
+            output_file="/mnt/backup.sh",
+            relative_src=True,
+            relative_dst=True,
+        )
+        script = generate_script(config, options, now=_NOW)
+        assert "${NBKP_SCRIPT_DIR}" in script
+        # Both absolute paths replaced
+        assert "/mnt/src/photos/" not in script
+        assert "/mnt/dst/backup/latest/" not in script
+
+    def test_relative_src_local_to_remote(self) -> None:
+        config = _local_to_remote_config()
+        options = ScriptOptions(
+            config_path="/etc/nbkp/config.yaml",
+            output_file="/mnt/data/backup.sh",
+            relative_src=True,
+        )
+        script = generate_script(config, options, now=_NOW)
+        # Local source relativized
+        assert "${NBKP_SCRIPT_DIR}" in script
+        # Remote dest stays absolute
+        assert "nas.example.com" in script
+
+    def test_relative_dst_remote_to_local(self) -> None:
+        config = _remote_to_local_config()
+        options = ScriptOptions(
+            config_path="/etc/nbkp/config.yaml",
+            output_file="/mnt/backup/backup.sh",
+            relative_dst=True,
+        )
+        script = generate_script(config, options, now=_NOW)
+        # Local dest relativized
+        assert "${NBKP_SCRIPT_DIR}" in script
+        # Remote source stays absolute
+        assert "admin@remote.example.com" in script
+
+    def test_relative_remote_to_remote_unchanged(self) -> None:
+        config = _remote_to_remote_config()
+        options = ScriptOptions(
+            config_path="/etc/nbkp/config.yaml",
+            output_file="/tmp/backup.sh",
+            relative_src=True,
+            relative_dst=True,
+        )
+        script = generate_script(config, options, now=_NOW)
+        # Remote volumes are never relativized
+        assert "NBKP_SCRIPT_DIR" not in script
+
+    def test_script_dir_in_header(self) -> None:
+        config = _local_to_local_config()
+        options = ScriptOptions(
+            config_path="/etc/nbkp/config.yaml",
+            output_file="/mnt/dst/backup.sh",
+            relative_dst=True,
+        )
+        script = generate_script(config, options, now=_NOW)
+        assert "NBKP_SCRIPT_DIR=" in script
+        assert "BASH_SOURCE[0]" in script
+
+    def test_no_script_dir_when_absolute(self) -> None:
+        config = _local_to_local_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert "NBKP_SCRIPT_DIR" not in script
+
+    def test_relative_shell_valid(self) -> None:
+        config = _local_to_local_config()
+        options = ScriptOptions(
+            config_path="/etc/nbkp/config.yaml",
+            output_file="/mnt/dst/backup.sh",
+            relative_dst=True,
+        )
+        script = generate_script(config, options, now=_NOW)
+        result = subprocess.run(
+            ["bash", "-n"],
+            input=script,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+
+    def test_relative_both_shell_valid(self) -> None:
+        config = _local_to_local_config()
+        options = ScriptOptions(
+            config_path="/etc/nbkp/config.yaml",
+            output_file="/mnt/backup.sh",
+            relative_src=True,
+            relative_dst=True,
+        )
+        script = generate_script(config, options, now=_NOW)
+        result = subprocess.run(
+            ["bash", "-n"],
+            input=script,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+
+    def test_relative_btrfs(self) -> None:
+        config = _btrfs_config()
+        options = ScriptOptions(
+            config_path="/etc/nbkp/config.yaml",
+            output_file="/mnt/dst/backup.sh",
+            relative_dst=True,
+        )
+        script = generate_script(config, options, now=_NOW)
+        assert "${NBKP_SCRIPT_DIR}" in script
+        # Btrfs snapshot uses relative dest paths
+        assert "btrfs" in script
+        assert "subvolume" in script
+        assert "snapshot" in script
+        assert "${NBKP_SCRIPT_DIR}" in script
+        result = subprocess.run(
+            ["bash", "-n"],
+            input=script,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+
+    def test_relative_volume_checks(self) -> None:
+        config = _local_to_local_config()
+        options = ScriptOptions(
+            config_path="/etc/nbkp/config.yaml",
+            output_file="/mnt/dst/backup.sh",
+            relative_dst=True,
+        )
+        script = generate_script(config, options, now=_NOW)
+        # Dst volume check should use relative path
+        assert "${NBKP_SCRIPT_DIR}" in script
+        # Src volume check stays absolute
+        assert "test -f /mnt/src/.nbkp-vol" in script
+
+    def test_relative_preflight_checks(self) -> None:
+        config = _local_to_local_config()
+        options = ScriptOptions(
+            config_path="/etc/nbkp/config.yaml",
+            output_file="/mnt/dst/backup.sh",
+            relative_dst=True,
+        )
+        script = generate_script(config, options, now=_NOW)
+        # Source preflight stays absolute
+        assert "/mnt/src/photos/.nbkp-src" in script
+        # Dest preflight uses relative
+        assert ".nbkp-dst" in script

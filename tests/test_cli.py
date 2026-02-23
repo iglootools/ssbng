@@ -823,6 +823,42 @@ class TestShCommand:
         assert mode & stat.S_IXUSR
         assert mode & stat.S_IXGRP
 
+    def test_relative_without_output_file(self) -> None:
+        result = runner.invoke(
+            app,
+            ["sh", "--config", "/fake.yaml", "--relative-src"],
+        )
+        assert result.exit_code == 2
+
+    @patch("nbkp.cli.load_config")
+    def test_relative_with_output_file(
+        self,
+        mock_load: MagicMock,
+        tmp_path: object,
+    ) -> None:
+        import pathlib
+
+        tp = pathlib.Path(str(tmp_path))
+        config = _sample_config()
+        mock_load.return_value = config
+        out = tp / "backup.sh"
+
+        result = runner.invoke(
+            app,
+            [
+                "sh",
+                "--config",
+                "/fake.yaml",
+                "-o",
+                str(out),
+                "--relative-src",
+            ],
+        )
+        assert result.exit_code == 0
+        assert out.exists()
+        content = out.read_text(encoding="utf-8")
+        assert "NBKP_SCRIPT_DIR" in content
+
     @patch(
         "nbkp.cli.load_config",
         side_effect=__import__(

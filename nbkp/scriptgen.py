@@ -8,6 +8,7 @@ and ``--verbose`` flags at runtime.
 
 from __future__ import annotations
 
+import os
 import shlex
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -20,11 +21,7 @@ from .config import (
     SyncConfig,
 )
 from .remote.ssh import build_ssh_base_args
-from .sync.btrfs import resolve_dest_path
-from .sync.rsync import (
-    build_rsync_command,
-    resolve_path,
-)
+from .sync.rsync import build_rsync_command
 
 _SH_INDENT = "    "
 
@@ -34,6 +31,67 @@ class ScriptOptions:
     """Options for script generation."""
 
     config_path: str | None = None
+    output_file: str | None = None
+    relative_src: bool = False
+    relative_dst: bool = False
+
+
+def _build_vol_paths(
+    config: Config,
+    options: ScriptOptions,
+) -> dict[str, str]:
+    """Compute volume slug -> effective path (absolute or relative).
+
+    Local volumes are relativized when they appear as source
+    (and ``relative_src`` is set) or as destination (and
+    ``relative_dst`` is set).  Remote volumes always keep their
+    absolute path.
+    """
+    src_slugs = {s.source.volume for s in config.syncs.values()}
+    dst_slugs = {s.destination.volume for s in config.syncs.values()}
+
+    vol_paths: dict[str, str] = {}
+    for slug, vol in config.volumes.items():
+        match vol:
+            case RemoteVolume():
+                vol_paths[slug] = vol.path
+            case LocalVolume():
+                should_relativize = (
+                    slug in src_slugs and options.relative_src
+                ) or (slug in dst_slugs and options.relative_dst)
+                if should_relativize and options.output_file:
+                    output_dir = os.path.dirname(options.output_file)
+                    rel = os.path.relpath(vol.path, output_dir)
+                    vol_paths[slug] = f"${{NBKP_SCRIPT_DIR}}/{rel}"
+                else:
+                    vol_paths[slug] = vol.path
+    return vol_paths
+
+
+def _vol_path(
+    vol_paths: dict[str, str],
+    slug: str,
+    subdir: str | None = None,
+) -> str:
+    """Resolve full path from the vol_paths mapping."""
+    base = vol_paths[slug]
+    if subdir:
+        return f"{base}/{subdir}"
+    return base
+
+
+def _substitute_vol_path(
+    arg: str,
+    vol: LocalVolume | RemoteVolume,
+    vol_paths: dict[str, str],
+    slug: str,
+) -> str:
+    """Replace the absolute volume path prefix in *arg* with vol_paths."""
+    match vol:
+        case RemoteVolume():
+            return arg
+        case LocalVolume():
+            return arg.replace(vol.path, vol_paths[slug], 1)
 
 
 def generate_script(
@@ -45,10 +103,11 @@ def generate_script(
     """Generate a standalone bash script from config."""
     if now is None:
         now = datetime.now(timezone.utc)
+    vol_paths = _build_vol_paths(config, options)
     parts = [
-        _generate_header(options, now),
-        _generate_volume_checks(config),
-        _generate_sync_functions(config),
+        _generate_header(options, now, vol_paths),
+        _generate_volume_checks(config, vol_paths),
+        _generate_sync_functions(config, vol_paths),
         _generate_invocations(config),
         _generate_summary(),
     ]
@@ -61,12 +120,19 @@ def generate_script(
 def _generate_header(
     options: ScriptOptions,
     now: datetime,
+    vol_paths: dict[str, str],
 ) -> str:
     timestamp = now.isoformat(timespec="seconds").replace("+00:00", "Z")
     config_line = (
         f"# Config: {options.config_path}"
         if options.config_path
         else "# Config: <stdin>"
+    )
+    has_relative = any("$" in p for p in vol_paths.values())
+    script_dir_line = (
+        "\nNBKP_SCRIPT_DIR=" '"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"'
+        if has_relative
+        else ""
     )
     return f"""\
 #!/bin/bash
@@ -98,7 +164,7 @@ endpoint markers (.nbkp-src/.nbkp-dst)
 # Unofficial bash strict mode \
 (http://redsymbol.net/articles/unofficial-bash-strict-mode/)
 set -euo pipefail
-IFS=$'\\n\\t'
+IFS=$'\\n\\t'{script_dir_line}
 
 NBKP_DRY_RUN=false
 NBKP_VERBOSE=0
@@ -120,14 +186,18 @@ nbkp_log() {{ echo "[nbkp] $*" >&2; }}"""
 # -- Volume checks -------------------------------------------------
 
 
-def _generate_volume_checks(config: Config) -> str:
+def _generate_volume_checks(
+    config: Config,
+    vol_paths: dict[str, str],
+) -> str:
     lines = ["", "# --- Volume checks ---"]
     for slug, vol in config.volumes.items():
-        marker = f"{vol.path}/.nbkp-vol"
+        vpath = vol_paths[slug]
+        marker = f"{vpath}/.nbkp-vol"
         match vol:
             case LocalVolume():
                 lines.append(
-                    f"test -f {_sq(marker)}"
+                    f"test -f {_qp(marker)}"
                     f" || {{ nbkp_log"
                     f' "WARN: volume {slug}:'
                     f' marker {marker} not found";'
@@ -150,13 +220,20 @@ def _generate_volume_checks(config: Config) -> str:
 # -- Sync functions ------------------------------------------------
 
 
-def _generate_sync_functions(config: Config) -> str:
+def _generate_sync_functions(
+    config: Config,
+    vol_paths: dict[str, str],
+) -> str:
     parts = ["", "# --- Sync functions ---"]
     for slug, sync in config.syncs.items():
         if sync.enabled:
-            parts.append(_generate_sync_function(slug, sync, config))
+            parts.append(
+                _generate_sync_function(slug, sync, config, vol_paths)
+            )
         else:
-            parts.append(_generate_disabled_sync(slug, sync, config))
+            parts.append(
+                _generate_disabled_sync(slug, sync, config, vol_paths)
+            )
     return "\n".join(parts)
 
 
@@ -164,6 +241,7 @@ def _generate_sync_function(
     slug: str,
     sync: SyncConfig,
     config: Config,
+    vol_paths: dict[str, str],
 ) -> str:
     i1 = _SH_INDENT
     fn_name = _slug_to_fn(slug)
@@ -173,21 +251,23 @@ def _generate_sync_function(
         f'{i1}nbkp_log "Starting sync: {slug}"',
     ]
 
-    lines.extend(_generate_preflight_checks(sync, config))
+    lines.extend(_generate_preflight_checks(sync, config, vol_paths))
 
     lines.extend(_generate_runtime_flags())
 
     if sync.destination.btrfs_snapshots.enabled:
-        lines.extend(_generate_link_dest(sync, config))
+        lines.extend(_generate_link_dest(sync, config, vol_paths))
 
-    lines.extend(_generate_rsync_command(sync, config))
+    lines.extend(_generate_rsync_command(sync, config, vol_paths))
 
     if sync.destination.btrfs_snapshots.enabled:
-        lines.extend(_generate_btrfs_snapshot(sync, config))
+        lines.extend(_generate_btrfs_snapshot(sync, config, vol_paths))
         btrfs_cfg = sync.destination.btrfs_snapshots
         if btrfs_cfg.max_snapshots is not None:
             lines.extend(
-                _generate_btrfs_prune(sync, config, btrfs_cfg.max_snapshots)
+                _generate_btrfs_prune(
+                    sync, config, btrfs_cfg.max_snapshots, vol_paths
+                )
             )
 
     lines.append("")
@@ -200,6 +280,7 @@ def _generate_disabled_sync(
     slug: str,
     sync: SyncConfig,
     config: Config,
+    vol_paths: dict[str, str],
 ) -> str:
     enabled_sync = SyncConfig(
         slug=sync.slug,
@@ -211,7 +292,9 @@ def _generate_disabled_sync(
         filters=sync.filters,
         filter_file=sync.filter_file,
     )
-    enabled_body = _generate_sync_function(slug, enabled_sync, config)
+    enabled_body = _generate_sync_function(
+        slug, enabled_sync, config, vol_paths
+    )
     commented = "\n".join(
         f"# {line}" if line.strip() else "#"
         for line in enabled_body.split("\n")
@@ -225,6 +308,7 @@ def _generate_disabled_sync(
 def _generate_preflight_checks(
     sync: SyncConfig,
     config: Config,
+    vol_paths: dict[str, str],
 ) -> list[str]:
     i1 = _SH_INDENT
     lines: list[str] = ["", f"{i1}# Pre-flight checks"]
@@ -232,8 +316,10 @@ def _generate_preflight_checks(
     src_vol = config.volumes[sync.source.volume]
     dst_vol = config.volumes[sync.destination.volume]
 
-    src_path = resolve_path(src_vol, sync.source.subdir)
-    dst_path = resolve_path(dst_vol, sync.destination.subdir)
+    src_path = _vol_path(vol_paths, sync.source.volume, sync.source.subdir)
+    dst_path = _vol_path(
+        vol_paths, sync.destination.volume, sync.destination.subdir
+    )
 
     # Source endpoint marker
     src_marker = f"{src_path}/.nbkp-src"
@@ -323,7 +409,7 @@ def _check_line(
     i1 = _SH_INDENT
     match vol:
         case LocalVolume():
-            test_cmd = "test " + " ".join(_sq(a) for a in test_args)
+            test_cmd = "test " + " ".join(_qp(a) for a in test_args)
         case RemoteVolume():
             server = config.rsync_servers[vol.rsync_server]
             proxy = config.resolve_proxy(server)
@@ -376,11 +462,16 @@ def _generate_runtime_flags() -> list[str]:
 def _generate_link_dest(
     sync: SyncConfig,
     config: Config,
+    vol_paths: dict[str, str],
 ) -> list[str]:
     i1 = _SH_INDENT
     i2 = _SH_INDENT * 2
     dst_vol = config.volumes[sync.destination.volume]
-    dest_path = resolve_dest_path(sync, config)
+    dest_path = _vol_path(
+        vol_paths,
+        sync.destination.volume,
+        sync.destination.subdir,
+    )
     snaps_dir = f"{dest_path}/snapshots"
 
     lines = [
@@ -394,7 +485,7 @@ def _generate_link_dest(
             lines.extend(
                 [
                     f"{i1}NBKP_LATEST_SNAP="
-                    f"$(ls {_sq(snaps_dir)}"
+                    f"$(ls {_qp(snaps_dir)}"
                     f" 2>/dev/null | sort | tail -1)",
                     f'{i1}NBKP_LINK_DEST=""',
                     f'{i1}if [ -n "$NBKP_LATEST_SNAP" ]; then',
@@ -433,6 +524,7 @@ def _generate_link_dest(
 def _generate_rsync_command(
     sync: SyncConfig,
     config: Config,
+    vol_paths: dict[str, str],
 ) -> list[str]:
     i1 = _SH_INDENT
     i2 = _SH_INDENT * 2
@@ -441,6 +533,20 @@ def _generate_rsync_command(
     cmd = build_rsync_command(
         sync, config, dry_run=False, link_dest=None, verbose=0
     )
+
+    # Substitute local volume paths with vol_paths versions
+    src_vol = config.volumes[sync.source.volume]
+    dst_vol = config.volumes[sync.destination.volume]
+    match (src_vol, dst_vol):
+        case (RemoteVolume(), RemoteVolume()):
+            pass  # R→R: paths are baked into inner command
+        case _:
+            cmd[-2] = _substitute_vol_path(
+                cmd[-2], src_vol, vol_paths, sync.source.volume
+            )
+            cmd[-1] = _substitute_vol_path(
+                cmd[-1], dst_vol, vol_paths, sync.destination.volume
+            )
 
     lines = ["", f"{i1}# Rsync"]
 
@@ -466,11 +572,16 @@ def _generate_rsync_command(
 def _generate_btrfs_snapshot(
     sync: SyncConfig,
     config: Config,
+    vol_paths: dict[str, str],
 ) -> list[str]:
     i1 = _SH_INDENT
     i2 = _SH_INDENT * 2
     dst_vol = config.volumes[sync.destination.volume]
-    dest_path = resolve_dest_path(sync, config)
+    dest_path = _vol_path(
+        vol_paths,
+        sync.destination.volume,
+        sync.destination.subdir,
+    )
     latest = f"{dest_path}/latest"
     snaps_dir = f"{dest_path}/snapshots"
 
@@ -523,13 +634,18 @@ def _generate_btrfs_prune(
     sync: SyncConfig,
     config: Config,
     max_snapshots: int,
+    vol_paths: dict[str, str],
 ) -> list[str]:
     i1 = _SH_INDENT
     i2 = _SH_INDENT * 2
     i3 = _SH_INDENT * 3
     i4 = _SH_INDENT * 4
     dst_vol = config.volumes[sync.destination.volume]
-    dest_path = resolve_dest_path(sync, config)
+    dest_path = _vol_path(
+        vol_paths,
+        sync.destination.volume,
+        sync.destination.subdir,
+    )
     snaps_dir = f"{dest_path}/snapshots"
 
     lines = [
@@ -542,7 +658,7 @@ def _generate_btrfs_prune(
         case LocalVolume():
             lines.extend(
                 [
-                    f"{i2}NBKP_SNAPS=" f"$(ls {_sq(snaps_dir)} | sort)",
+                    f"{i2}NBKP_SNAPS=" f"$(ls {_qp(snaps_dir)} | sort)",
                     f"{i2}NBKP_COUNT="
                     '$(echo "$NBKP_SNAPS" | wc -l'
                     " | tr -d ' ')",
@@ -553,9 +669,9 @@ def _generate_btrfs_prune(
                     f" | while IFS= read -r snap; do",
                     f'{i4}nbkp_log "Pruning' ' snapshot: $snap"',
                     f"{i4}btrfs property set"
-                    f' {_sq(snaps_dir)}/"$snap"'
+                    f' {_qp(snaps_dir)}/"$snap"'
                     f" ro false",
-                    f"{i4}btrfs subvolume delete" f' {_sq(snaps_dir)}/"$snap"',
+                    f"{i4}btrfs subvolume delete" f' {_qp(snaps_dir)}/"$snap"',
                     f"{i3}done",
                     f"{i2}fi",
                 ]
@@ -650,8 +766,20 @@ def _generate_summary() -> str:
 
 
 def _sq(s: str) -> str:
-    """Shell-quote a string."""
+    """Shell-quote a string (single quotes, no variable expansion)."""
     return shlex.quote(s)
+
+
+def _qp(s: str) -> str:
+    """Quote a path, double-quoting if it contains shell variables.
+
+    Falls back to :func:`_sq` when the string has no ``$``.
+    Double-quoting preserves ``${VAR}`` expansion while still
+    protecting against word splitting.
+    """
+    if "$" not in s:
+        return _sq(s)
+    return f'"{s}"'
 
 
 def _slug_to_fn(slug: str) -> str:
@@ -669,7 +797,7 @@ def _format_shell_command(
     continuations for readability.  *cont_indent* controls the
     indentation of continuation lines.
     """
-    parts = [_sq(arg) for arg in cmd]
+    parts = [_qp(arg) for arg in cmd]
     if len(parts) <= 3:
         return " ".join(parts)
     else:
