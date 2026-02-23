@@ -105,9 +105,10 @@ def seed(
             "--big-file-size",
             help="Size in MB for large files (e.g. 100, 1024)."
             " When set, vacation.jpg and report.pdf"
-            " are written at this size to slow down syncs.",
+            " are written at this size to slow down syncs."
+            " Set to 0 to disable.",
         ),
-    ] = 0,
+    ] = 1024,
 ) -> None:
     """Create a temp folder with config and test data."""
     size_bytes = big_file_size * 1024 * 1024
