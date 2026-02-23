@@ -183,19 +183,20 @@ def seed(
     typer.echo(f"{cfg_label:<{w}} {config_path}")
     typer.echo()
     typer.echo("Try:")
-    typer.echo(f"{_INDENT}poetry run nbkp status --config {config_path}")
+    typer.echo("poetry install, then run:")
+    typer.echo(f"{_INDENT}nbkp status --config {config_path}")
     typer.echo(
-        f"{_INDENT}poetry run nbkp run --config {config_path} --dry-run"
+        f"{_INDENT}nbkp run --config {config_path} --dry-run"
     )
-    typer.echo(f"{_INDENT}poetry run nbkp run --config {config_path}")
-    typer.echo(f"{_INDENT}poetry run nbkp prune --config {config_path}")
-    typer.echo(f"{_INDENT}poetry run nbkp sh --config {config_path}")
+    typer.echo(f"{_INDENT}nbkp run --config {config_path}")
+    typer.echo(f"{_INDENT}nbkp prune --config {config_path}")
+    typer.echo(f"{_INDENT}nbkp sh --config {config_path}")
     typer.echo(
-        f"{_INDENT}poetry run nbkp sh --config {config_path}"
+        f"{_INDENT}nbkp sh --config {config_path}"
         f" -o /tmp/backup.sh && bash -n /tmp/backup.sh"
     )
     typer.echo(
-        f"{_INDENT}poetry run nbkp sh --config {config_path}"
+        f"{_INDENT}nbkp sh --config {config_path}"
         f" -o /tmp/backup.sh --relative-dst"
     )
 
