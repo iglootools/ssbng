@@ -176,6 +176,8 @@ def seed(
         )
     )
 
+    backup_sh = tmp / "backup.sh"
+
     seed_label = "Seed directory:"
     cfg_label = "Config file:"
     w = max(len(seed_label), len(cfg_label))
@@ -184,22 +186,38 @@ def seed(
     typer.echo()
     typer.echo("Try:")
     typer.echo("poetry install, then run:")
+    typer.echo()
+    typer.echo(f"{_INDENT}# Volume and sync health checks")
     typer.echo(f"{_INDENT}nbkp status --config {config_path}")
-    typer.echo(
-        f"{_INDENT}nbkp run --config {config_path} --dry-run"
-    )
+    typer.echo()
+    typer.echo(f"{_INDENT}# Preview what rsync would do without changes")
+    typer.echo(f"{_INDENT}nbkp run --config {config_path} --dry-run")
+    typer.echo()
+    typer.echo(f"{_INDENT}# Execute backup syncs")
     typer.echo(f"{_INDENT}nbkp run --config {config_path}")
+    typer.echo()
+    typer.echo(f"{_INDENT}# Prune old btrfs snapshots")
     typer.echo(f"{_INDENT}nbkp prune --config {config_path}")
+    typer.echo()
+    typer.echo(f"{_INDENT}# Generate standalone bash script to stdout")
     typer.echo(f"{_INDENT}nbkp sh --config {config_path}")
+    typer.echo()
+    typer.echo(f"{_INDENT}# Write script to file, validate syntax, and run")
     typer.echo(
-        f"{_INDENT}nbkp sh --config {config_path}"
-        f" -o /tmp/backup.sh && bash -n /tmp/backup.sh"
+        f"{_INDENT}nbkp sh --config {config_path}  -o {backup_sh} \\\n"
+        f"{_INDENT} && bash -n {backup_sh} \\\n"
+        f"{_INDENT} && {backup_sh} --dry-run \\\n"
+        f"{_INDENT} && {backup_sh}"
     )
+    typer.echo()
+    typer.echo(f"{_INDENT}# With Relative paths (src and dst)")
     typer.echo(
-        f"{_INDENT}nbkp sh --config {config_path}"
-        f" -o /tmp/backup.sh --relative-dst"
+        f"{_INDENT}nbkp sh --config {config_path}  -o {backup_sh} --relative-src --relative-dst \\\n"
+        f"{_INDENT} && bash -n {backup_sh} \\\n"
+        f"{_INDENT} && {backup_sh} --dry-run \\\n"
+        f"{_INDENT} && {backup_sh}"
     )
-
+    typer.echo()
 
 def main() -> None:
     """Test CLI entry point."""
