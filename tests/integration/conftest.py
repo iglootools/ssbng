@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Any, Generator
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+)
 
 from nbkp.config import RemoteVolume, RsyncServer, SshOptions
 
@@ -38,26 +42,30 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture(scope="session")
 def ssh_key_pair() -> Generator[tuple[Path, Path], None, None]:
-    """Generate an ephemeral ed25519 SSH key pair for tests."""
+    """Generate an ephemeral ed25519 SSH key pair for tests.
+
+    Ed25519: fast generation, small keys, no parameter choices
+    to get wrong — ideal for throwaway test keys.
+    """
     tmpdir = Path(tempfile.mkdtemp(prefix="nbkp-test-ssh-"))
     private_key = tmpdir / "id_ed25519"
     public_key = tmpdir / "id_ed25519.pub"
 
-    subprocess.run(
-        [
-            "ssh-keygen",
-            "-t",
-            "ed25519",
-            "-f",
-            str(private_key),
-            "-N",
-            "",
-            "-C",
-            "nbkp-integration-test",
-        ],
-        capture_output=True,
-        check=True,
+    # ssh-keygen -t ed25519 -f <private_key> -N "" -C nbkp-integration-test
+    key = Ed25519PrivateKey.generate()
+    private_key.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.OpenSSH,
+            serialization.NoEncryption(),
+        )
     )
+    private_key.chmod(0o600)
+    pub_bytes = key.public_key().public_bytes(
+        serialization.Encoding.OpenSSH,
+        serialization.PublicFormat.OpenSSH,
+    )
+    public_key.write_text(f"{pub_bytes.decode()} nbkp-integration-test\n")
 
     yield private_key, public_key
 
