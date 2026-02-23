@@ -163,6 +163,15 @@ rsync-servers:
     proxy-jump: bastion         # connect through bastion
     ssh-options:                # optional, all fields have defaults
       connect-timeout: 30
+      # Setting known-hosts-file: /dev/null translates to the SSH option -o UserKnownHostsFile=/dev/null. Its effect:
+      # - SSH normally records and verifies host keys in ~/.ssh/known_hosts. 
+      #.  By pointing it to /dev/null, every connection starts with an empty known-hosts database.
+      # - Combined with strict-host-key-checking: false (line 166), this means SSH will never reject a host 
+      #.  based on its key and never persist any host key it sees.
+      # - This is commonly used for ephemeral or internal hosts (like nas.internal behind a bastion) whose keys may change frequently 
+      #.  (e.g. after reprovisioning), where TOFU (trust-on-first-use) verification isn't practical.
+      #
+      # Without known-hosts-file: /dev/null, setting only strict-host-key-checking: false would still write new host keys to ~/.ssh/known_hosts, which could later cause "host key changed" warnings if the key rotates and strict checking is re-enabled.
       strict-host-key-checking: false
       known-hosts-file: /dev/null
       compress: true
