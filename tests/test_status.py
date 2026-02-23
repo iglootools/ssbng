@@ -2266,6 +2266,55 @@ class TestCheckAllSyncs:
         assert vol_statuses["dst"].active is True
         assert sync_statuses["s1"].active is True
 
+    @patch(
+        "nbkp.status.shutil.which",
+        return_value="/usr/bin/rsync",
+    )
+    def test_only_syncs_filters_syncs_and_volumes(
+        self, mock_which: MagicMock, tmp_path: Path
+    ) -> None:
+        """When only_syncs is given, only those syncs and their
+        referenced volumes are checked."""
+        src1 = tmp_path / "src1"
+        dst1 = tmp_path / "dst1"
+        src2 = tmp_path / "src2"
+        dst2 = tmp_path / "dst2"
+        for d in (src1, dst1, src2, dst2):
+            d.mkdir()
+            (d / ".nbkp-vol").touch()
+        (src1 / ".nbkp-src").touch()
+        (dst1 / ".nbkp-dst").touch()
+        (src2 / ".nbkp-src").touch()
+        (dst2 / ".nbkp-dst").touch()
+
+        config = Config(
+            volumes={
+                "src1": LocalVolume(slug="src1", path=str(src1)),
+                "dst1": LocalVolume(slug="dst1", path=str(dst1)),
+                "src2": LocalVolume(slug="src2", path=str(src2)),
+                "dst2": LocalVolume(slug="dst2", path=str(dst2)),
+            },
+            syncs={
+                "s1": SyncConfig(
+                    slug="s1",
+                    source=SyncEndpoint(volume="src1"),
+                    destination=DestinationSyncEndpoint(volume="dst1"),
+                ),
+                "s2": SyncConfig(
+                    slug="s2",
+                    source=SyncEndpoint(volume="src2"),
+                    destination=DestinationSyncEndpoint(volume="dst2"),
+                ),
+            },
+        )
+
+        vol_statuses, sync_statuses = check_all_syncs(
+            config, only_syncs=["s1"]
+        )
+        assert set(sync_statuses.keys()) == {"s1"}
+        assert set(vol_statuses.keys()) == {"src1", "dst1"}
+        assert sync_statuses["s1"].active is True
+
 
 class TestCheckRemoteVolumeSpaces:
     @patch("nbkp.status.run_remote_command")

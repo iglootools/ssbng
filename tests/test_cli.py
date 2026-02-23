@@ -466,8 +466,10 @@ class TestRunCommand:
             ],
         )
         assert result.exit_code == 0
-        call_kwargs = mock_run.call_args
-        assert call_kwargs.kwargs.get("only_syncs") == ["photos-to-nas"]
+        check_kwargs = mock_checks.call_args
+        assert check_kwargs.kwargs.get("only_syncs") == ["photos-to-nas"]
+        run_kwargs = mock_run.call_args
+        assert run_kwargs.kwargs.get("only_syncs") == ["photos-to-nas"]
 
     @patch("nbkp.cli.run_all_syncs")
     @patch("nbkp.cli.check_all_syncs")

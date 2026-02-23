@@ -114,7 +114,7 @@ def run(
     cfg = _load_config_or_exit(config)
     output_format = output
     vol_statuses, sync_statuses, has_errors = _check_and_display_status(
-        cfg, output_format, allow_removable_devices
+        cfg, output_format, allow_removable_devices, only_syncs=sync
     )
 
     if has_errors:
@@ -287,11 +287,12 @@ def _load_config_or_exit(config_path: str | None) -> Config:
 def _check_all_with_progress(
     cfg: Config,
     use_progress: bool,
+    only_syncs: list[str] | None = None,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     """Run check_all_syncs with an optional progress bar."""
     total = len(cfg.volumes) + len(cfg.syncs)
     if not use_progress or total == 0:
-        return check_all_syncs(cfg)
+        return check_all_syncs(cfg, only_syncs=only_syncs)
 
     with Progress(
         SpinnerColumn(),
@@ -304,13 +305,18 @@ def _check_all_with_progress(
         def on_progress(_slug: str) -> None:
             progress.advance(task)
 
-        return check_all_syncs(cfg, on_progress=on_progress)
+        return check_all_syncs(
+            cfg,
+            on_progress=on_progress,
+            only_syncs=only_syncs,
+        )
 
 
 def _check_and_display_status(
     cfg: Config,
     output_format: OutputFormat,
     allow_removable_devices: bool,
+    only_syncs: list[str] | None = None,
 ) -> tuple[
     dict[str, VolumeStatus],
     dict[str, SyncStatus],
@@ -319,10 +325,13 @@ def _check_and_display_status(
     """Compute statuses, display human output, and check for errors.
 
     Returns volume statuses, sync statuses, and whether there are
-    fatal errors.
+    fatal errors.  When *only_syncs* is given, only those syncs
+    (and the volumes they reference) are checked.
     """
     vol_statuses, sync_statuses = _check_all_with_progress(
-        cfg, use_progress=output_format is OutputFormat.HUMAN
+        cfg,
+        use_progress=output_format is OutputFormat.HUMAN,
+        only_syncs=only_syncs,
     )
 
     if output_format is OutputFormat.HUMAN:

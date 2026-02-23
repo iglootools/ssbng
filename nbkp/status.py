@@ -363,16 +363,35 @@ def check_sync(
 def check_all_syncs(
     config: Config,
     on_progress: Callable[[str], None] | None = None,
+    only_syncs: list[str] | None = None,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
-    """Check all volumes and syncs, caching volume checks."""
+    """Check volumes and syncs, caching volume checks.
+
+    When *only_syncs* is given, only those syncs (and the
+    volumes they reference) are checked.
+    """
+    syncs = (
+        {s: sc for s, sc in config.syncs.items() if s in only_syncs}
+        if only_syncs
+        else config.syncs
+    )
+
+    needed_volumes: set[str] = (
+        {sc.source.volume for sc in syncs.values()}
+        | {sc.destination.volume for sc in syncs.values()}
+        if only_syncs
+        else set(config.volumes.keys())
+    )
+
     volume_statuses: dict[str, VolumeStatus] = {}
-    for slug, volume in config.volumes.items():
+    for slug in needed_volumes:
+        volume = config.volumes[slug]
         volume_statuses[slug] = check_volume(volume, config)
         if on_progress:
             on_progress(slug)
 
     sync_statuses: dict[str, SyncStatus] = {}
-    for slug, sync in config.syncs.items():
+    for slug, sync in syncs.items():
         sync_statuses[slug] = check_sync(sync, config, volume_statuses)
         if on_progress:
             on_progress(slug)
