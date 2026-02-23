@@ -264,6 +264,12 @@ class TestHeader:
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert "nbkp_log()" in script
 
+    def test_nbkp_log_dry_run_tag(self) -> None:
+        config = _local_to_local_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert "[nbkp] [dry-run]" in script
+        assert '"[nbkp] $*"' in script
+
 
 class TestVolumeChecks:
     def test_local_volume_check(self) -> None:

@@ -180,7 +180,13 @@ while [ $# -gt 0 ]; do
 done
 
 NBKP_FAILURES=0
-nbkp_log() {{ echo "[nbkp] $*" >&2; }}"""
+nbkp_log() {{
+    if [ "$NBKP_DRY_RUN" = true ]; then
+        echo "[nbkp] [dry-run] $*" >&2
+    else
+        echo "[nbkp] $*" >&2
+    fi
+}}"""
 
 
 # -- Volume checks -------------------------------------------------
