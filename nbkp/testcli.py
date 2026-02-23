@@ -188,6 +188,11 @@ def seed(
     )
     typer.echo(f"{_INDENT}poetry run nbkp run --config {config_path}")
     typer.echo(f"{_INDENT}poetry run nbkp prune --config {config_path}")
+    typer.echo(f"{_INDENT}poetry run nbkp sh --config {config_path}")
+    typer.echo(
+        f"{_INDENT}poetry run nbkp sh --config {config_path}"
+        f" -o /tmp/backup.sh && bash -n /tmp/backup.sh && /tmp/backup.sh"
+    )
 
 
 def main() -> None:

@@ -232,3 +232,39 @@ syncs:
       - "--compress"
       - "--progress"
 ```
+
+## Shell Script Generation (`sh` command)
+
+The `nbkp sh` command compiles a config into a standalone bash script that performs the same backup operations as `nbkp run`, without requiring Python or the config file at runtime. All paths, SSH options, and rsync arguments are baked into the generated script.
+
+```bash
+# Generate and inspect the script
+nbkp sh --config backup.yaml
+
+# Generate, save to file (made executable), and validate syntax
+nbkp sh --config backup.yaml -o backup.sh
+bash -n backup.sh  # syntax check
+
+# Run the generated script with flags
+./backup.sh --dry-run
+./backup.sh -v        # verbose
+./backup.sh -v -v     # more verbose
+```
+
+The generated script supports `--dry-run` (`-n`) and `--verbose` (`-v`, `-vv`, `-vvv`) as runtime arguments — these are not baked in at generation time.
+
+**What is preserved from `nbkp run`:**
+- All 4 rsync command variants (local-to-local, local-to-remote, remote-to-local, remote-to-remote)
+- SSH options (port, key, `-o` options, proxy jump `-J`)
+- Rsync filters and filter-file support
+- Btrfs snapshot creation, link-dest incremental backups, and pruning
+- Pre-flight checks (volume markers, endpoint markers)
+- Nonzero exit on any sync failure
+
+**What is dropped:**
+- Rich console output (spinners, progress bars) — replaced with simple log messages
+- JSON output mode
+- Python runtime / config parsing — all values are hardcoded
+- Paramiko-only SSH options (`channel_timeout`, `disabled_algorithms`) — no `ssh` CLI equivalent
+
+Disabled syncs appear in the generated script as commented-out blocks, allowing users to re-enable them by uncommenting.

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import stat
+from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
@@ -19,6 +21,7 @@ from .output import (
     print_human_status,
     print_human_troubleshoot,
 )
+from .scriptgen import ScriptOptions, generate_script
 from .sync import PruneResult, SyncResult, run_all_syncs
 
 _REMOVABLE_DEVICE_REASONS = {
@@ -182,6 +185,36 @@ def run(
 
         if any(not r.success for r in results):
             raise typer.Exit(1)
+
+
+@app.command()
+def sh(
+    config: Annotated[
+        Optional[str],
+        typer.Option("--config", help="Path to config file"),
+    ] = None,
+    output_file: Annotated[
+        Optional[str],
+        typer.Option(
+            "--output-file",
+            "-o",
+            help="Write script to file (made executable)",
+        ),
+    ] = None,
+) -> None:
+    """Generate a standalone backup shell script.
+    
+    This is useful for deploying to systems without Python, or auditing what commands will run.
+    """
+    cfg = _load_config_or_exit(config)
+    script = generate_script(cfg, ScriptOptions(config_path=config))
+    if output_file is not None:
+        path = Path(output_file)
+        path.write_text(script, encoding="utf-8")
+        path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
+        typer.echo(f"Written to {output_file}", err=True)
+    else:
+        typer.echo(script)
 
 
 @app.command()

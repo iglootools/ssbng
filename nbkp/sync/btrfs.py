@@ -9,7 +9,7 @@ from ..config import Config, LocalVolume, RemoteVolume, SyncConfig, Volume
 from ..remote import run_remote_command
 
 
-def _resolve_dest_path(sync: SyncConfig, config: Config) -> str:
+def resolve_dest_path(sync: SyncConfig, config: Config) -> str:
     """Resolve the destination path for a sync."""
     vol = config.volumes[sync.destination.volume]
     if sync.destination.subdir:
@@ -30,7 +30,7 @@ def create_snapshot(
     """
     if now is None:
         now = datetime.now(timezone.utc)
-    dest_path = _resolve_dest_path(sync, config)
+    dest_path = resolve_dest_path(sync, config)
     # isoformat uses +00:00, but Z is more conventional for UTC.
     timestamp = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
     snapshot_path = f"{dest_path}/snapshots/{timestamp}"
@@ -66,7 +66,7 @@ def create_snapshot(
 
 def list_snapshots(sync: SyncConfig, config: Config) -> list[str]:
     """List all snapshot paths sorted oldest-first."""
-    dest_path = _resolve_dest_path(sync, config)
+    dest_path = resolve_dest_path(sync, config)
     snapshots_dir = f"{dest_path}/snapshots"
 
     dst_vol = config.volumes[sync.destination.volume]

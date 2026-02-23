@@ -45,6 +45,10 @@
   - Provide both human-readable and JSON output formats for all commands, with human-readable as the default.
   - Provide ability to pass a config file to all commands
   - Provide a dry-run parameter for all data-mutating or long-running operations
+  - `sh` command: 
+    - Ensure to add comments in the codebase to describe which choices have been made with regard to which of the original (`run`) functionality has been preserved vs dropped
+    - When adding functionality to the `run` command, make sure to also add it to the `sh` command, or explicitly document why it's not applicable.
+
 - **Testing**
   - No real rsync/ssh/btrfs calls in unit tests - use mocks instead. Docker-enabled integration tests cover the real interactions.
   - Generate YAML test data using the Pydantic data models and `model.model_dump()` instead of hardcoding YAML strings. 

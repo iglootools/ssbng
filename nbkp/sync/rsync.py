@@ -27,7 +27,7 @@ _DEFAULT_RSYNC_OPTIONS: list[str] = [
 ]
 
 
-def _resolve_path(
+def resolve_path(
     volume: LocalVolume | RemoteVolume, subdir: str | None
 ) -> str:
     """Resolve the full path for a volume with optional subdir."""
@@ -84,8 +84,8 @@ def build_rsync_command(
     src_vol = config.volumes[sync.source.volume]
     dst_vol = config.volumes[sync.destination.volume]
 
-    src_path = _resolve_path(src_vol, sync.source.subdir)
-    dst_path = _resolve_path(dst_vol, sync.destination.subdir)
+    src_path = resolve_path(src_vol, sync.source.subdir)
+    dst_path = resolve_path(dst_vol, sync.destination.subdir)
 
     match (src_vol, dst_vol):
         case (RemoteVolume() as sv, RemoteVolume() as dv):
