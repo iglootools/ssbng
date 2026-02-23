@@ -481,9 +481,9 @@ def _build_link_dest_block(
 
     return dedent(f"""\
         NBKP_LATEST_SNAP=$({ls_cmd} 2>/dev/null | sort | tail -1)
-        NBKP_LINK_DEST=""
+        RSYNC_LINK_DEST=""
         if [ -n "$NBKP_LATEST_SNAP" ]; then
-            NBKP_LINK_DEST="--link-dest=../../snapshots/$NBKP_LATEST_SNAP"
+            RSYNC_LINK_DEST="--link-dest=../../snapshots/$NBKP_LATEST_SNAP"
         fi""")
 
 
@@ -522,11 +522,11 @@ def _build_rsync_block(
     formatted = _format_shell_command(cmd, cont_indent=i2)
 
     runtime_vars = [
-        '${NBKP_DRY_RUN_FLAG:+"$NBKP_DRY_RUN_FLAG"}',
-        '${NBKP_VERBOSE_FLAG:+"$NBKP_VERBOSE_FLAG"}',
+        '${RSYNC_DRY_RUN_FLAG:+"$RSYNC_DRY_RUN_FLAG"}',
+        '${RSYNC_VERBOSE_FLAG:+"$RSYNC_VERBOSE_FLAG"}',
     ]
     if has_btrfs:
-        runtime_vars.insert(0, '${NBKP_LINK_DEST:+"$NBKP_LINK_DEST"}')
+        runtime_vars.insert(0, '${RSYNC_LINK_DEST:+"$RSYNC_LINK_DEST"}')
     runtime_suffix = f" \\\n{i2}".join(runtime_vars)
     return f"{formatted} \\\n{i2}{runtime_suffix}"
 
@@ -660,24 +660,6 @@ def _render_enabled_function(ctx: _SyncContext) -> str:
     parts.append("    # Pre-flight checks")
     for line in ctx.preflight.split("\n"):
         parts.append(f"    {line}" if line else "")
-    parts.append("")
-    parts.append("    # Build runtime flags")
-    parts.append('    NBKP_DRY_RUN_FLAG=""')
-    parts.append(
-        '    if [ "$NBKP_DRY_RUN" = true ]; then'
-        ' NBKP_DRY_RUN_FLAG="--dry-run"; fi'
-    )
-    parts.append('    NBKP_VERBOSE_FLAG=""')
-    parts.append(
-        '    if [ "$NBKP_VERBOSE" -ge 3 ]; then' ' NBKP_VERBOSE_FLAG="-vvv"'
-    )
-    parts.append(
-        '    elif [ "$NBKP_VERBOSE" -ge 2 ]; then' ' NBKP_VERBOSE_FLAG="-vv"'
-    )
-    parts.append(
-        '    elif [ "$NBKP_VERBOSE" -ge 1 ]; then' ' NBKP_VERBOSE_FLAG="-v"'
-    )
-    parts.append("    fi")
     if ctx.has_btrfs:
         parts.append("")
         parts.append(

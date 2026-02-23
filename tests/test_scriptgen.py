@@ -355,7 +355,7 @@ class TestBtrfs:
         config = _btrfs_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert "NBKP_LATEST_SNAP=" in script
-        assert "NBKP_LINK_DEST=" in script
+        assert "RSYNC_LINK_DEST=" in script
         assert "--link-dest=../../snapshots/" in script
 
     def test_snapshot_creation(self) -> None:
@@ -431,14 +431,14 @@ class TestDryRunAndVerbose:
     def test_dry_run_flag_injected(self) -> None:
         config = _local_to_local_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert "NBKP_DRY_RUN_FLAG" in script
-        assert '${NBKP_DRY_RUN_FLAG:+"$NBKP_DRY_RUN_FLAG"}' in script
+        assert "RSYNC_DRY_RUN_FLAG" in script
+        assert '${RSYNC_DRY_RUN_FLAG:+"$RSYNC_DRY_RUN_FLAG"}' in script
 
     def test_verbose_flag_injected(self) -> None:
         config = _local_to_local_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert "NBKP_VERBOSE_FLAG" in script
-        assert '${NBKP_VERBOSE_FLAG:+"$NBKP_VERBOSE_FLAG"}' in script
+        assert "RSYNC_VERBOSE_FLAG" in script
+        assert '${RSYNC_VERBOSE_FLAG:+"$RSYNC_VERBOSE_FLAG"}' in script
 
     def test_verbose_levels(self) -> None:
         config = _local_to_local_config()

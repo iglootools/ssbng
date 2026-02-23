@@ -48,6 +48,15 @@ nbkp_log() {
     fi
 }
 
+# --- Rsync runtime flags ---
+RSYNC_DRY_RUN_FLAG=""
+if [ "$NBKP_DRY_RUN" = true ]; then RSYNC_DRY_RUN_FLAG="--dry-run"; fi
+RSYNC_VERBOSE_FLAG=""
+if [ "$NBKP_VERBOSE" -ge 3 ]; then RSYNC_VERBOSE_FLAG="-vvv"
+elif [ "$NBKP_VERBOSE" -ge 2 ]; then RSYNC_VERBOSE_FLAG="-vv"
+elif [ "$NBKP_VERBOSE" -ge 1 ]; then RSYNC_VERBOSE_FLAG="-v"
+fi
+
 # --- Volume checks ---
 <% for check in volume_checks %>
 ${{ check }}
@@ -62,15 +71,6 @@ ${{ sync.fn_name }}() {
 
     # Pre-flight checks
 ${{ sync.preflight | indent(4, first=true) }}
-
-    # Build runtime flags
-    NBKP_DRY_RUN_FLAG=""
-    if [ "$NBKP_DRY_RUN" = true ]; then NBKP_DRY_RUN_FLAG="--dry-run"; fi
-    NBKP_VERBOSE_FLAG=""
-    if [ "$NBKP_VERBOSE" -ge 3 ]; then NBKP_VERBOSE_FLAG="-vvv"
-    elif [ "$NBKP_VERBOSE" -ge 2 ]; then NBKP_VERBOSE_FLAG="-vv"
-    elif [ "$NBKP_VERBOSE" -ge 1 ]; then NBKP_VERBOSE_FLAG="-v"
-    fi
 <% if sync.has_btrfs %>
 
     # Link-dest resolution (latest snapshot for incremental backup)
