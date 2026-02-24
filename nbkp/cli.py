@@ -13,14 +13,14 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from .config import Config, ConfigError, load_config
-from .status import SyncReason, SyncStatus, VolumeStatus, check_all_syncs
+from .check import SyncReason, SyncStatus, VolumeStatus, check_all_syncs
 from .sync.btrfs import list_snapshots, prune_snapshots
 from .output import (
     OutputFormat,
     print_config_error,
     print_human_prune_results,
     print_human_results,
-    print_human_status,
+    print_human_check,
     print_human_troubleshoot,
 )
 from .scriptgen import ScriptOptions, generate_script
@@ -39,7 +39,7 @@ app = typer.Typer(
 
 
 @app.command()
-def status(
+def check(
     config: Annotated[
         Optional[str],
         typer.Option("--config", "-c", help="Path to config file"),
@@ -59,10 +59,10 @@ def status(
         ),
     ] = False,
 ) -> None:
-    """Show status of volumes and syncs."""
+    """Check status of volumes and syncs."""
     cfg = _load_config_or_exit(config)
     output_format = output
-    vol_statuses, sync_statuses, has_errors = _check_and_display_status(
+    vol_statuses, sync_statuses, has_errors = _check_and_display(
         cfg, output_format, strict
     )
 
@@ -125,7 +125,7 @@ def run(
     """Run backup syncs."""
     cfg = _load_config_or_exit(config)
     output_format = output
-    vol_statuses, sync_statuses, has_errors = _check_and_display_status(
+    vol_statuses, sync_statuses, has_errors = _check_and_display(
         cfg, output_format, strict, only_syncs=sync
     )
 
@@ -393,7 +393,7 @@ def _check_all_with_progress(
         )
 
 
-def _check_and_display_status(
+def _check_and_display(
     cfg: Config,
     output_format: OutputFormat,
     strict: bool,
@@ -416,7 +416,7 @@ def _check_and_display_status(
     )
 
     if output_format is OutputFormat.HUMAN:
-        print_human_status(vol_statuses, sync_statuses, cfg)
+        print_human_check(vol_statuses, sync_statuses, cfg)
 
     if strict:
         has_errors = any(not s.active for s in sync_statuses.values())

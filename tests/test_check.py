@@ -1,4 +1,4 @@
-"""Tests for nbkp.status and nbkp.output."""
+"""Tests for nbkp.check and nbkp.output."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from nbkp.config import (
 )
 from nbkp.output import OutputFormat
 from nbkp.sync import SyncResult
-from nbkp.status import (
+from nbkp.check import (
     SyncReason,
     SyncStatus,
     VolumeReason,
@@ -380,7 +380,7 @@ class TestCheckLocalVolume:
 
 
 class TestCheckRemoteVolume:
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     def test_active(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0)
         vol, config = _remote_config()
@@ -392,7 +392,7 @@ class TestCheckRemoteVolume:
             server, ["test", "-f", "/backup/.nbkp-vol"], None
         )
 
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     def test_inactive(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1)
         vol, config = _remote_config()
@@ -402,7 +402,7 @@ class TestCheckRemoteVolume:
 
 
 class TestCheckCommandAvailableLocal:
-    @patch("nbkp.status.shutil.which")
+    @patch("nbkp.check.shutil.which")
     def test_command_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = "/usr/bin/rsync"
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -410,7 +410,7 @@ class TestCheckCommandAvailableLocal:
         assert _check_command_available(vol, "rsync", config) is True
         mock_which.assert_called_once_with("rsync")
 
-    @patch("nbkp.status.shutil.which")
+    @patch("nbkp.check.shutil.which")
     def test_command_not_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = None
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -420,7 +420,7 @@ class TestCheckCommandAvailableLocal:
 
 
 class TestCheckCommandAvailableRemote:
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     def test_command_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0)
         vol, config = _remote_config()
@@ -428,7 +428,7 @@ class TestCheckCommandAvailableRemote:
         server = config.rsync_servers["nas-server"]
         mock_run.assert_called_once_with(server, ["which", "rsync"], None)
 
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     def test_command_not_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1)
         vol, config = _remote_config()
@@ -438,7 +438,7 @@ class TestCheckCommandAvailableRemote:
 
 
 class TestCheckBtrfsFilesystemLocal:
-    @patch("nbkp.status.subprocess.run")
+    @patch("nbkp.check.subprocess.run")
     def test_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -450,14 +450,14 @@ class TestCheckBtrfsFilesystemLocal:
             text=True,
         )
 
-    @patch("nbkp.status.subprocess.run")
+    @patch("nbkp.check.subprocess.run")
     def test_not_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
         config = Config(volumes={"data": vol})
         assert _check_btrfs_filesystem(vol, config) is False
 
-    @patch("nbkp.status.subprocess.run")
+    @patch("nbkp.check.subprocess.run")
     def test_stat_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -466,7 +466,7 @@ class TestCheckBtrfsFilesystemLocal:
 
 
 class TestCheckBtrfsFilesystemRemote:
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     def test_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
         vol, config = _remote_config()
@@ -478,7 +478,7 @@ class TestCheckBtrfsFilesystemRemote:
             None,
         )
 
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     def test_not_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
         vol, config = _remote_config()
@@ -486,7 +486,7 @@ class TestCheckBtrfsFilesystemRemote:
 
 
 class TestCheckBtrfsSubvolumeLocal:
-    @patch("nbkp.status.subprocess.run")
+    @patch("nbkp.check.subprocess.run")
     def test_is_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -498,7 +498,7 @@ class TestCheckBtrfsSubvolumeLocal:
             text=True,
         )
 
-    @patch("nbkp.status.subprocess.run")
+    @patch("nbkp.check.subprocess.run")
     def test_is_subvolume_with_subdir(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -510,14 +510,14 @@ class TestCheckBtrfsSubvolumeLocal:
             text=True,
         )
 
-    @patch("nbkp.status.subprocess.run")
+    @patch("nbkp.check.subprocess.run")
     def test_not_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="1234\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
         config = Config(volumes={"data": vol})
         assert _check_btrfs_subvolume(vol, None, config) is False
 
-    @patch("nbkp.status.subprocess.run")
+    @patch("nbkp.check.subprocess.run")
     def test_stat_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -526,7 +526,7 @@ class TestCheckBtrfsSubvolumeLocal:
 
 
 class TestCheckBtrfsSubvolumeRemote:
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     def test_is_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol, config = _remote_config()
@@ -538,7 +538,7 @@ class TestCheckBtrfsSubvolumeRemote:
             None,
         )
 
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     def test_is_subvolume_with_subdir(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol, config = _remote_config()
@@ -550,7 +550,7 @@ class TestCheckBtrfsSubvolumeRemote:
             None,
         )
 
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     def test_not_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="1234\n")
         vol, config = _remote_config()
@@ -558,7 +558,7 @@ class TestCheckBtrfsSubvolumeRemote:
 
 
 class TestCheckBtrfsMountOptionLocal:
-    @patch("nbkp.status.subprocess.run")
+    @patch("nbkp.check.subprocess.run")
     def test_option_present(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -576,7 +576,7 @@ class TestCheckBtrfsMountOptionLocal:
             text=True,
         )
 
-    @patch("nbkp.status.subprocess.run")
+    @patch("nbkp.check.subprocess.run")
     def test_option_missing(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="rw,relatime\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -586,7 +586,7 @@ class TestCheckBtrfsMountOptionLocal:
             is False
         )
 
-    @patch("nbkp.status.subprocess.run")
+    @patch("nbkp.check.subprocess.run")
     def test_findmnt_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -598,7 +598,7 @@ class TestCheckBtrfsMountOptionLocal:
 
 
 class TestCheckBtrfsMountOptionRemote:
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     def test_option_present(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -616,7 +616,7 @@ class TestCheckBtrfsMountOptionRemote:
             None,
         )
 
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     def test_option_missing(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="rw,relatime\n")
         vol, config = _remote_config()
@@ -644,7 +644,7 @@ class TestCheckSync:
         return config, sync
 
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_active_sync(self, mock_which: MagicMock, tmp_path: Path) -> None:
@@ -783,7 +783,7 @@ class TestCheckSync:
             ),
         }
 
-    @patch("nbkp.status.shutil.which", return_value=None)
+    @patch("nbkp.check.shutil.which", return_value=None)
     def test_rsync_not_found_on_source(
         self, mock_which: MagicMock, tmp_path: Path
     ) -> None:
@@ -802,7 +802,7 @@ class TestCheckSync:
         assert SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION in status.reasons
 
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         side_effect=lambda cmd: (
             None if cmd == "btrfs" else f"/usr/bin/{cmd}"
         ),
@@ -838,7 +838,7 @@ class TestCheckSync:
         assert SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION in status.reasons
 
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         side_effect=lambda cmd: (None if cmd == "stat" else f"/usr/bin/{cmd}"),
     )
     def test_stat_not_found_on_destination(
@@ -873,9 +873,9 @@ class TestCheckSync:
         assert SyncReason.DESTINATION_NOT_BTRFS not in status.reasons
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.reasons
 
-    @patch("nbkp.status.subprocess.run")
+    @patch("nbkp.check.subprocess.run")
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         side_effect=lambda cmd: (
             None if cmd == "findmnt" else f"/usr/bin/{cmd}"
         ),
@@ -931,7 +931,7 @@ class TestCheckSync:
         )
 
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         side_effect=lambda cmd: (
             None if cmd in ("stat", "findmnt") else f"/usr/bin/{cmd}"
         ),
@@ -967,9 +967,9 @@ class TestCheckSync:
         assert SyncReason.STAT_NOT_FOUND_ON_DESTINATION in status.reasons
         assert SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION in status.reasons
 
-    @patch("nbkp.status.subprocess.run")
+    @patch("nbkp.check.subprocess.run")
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/fake",
     )
     def test_destination_not_btrfs_filesystem(
@@ -1009,9 +1009,9 @@ class TestCheckSync:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS in status.reasons
 
-    @patch("nbkp.status.subprocess.run")
+    @patch("nbkp.check.subprocess.run")
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/fake",
     )
     def test_destination_not_btrfs_subvolume(
@@ -1058,9 +1058,9 @@ class TestCheckSync:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME in status.reasons
 
-    @patch("nbkp.status.subprocess.run")
+    @patch("nbkp.check.subprocess.run")
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/fake",
     )
     def test_destination_not_mounted_user_subvol_rm(
@@ -1113,9 +1113,9 @@ class TestCheckSync:
             SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.reasons
         )
 
-    @patch("nbkp.status.subprocess.run")
+    @patch("nbkp.check.subprocess.run")
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/fake",
     )
     def test_destination_latest_not_found(
@@ -1173,9 +1173,9 @@ class TestCheckSync:
             not in status.reasons
         )
 
-    @patch("nbkp.status.subprocess.run")
+    @patch("nbkp.check.subprocess.run")
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/fake",
     )
     def test_destination_snapshots_dir_not_found(
@@ -1230,9 +1230,9 @@ class TestCheckSync:
         assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
         assert SyncReason.DESTINATION_LATEST_NOT_FOUND not in status.reasons
 
-    @patch("nbkp.status.subprocess.run")
+    @patch("nbkp.check.subprocess.run")
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/fake",
     )
     def test_destination_latest_and_snapshots_both_missing(
@@ -1287,7 +1287,7 @@ class TestCheckSync:
         assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
 
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_btrfs_check_skipped_when_not_enabled(
@@ -1306,7 +1306,7 @@ class TestCheckSync:
         assert status.active is True
         assert status.reasons == []
 
-    @patch("nbkp.status.shutil.which", return_value=None)
+    @patch("nbkp.check.shutil.which", return_value=None)
     def test_multiple_failures_accumulated(
         self, mock_which: MagicMock, tmp_path: Path
     ) -> None:
@@ -1359,7 +1359,7 @@ class TestCheckSync:
 
 
 class TestCheckSyncRemoteCommands:
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     def test_rsync_not_found_on_remote_source(
         self, mock_run: MagicMock, tmp_path: Path
     ) -> None:
@@ -1416,9 +1416,9 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.RSYNC_NOT_FOUND_ON_SOURCE in status.reasons
 
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_rsync_not_found_on_remote_destination(
@@ -1484,9 +1484,9 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION in status.reasons
 
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_btrfs_not_found_on_remote_destination(
@@ -1558,9 +1558,9 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION in status.reasons
 
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_destination_not_btrfs_on_remote(
@@ -1640,9 +1640,9 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS in status.reasons
 
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_destination_not_subvolume_on_remote(
@@ -1729,9 +1729,9 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME in status.reasons
 
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_destination_not_mounted_user_subvol_rm_on_remote(
@@ -1828,9 +1828,9 @@ class TestCheckSyncRemoteCommands:
             SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.reasons
         )
 
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_stat_not_found_on_remote_destination(
@@ -1905,9 +1905,9 @@ class TestCheckSyncRemoteCommands:
         assert SyncReason.STAT_NOT_FOUND_ON_DESTINATION in status.reasons
         assert SyncReason.DESTINATION_NOT_BTRFS not in status.reasons
 
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_findmnt_not_found_on_remote_destination(
@@ -2004,9 +2004,9 @@ class TestCheckSyncRemoteCommands:
             not in status.reasons
         )
 
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_destination_latest_not_found_on_remote(
@@ -2120,9 +2120,9 @@ class TestCheckSyncRemoteCommands:
             not in status.reasons
         )
 
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_destination_snapshots_dir_not_found_on_remote(
@@ -2236,7 +2236,7 @@ class TestCheckSyncRemoteCommands:
 
 class TestCheckAllSyncs:
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_check_all(self, mock_which: MagicMock, tmp_path: Path) -> None:
@@ -2267,7 +2267,7 @@ class TestCheckAllSyncs:
         assert sync_statuses["s1"].active is True
 
     @patch(
-        "nbkp.status.shutil.which",
+        "nbkp.check.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_only_syncs_filters_syncs_and_volumes(
@@ -2317,7 +2317,7 @@ class TestCheckAllSyncs:
 
 
 class TestCheckRemoteVolumeSpaces:
-    @patch("nbkp.status.run_remote_command")
+    @patch("nbkp.check.run_remote_command")
     def test_active(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0)
         vol, config = _remote_config(path="/my backup")

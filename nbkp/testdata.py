@@ -13,7 +13,7 @@ from .config import (
     SyncEndpoint,
 )
 from .sync import PruneResult, SyncResult
-from .status import (
+from .check import (
     SyncReason,
     SyncStatus,
     VolumeReason,
@@ -57,7 +57,7 @@ def _base_volumes() -> dict[str, LocalVolume | RemoteVolume]:
 # ── status ──────────────────────────────────────────────────────
 
 
-def status_config() -> Config:
+def check_config() -> Config:
     """Config with local + remote volumes and varied syncs."""
     volumes = _base_volumes()
     volumes["external-drive"] = LocalVolume(
@@ -114,7 +114,7 @@ def status_config() -> Config:
     )
 
 
-def status_data(
+def check_data(
     config: Config,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     """Volume and sync statuses with mixed active/inactive."""

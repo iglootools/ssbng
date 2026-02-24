@@ -20,7 +20,7 @@ from .config import (
     SyncConfig,
 )
 from .sync import PruneResult, SyncResult
-from .status import SyncReason, SyncStatus, VolumeReason, VolumeStatus
+from .check import SyncReason, SyncStatus, VolumeReason, VolumeStatus
 
 
 class OutputFormat(str, enum.Enum):
@@ -74,7 +74,7 @@ def format_volume_display(
             return vol.path
 
 
-def print_human_status(
+def print_human_check(
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
     config: Config,

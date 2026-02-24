@@ -22,18 +22,18 @@ from .config import (
 from .config.protocol import Config as ConfigModel
 from .output import (
     print_config_error,
+    print_human_check,
     print_human_prune_results,
     print_human_results,
-    print_human_status,
     print_human_troubleshoot,
 )
 from .testdata import (
+    check_config,
+    check_data,
     dry_run_result,
     prune_dry_run_results,
     prune_results,
     run_results,
-    status_config,
-    status_data,
     troubleshoot_config,
     troubleshoot_data,
 )
@@ -54,18 +54,18 @@ app = typer.Typer(
 @app.command()
 def output() -> None:
     """Render all human output functions with fake data."""
-    _show_status()
+    _show_check()
     _show_results()
     _show_prune()
     _show_troubleshoot()
     _show_config_errors()
 
 
-def _show_status() -> None:
-    _console.rule("print_human_status")
-    config = status_config()
-    vol_statuses, sync_statuses = status_data(config)
-    print_human_status(vol_statuses, sync_statuses, config)
+def _show_check() -> None:
+    _console.rule("print_human_check")
+    config = check_config()
+    vol_statuses, sync_statuses = check_data(config)
+    print_human_check(vol_statuses, sync_statuses, config)
 
 
 def _show_results() -> None:
@@ -250,7 +250,7 @@ def seed(
     typer.echo("poetry install, then run:")
     typer.echo()
     typer.echo(f"{_INDENT}# Volume and sync health checks")
-    typer.echo(f"{_INDENT}nbkp status --config {config_path}")
+    typer.echo(f"{_INDENT}nbkp check --config {config_path}")
     typer.echo()
     typer.echo(f"{_INDENT}# Preview what rsync would do without changes")
     typer.echo(f"{_INDENT}nbkp run --config {config_path} --dry-run")

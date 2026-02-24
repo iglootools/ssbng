@@ -1,4 +1,4 @@
-"""Integration tests: volume and sync status checks."""
+"""Integration tests: volume and sync checks."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from nbkp.status import (
+from nbkp.check import (
     SyncReason,
     _check_btrfs_filesystem,
     _check_btrfs_subvolume,
@@ -30,7 +30,7 @@ from .conftest import create_markers, ssh_exec
 pytestmark = pytest.mark.integration
 
 
-class TestLocalVolumeStatus:
+class TestLocalVolumeCheck:
     def test_local_volume_active(self, tmp_path: Path) -> None:
         vol_path = tmp_path / "vol"
         vol_path.mkdir()
@@ -56,7 +56,7 @@ class TestLocalVolumeStatus:
         assert status.active is False
 
 
-class TestRemoteVolumeStatus:
+class TestRemoteVolumeCheck:
     def test_remote_volume_active(
         self,
         docker_container: dict[str, Any],
@@ -86,7 +86,7 @@ class TestRemoteVolumeStatus:
         assert status.active is False
 
 
-class TestSyncStatus:
+class TestSyncCheck:
     def test_sync_status_active(
         self,
         tmp_path: Path,
@@ -205,7 +205,7 @@ class TestBtrfsSubvolumeCheck:
         )
 
 
-class TestSyncStatusBtrfsChecks:
+class TestSyncCheckBtrfs:
     def test_sync_inactive_when_not_subvolume(
         self,
         tmp_path: Path,

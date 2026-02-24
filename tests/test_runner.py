@@ -14,7 +14,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.status import (
+from nbkp.check import (
     SyncReason,
     SyncStatus,
     VolumeReason,

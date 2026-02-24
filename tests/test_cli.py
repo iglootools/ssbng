@@ -20,7 +20,7 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.sync import SyncResult
-from nbkp.status import (
+from nbkp.check import (
     SyncReason,
     SyncStatus,
     VolumeReason,
@@ -145,7 +145,7 @@ def _sample_all_active_sync_statuses(
     }
 
 
-class TestStatusCommand:
+class TestCheckCommand:
     @patch("nbkp.cli.check_all_syncs")
     @patch("nbkp.cli.load_config")
     def test_human_output_inactive(
@@ -157,7 +157,7 @@ class TestStatusCommand:
         sync_s = _sample_sync_statuses(config, vol_s)
         mock_checks.return_value = (vol_s, sync_s)
 
-        result = runner.invoke(app, ["status", "--config", "/fake.yaml"])
+        result = runner.invoke(app, ["check", "--config", "/fake.yaml"])
         assert result.exit_code == 1
         assert "local-data" in result.output
         assert "nas" in result.output
@@ -176,7 +176,7 @@ class TestStatusCommand:
         sync_s = _sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = (vol_s, sync_s)
 
-        result = runner.invoke(app, ["status", "--config", "/fake.yaml"])
+        result = runner.invoke(app, ["check", "--config", "/fake.yaml"])
         assert result.exit_code == 0
 
     @patch("nbkp.cli.check_all_syncs")
@@ -193,7 +193,7 @@ class TestStatusCommand:
         result = runner.invoke(
             app,
             [
-                "status",
+                "check",
                 "--config",
                 "/fake.yaml",
                 "--output",
@@ -219,7 +219,7 @@ class TestStatusCommand:
         result = runner.invoke(
             app,
             [
-                "status",
+                "check",
                 "--config",
                 "/fake.yaml",
                 "--output",
@@ -242,7 +242,7 @@ class TestStatusCommand:
         sync_s = _sample_marker_only_sync_statuses(config, vol_s)
         mock_checks.return_value = (vol_s, sync_s)
 
-        result = runner.invoke(app, ["status", "--config", "/fake.yaml"])
+        result = runner.invoke(app, ["check", "--config", "/fake.yaml"])
         assert result.exit_code == 0
 
     @patch("nbkp.cli.check_all_syncs")
@@ -259,7 +259,7 @@ class TestStatusCommand:
         result = runner.invoke(
             app,
             [
-                "status",
+                "check",
                 "--config",
                 "/fake.yaml",
                 "--strict",
@@ -771,8 +771,8 @@ class TestConfigError:
             "nbkp.config", fromlist=["ConfigError"]
         ).ConfigError("bad config"),
     )
-    def test_status_config_error(self, mock_load: MagicMock) -> None:
-        result = runner.invoke(app, ["status", "--config", "/bad.yaml"])
+    def test_check_config_error(self, mock_load: MagicMock) -> None:
+        result = runner.invoke(app, ["check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
 
     @patch(
@@ -790,7 +790,7 @@ class TestConfigError:
 
         err = ConfigError("Config file not found: /bad.yaml")
         with patch("nbkp.cli.load_config", side_effect=err):
-            result = runner.invoke(app, ["status", "--config", "/bad.yaml"])
+            result = runner.invoke(app, ["check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
         out = _strip_panel(result.output)
         assert "Config file not found: /bad.yaml" in out
@@ -809,7 +809,7 @@ class TestConfigError:
             err.__cause__ = ve
 
         with patch("nbkp.cli.load_config", side_effect=err):
-            result = runner.invoke(app, ["status", "--config", "/bad.yaml"])
+            result = runner.invoke(app, ["check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
         out = _strip_panel(result.output)
         assert "volumes → v" in out
@@ -826,7 +826,7 @@ class TestConfigError:
             err.__cause__ = ye
 
         with patch("nbkp.cli.load_config", side_effect=err):
-            result = runner.invoke(app, ["status", "--config", "/bad.yaml"])
+            result = runner.invoke(app, ["check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
         out = _strip_panel(result.output)
         assert "Invalid YAML" in out
@@ -855,7 +855,7 @@ class TestConfigError:
             err.__cause__ = ve
 
         with patch("nbkp.cli.load_config", side_effect=err):
-            result = runner.invoke(app, ["status", "--config", "/bad.yaml"])
+            result = runner.invoke(app, ["check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
         out = _strip_panel(result.output)
         assert "unknown rsync-server 'missing'" in out
