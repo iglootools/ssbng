@@ -12,6 +12,7 @@ from ...config import (
     BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
+    HardLinkSnapshotConfig,
     LocalVolume,
     SyncConfig,
     SyncEndpoint,
@@ -207,6 +208,16 @@ def troubleshoot_config() -> Config:
                     btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
                 ),
             ),
+            "hardlink-issues": SyncConfig(
+                slug="hardlink-issues",
+                source=SyncEndpoint(volume="laptop"),
+                destination=DestinationSyncEndpoint(
+                    volume="usb-drive",
+                    hard_link_snapshots=HardLinkSnapshotConfig(
+                        enabled=True, max_snapshots=5
+                    ),
+                ),
+            ),
         },
     )
 
@@ -305,6 +316,16 @@ def troubleshoot_data(
             reasons=[
                 SyncReason.STAT_NOT_FOUND_ON_DESTINATION,
                 SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION,
+            ],
+        ),
+        "hardlink-issues": SyncStatus(
+            slug="hardlink-issues",
+            config=config.syncs["hardlink-issues"],
+            source_status=laptop_vs,
+            destination_status=usb_vs,
+            reasons=[
+                SyncReason.DESTINATION_NO_HARDLINK_SUPPORT,
+                SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND,
             ],
         ),
     }

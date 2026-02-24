@@ -6,7 +6,8 @@ ${{ config_line }}
 #   - All 4 rsync command variants (local→local, local→remote, remote→local, remote→remote)
 #   - SSH options (port, key, -o options, proxy jump -J)
 #   - Rsync filters and filter-file support
-#   - Btrfs: snapshot creation, link-dest incremental backups, pruning
+#   - Btrfs: snapshot creation, pruning
+#   - Hard-link: incremental backups via --link-dest, symlink management, pruning
 #   - Pre-flight checks: volume markers (.nbkp-vol), endpoint markers (.nbkp-src/.nbkp-dst)
 #   - Dry-run and verbose support (as runtime script arguments)
 #   - Nonzero exit on any sync failure
@@ -71,6 +72,17 @@ ${{ sync.fn_name }}() {
 
     # Pre-flight checks
 ${{ sync.preflight | indent(4, first=true) }}
+<% if sync.has_hard_link %>
+
+    # Cleanup orphaned snapshots
+${{ sync.orphan_cleanup | indent(4, first=true) }}
+
+    # Link-dest resolution (latest snapshot for incremental backup)
+${{ sync.link_dest | indent(4, first=true) }}
+
+    # Create snapshot directory
+${{ sync.hl_mkdir | indent(4, first=true) }}
+<% endif %>
 <% if sync.has_btrfs %>
 
     # Link-dest resolution (latest snapshot for incremental backup)
@@ -87,6 +99,16 @@ ${{ sync.snapshot | indent(4, first=true) }}
 
     # Prune old snapshots (max: ${{ sync.max_snapshots }})
 ${{ sync.prune | indent(4, first=true) }}
+<% endif %>
+<% endif %>
+<% if sync.has_hard_link %>
+
+    # Update latest symlink (skip if dry-run)
+${{ sync.symlink | indent(4, first=true) }}
+<% if sync.has_prune %>
+
+    # Prune old snapshots (max: ${{ sync.max_snapshots }})
+${{ sync.hl_prune | indent(4, first=true) }}
 <% endif %>
 <% endif %>
 

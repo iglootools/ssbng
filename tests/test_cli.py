@@ -689,7 +689,7 @@ def _prune_active_statuses(
 
 class TestPruneCommand:
     @patch("nbkp.cli.list_snapshots")
-    @patch("nbkp.cli.prune_snapshots")
+    @patch("nbkp.cli.btrfs_prune_snapshots")
     @patch("nbkp.cli.check_all_syncs")
     @patch("nbkp.cli.load_config")
     def test_successful_prune(
@@ -725,7 +725,7 @@ class TestPruneCommand:
         mock_prune.assert_called_once()
 
     @patch("nbkp.cli.list_snapshots")
-    @patch("nbkp.cli.prune_snapshots")
+    @patch("nbkp.cli.btrfs_prune_snapshots")
     @patch("nbkp.cli.check_all_syncs")
     @patch("nbkp.cli.load_config")
     def test_dry_run(
@@ -766,7 +766,7 @@ class TestPruneCommand:
         assert call_kwargs.kwargs.get("dry_run") is True
 
     @patch("nbkp.cli.list_snapshots")
-    @patch("nbkp.cli.prune_snapshots")
+    @patch("nbkp.cli.btrfs_prune_snapshots")
     @patch("nbkp.cli.check_all_syncs")
     @patch("nbkp.cli.load_config")
     def test_json_output(

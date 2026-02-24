@@ -57,6 +57,12 @@ def _sync_options(sync: SyncConfig) -> str:
         if max_snap is not None:
             btrfs_label += f"(max:{max_snap})"
         opts.append(btrfs_label)
+    if sync.destination.hard_link_snapshots.enabled:
+        hl_label = "hard-link-snapshots"
+        max_snap = sync.destination.hard_link_snapshots.max_snapshots
+        if max_snap is not None:
+            hl_label += f"(max:{max_snap})"
+        opts.append(hl_label)
     return ", ".join(opts)
 
 
@@ -503,15 +509,25 @@ def _print_sync_reason_fix(
         case SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND:
             dst = config.volumes[sync.destination.volume]
             path = _endpoint_path(dst, sync.destination.subdir)
-            cmds = [
-                f"sudo mkdir {path}/snapshots",
-                "sudo chown <user>:<group>" f" {path}/snapshots",
-            ]
+            if sync.destination.hard_link_snapshots.enabled:
+                cmds = [f"mkdir -p {path}/snapshots"]
+            else:
+                cmds = [
+                    f"sudo mkdir {path}/snapshots",
+                    "sudo chown <user>:<group>" f" {path}/snapshots",
+                ]
             for cmd in cmds:
                 _print_cmd(
                     console,
                     _wrap_cmd(cmd, dst, resolved_endpoints),
                 )
+        case SyncReason.DESTINATION_NO_HARDLINK_SUPPORT:
+            console.print(
+                f"{p2}The destination filesystem does not"
+                " support hard links (e.g. FAT/exFAT)."
+                " Use a filesystem like ext4, xfs, or"
+                " btrfs, or use btrfs-snapshots instead."
+            )
 
 
 def print_human_troubleshoot(

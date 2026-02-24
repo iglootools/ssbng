@@ -91,6 +91,7 @@ def _create_dest_markers(
     vol = config.volumes[sync.destination.volume]
     subdir = sync.destination.subdir
     btrfs = sync.destination.btrfs_snapshots
+    hard_link = sync.destination.hard_link_snapshots
 
     match vol:
         case LocalVolume():
@@ -99,9 +100,12 @@ def _create_dest_markers(
                 path = path / subdir
             path.mkdir(parents=True, exist_ok=True)
             (path / ".nbkp-dst").touch()
-            (path / "latest").mkdir(exist_ok=True)
-            if btrfs.enabled:
+            if hard_link.enabled:
                 (path / "snapshots").mkdir(exist_ok=True)
+            else:
+                (path / "latest").mkdir(exist_ok=True)
+                if btrfs.enabled:
+                    (path / "snapshots").mkdir(exist_ok=True)
         case RemoteVolume():
             if remote_exec is not None:
                 rp = vol.path
@@ -109,7 +113,9 @@ def _create_dest_markers(
                     rp = f"{rp}/{subdir}"
                 remote_exec(f"mkdir -p {rp}")
                 remote_exec(f"touch {rp}/.nbkp-dst")
-                if btrfs.enabled:
+                if hard_link.enabled:
+                    remote_exec(f"mkdir -p {rp}/snapshots")
+                elif btrfs.enabled:
                     remote_exec("btrfs subvolume create" f" {rp}/latest")
                     remote_exec(f"mkdir -p {rp}/snapshots")
                 else:

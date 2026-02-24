@@ -67,6 +67,7 @@ class _SyncContext:
     fn_name: str
     enabled: bool
     has_btrfs: bool = False
+    has_hard_link: bool = False
     has_prune: bool = False
     max_snapshots: int | None = None
     preflight: str = ""
@@ -74,6 +75,10 @@ class _SyncContext:
     rsync: str = ""
     snapshot: str = ""
     prune: str = ""
+    orphan_cleanup: str = ""
+    hl_mkdir: str = ""
+    symlink: str = ""
+    hl_prune: str = ""
     disabled_body: str = ""
 
 
@@ -354,6 +359,80 @@ def _btrfs_del_cmd(
             )
 
 
+# ── Hard-link command helpers ────────────────────────────────
+
+
+def _readlink_cmd(
+    dst_vol: LocalVolume | RemoteVolume,
+    path: str,
+    resolved_endpoints: ResolvedEndpoints,
+) -> str:
+    """Shell expression that outputs the symlink target."""
+    match dst_vol:
+        case LocalVolume():
+            return f"readlink {_qp(path)}"
+        case RemoteVolume():
+            ep = resolved_endpoints[dst_vol.slug]
+            return _format_remote_command_str(
+                ep.server, ep.proxy, ["readlink", path]
+            )
+
+
+def _rm_rf_snap_cmd(
+    dst_vol: LocalVolume | RemoteVolume,
+    snaps_dir: str,
+    resolved_endpoints: ResolvedEndpoints,
+) -> str:
+    """Shell command to rm -rf {snaps_dir}/$snap (loop variable)."""
+    match dst_vol:
+        case LocalVolume():
+            return f'rm -rf {_qp(snaps_dir)}/"$snap"'
+        case RemoteVolume():
+            ep = resolved_endpoints[dst_vol.slug]
+            ssh_pfx = " ".join(
+                _sq(a) for a in build_ssh_base_args(ep.server, ep.proxy)
+            )
+            return f'{ssh_pfx} "rm -rf {snaps_dir}/$snap"'
+
+
+def _mkdir_snap_cmd(
+    dst_vol: LocalVolume | RemoteVolume,
+    snaps_dir: str,
+    resolved_endpoints: ResolvedEndpoints,
+) -> str:
+    """Shell command to mkdir -p {snaps_dir}/$NBKP_TS."""
+    match dst_vol:
+        case LocalVolume():
+            return f'mkdir -p {_qp(snaps_dir)}/"$NBKP_TS"'
+        case RemoteVolume():
+            ep = resolved_endpoints[dst_vol.slug]
+            ssh_pfx = " ".join(
+                _sq(a) for a in build_ssh_base_args(ep.server, ep.proxy)
+            )
+            return f'{ssh_pfx} "mkdir -p {snaps_dir}/$NBKP_TS"'
+
+
+def _ln_sfn_cmd(
+    dst_vol: LocalVolume | RemoteVolume,
+    dest_path: str,
+    resolved_endpoints: ResolvedEndpoints,
+) -> str:
+    """Shell command for ln -sfn snapshots/$NBKP_TS {dest}/latest."""
+    match dst_vol:
+        case LocalVolume():
+            return f'ln -sfn "snapshots/$NBKP_TS"' f" {_qp(dest_path)}/latest"
+        case RemoteVolume():
+            ep = resolved_endpoints[dst_vol.slug]
+            ssh_pfx = " ".join(
+                _sq(a) for a in build_ssh_base_args(ep.server, ep.proxy)
+            )
+            return (
+                f"{ssh_pfx}"
+                f' "ln -sfn snapshots/$NBKP_TS'
+                f' {dest_path}/latest"'
+            )
+
+
 # ── Block builders (textwrap.dedent) ─────────────────────────
 
 
@@ -466,6 +545,18 @@ def _build_preflight_block(
             )
         )
 
+    # Hard-link checks
+    if sync.destination.hard_link_snapshots.enabled:
+        snaps_dir = f"{dst_path}/snapshots"
+        lines.append(
+            _build_check_line(
+                dst_vol,
+                ["-d", snaps_dir],
+                "destination snapshots/ directory not found" f" ({snaps_dir})",
+                resolved_endpoints,
+            )
+        )
+
     return "\n".join(lines)
 
 
@@ -474,8 +565,15 @@ def _build_link_dest_block(
     config: Config,
     vol_paths: dict[str, str],
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    link_dest_prefix: str = "../",
 ) -> str:
-    """Build link-dest resolution block at indent 0."""
+    """Build link-dest resolution block at indent 0.
+
+    ``link_dest_prefix`` is the relative path from the rsync
+    destination to the snapshots directory (``../`` for hard-link
+    where rsync writes to ``snapshots/{ts}/``).
+    """
     dst_vol = config.volumes[sync.destination.volume]
     dest_path = _vol_path(
         vol_paths,
@@ -489,7 +587,7 @@ def _build_link_dest_block(
         NBKP_LATEST_SNAP=$({ls_cmd} 2>/dev/null | sort | tail -1)
         RSYNC_LINK_DEST=""
         if [ -n "$NBKP_LATEST_SNAP" ]; then
-            RSYNC_LINK_DEST="--link-dest=../../snapshots/$NBKP_LATEST_SNAP"
+            RSYNC_LINK_DEST="--link-dest={link_dest_prefix}$NBKP_LATEST_SNAP"
         fi""")
 
 
@@ -498,6 +596,9 @@ def _build_rsync_block(
     config: Config,
     vol_paths: dict[str, str],
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    dest_suffix: str = "latest",
+    has_link_dest: bool = False,
 ) -> str:
     """Build rsync command block at indent 0."""
     i2 = "    "  # continuation indent within this block
@@ -508,6 +609,7 @@ def _build_rsync_block(
         link_dest=None,
         verbose=0,
         resolved_endpoints=resolved_endpoints,
+        dest_suffix=dest_suffix,
     )
 
     # Substitute local volume paths
@@ -530,14 +632,13 @@ def _build_rsync_block(
                 sync.destination.volume,
             )
 
-    has_btrfs = sync.destination.btrfs_snapshots.enabled
     formatted = _format_shell_command(cmd, cont_indent=i2)
 
     runtime_vars = [
         '${RSYNC_DRY_RUN_FLAG:+"$RSYNC_DRY_RUN_FLAG"}',
         '${RSYNC_VERBOSE_FLAG:+"$RSYNC_VERBOSE_FLAG"}',
     ]
-    if has_btrfs:
+    if has_link_dest:
         runtime_vars.insert(0, '${RSYNC_LINK_DEST:+"$RSYNC_LINK_DEST"}')
     runtime_suffix = f" \\\n{i2}".join(runtime_vars)
     return f"{formatted} \\\n{i2}{runtime_suffix}"
@@ -603,6 +704,125 @@ def _build_prune_block(
                     nbkp_log "Pruning snapshot: $snap"
                     {prop_cmd}
                     {del_cmd}
+                done
+            fi
+        fi""")
+
+
+def _build_hard_link_orphan_cleanup_block(
+    sync: SyncConfig,
+    config: Config,
+    vol_paths: dict[str, str],
+    resolved_endpoints: ResolvedEndpoints,
+) -> str:
+    """Build orphan cleanup block for hard-link snapshots."""
+    dst_vol = config.volumes[sync.destination.volume]
+    dest_path = _vol_path(
+        vol_paths,
+        sync.destination.volume,
+        sync.destination.subdir,
+    )
+    latest_path = f"{dest_path}/latest"
+    snaps_dir = f"{dest_path}/snapshots"
+    rl_cmd = _readlink_cmd(dst_vol, latest_path, resolved_endpoints)
+    ls_cmd = _ls_snapshots_cmd(dst_vol, snaps_dir, resolved_endpoints)
+    rm_cmd = _rm_rf_snap_cmd(dst_vol, snaps_dir, resolved_endpoints)
+
+    return dedent(f"""\
+        NBKP_LATEST_LINK=$({rl_cmd} 2>/dev/null || true)
+        if [ -n "$NBKP_LATEST_LINK" ]; then
+            NBKP_LATEST_NAME="${{NBKP_LATEST_LINK##*/}}"
+            for snap in $({ls_cmd} 2>/dev/null | sort); do
+                if [ "$snap" \\> "$NBKP_LATEST_NAME" ]; then
+                    nbkp_log "Removing orphaned snapshot: $snap"
+                    {rm_cmd}
+                fi
+            done
+        fi""")
+
+
+def _build_hard_link_mkdir_block(
+    sync: SyncConfig,
+    config: Config,
+    vol_paths: dict[str, str],
+    resolved_endpoints: ResolvedEndpoints,
+) -> str:
+    """Build snapshot directory creation block."""
+    dst_vol = config.volumes[sync.destination.volume]
+    dest_path = _vol_path(
+        vol_paths,
+        sync.destination.volume,
+        sync.destination.subdir,
+    )
+    snaps_dir = f"{dest_path}/snapshots"
+    mkdir_cmd = _mkdir_snap_cmd(dst_vol, snaps_dir, resolved_endpoints)
+
+    return dedent(f"""\
+        NBKP_TS=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+        {mkdir_cmd}""")
+
+
+def _build_hard_link_symlink_block(
+    sync: SyncConfig,
+    config: Config,
+    vol_paths: dict[str, str],
+    resolved_endpoints: ResolvedEndpoints,
+) -> str:
+    """Build latest symlink update block."""
+    dst_vol = config.volumes[sync.destination.volume]
+    dest_path = _vol_path(
+        vol_paths,
+        sync.destination.volume,
+        sync.destination.subdir,
+    )
+    ln_cmd = _ln_sfn_cmd(dst_vol, dest_path, resolved_endpoints)
+
+    return dedent(f"""\
+        if [ "$NBKP_DRY_RUN" = false ]; then
+            {ln_cmd}
+        fi""")
+
+
+def _build_hard_link_prune_block(
+    sync: SyncConfig,
+    config: Config,
+    max_snapshots: int,
+    vol_paths: dict[str, str],
+    resolved_endpoints: ResolvedEndpoints,
+) -> str:
+    """Build hard-link prune block (rm -rf, skip latest)."""
+    dst_vol = config.volumes[sync.destination.volume]
+    dest_path = _vol_path(
+        vol_paths,
+        sync.destination.volume,
+        sync.destination.subdir,
+    )
+    latest_path = f"{dest_path}/latest"
+    snaps_dir = f"{dest_path}/snapshots"
+    ls_cmd = _ls_snapshots_cmd(dst_vol, snaps_dir, resolved_endpoints)
+    rl_cmd = _readlink_cmd(dst_vol, latest_path, resolved_endpoints)
+    rm_cmd = _rm_rf_snap_cmd(dst_vol, snaps_dir, resolved_endpoints)
+
+    # fmt: off
+    pipe_while = (
+        'echo "$NBKP_SNAPS"'
+        ' | head -n "$NBKP_EXCESS"'
+        " | while IFS= read -r snap; do"
+    )
+    # fmt: on
+    return dedent(f"""\
+        if [ "$NBKP_DRY_RUN" = false ]; then
+            NBKP_SNAPS=$({ls_cmd} | sort)
+            NBKP_COUNT=$(echo "$NBKP_SNAPS" | wc -l | tr -d ' ')
+            NBKP_EXCESS=$((NBKP_COUNT - {max_snapshots}))
+            NBKP_LATEST_LINK=$({rl_cmd} 2>/dev/null || true)
+            NBKP_LATEST_NAME="${{NBKP_LATEST_LINK##*/}}"
+            if [ "$NBKP_EXCESS" -gt 0 ]; then
+                {pipe_while}
+                    if [ "$snap" != "$NBKP_LATEST_NAME" ]; then
+                        nbkp_log "Pruning snapshot: $snap"
+                        {rm_cmd}
+                    fi
                 done
             fi
         fi""")
@@ -680,6 +900,22 @@ def _render_enabled_function(ctx: _SyncContext) -> str:
     parts.append("    # Pre-flight checks")
     for line in ctx.preflight.split("\n"):
         parts.append(f"    {line}" if line else "")
+    if ctx.has_hard_link:
+        parts.append("")
+        parts.append("    # Cleanup orphaned snapshots")
+        for line in ctx.orphan_cleanup.split("\n"):
+            parts.append(f"    {line}" if line else "")
+        parts.append("")
+        parts.append(
+            "    # Link-dest resolution"
+            " (latest snapshot for incremental backup)"
+        )
+        for line in ctx.link_dest.split("\n"):
+            parts.append(f"    {line}" if line else "")
+        parts.append("")
+        parts.append("    # Create snapshot directory")
+        for line in ctx.hl_mkdir.split("\n"):
+            parts.append(f"    {line}" if line else "")
     if ctx.has_btrfs:
         parts.append("")
         parts.append(
@@ -704,6 +940,18 @@ def _render_enabled_function(ctx: _SyncContext) -> str:
             )
             for line in ctx.prune.split("\n"):
                 parts.append(f"    {line}" if line else "")
+    if ctx.has_hard_link:
+        parts.append("")
+        parts.append("    # Update latest symlink (skip if dry-run)")
+        for line in ctx.symlink.split("\n"):
+            parts.append(f"    {line}" if line else "")
+        if ctx.has_prune:
+            parts.append("")
+            parts.append(
+                f"    # Prune old snapshots" f" (max: {ctx.max_snapshots})"
+            )
+            for line in ctx.hl_prune.split("\n"):
+                parts.append(f"    {line}" if line else "")
     parts.append("")
     parts.append(f'    nbkp_log "Completed sync: {ctx.slug}"')
     parts.append("}")
@@ -722,24 +970,55 @@ def _build_sync_context(
 ) -> _SyncContext:
     """Build a _SyncContext with all pre-computed blocks."""
     has_btrfs = sync.destination.btrfs_snapshots.enabled
+    has_hard_link = sync.destination.hard_link_snapshots.enabled
     btrfs_cfg = sync.destination.btrfs_snapshots
-    has_prune = has_btrfs and btrfs_cfg.max_snapshots is not None
+    hl_cfg = sync.destination.hard_link_snapshots
+
+    has_prune = (has_btrfs and btrfs_cfg.max_snapshots is not None) or (
+        has_hard_link and hl_cfg.max_snapshots is not None
+    )
+    max_snaps = (
+        btrfs_cfg.max_snapshots
+        if has_btrfs
+        else hl_cfg.max_snapshots if has_hard_link else None
+    )
 
     preflight = _build_preflight_block(
         sync, config, vol_paths, resolved_endpoints
     )
+
+    # Link-dest: only for hard-link (removed from btrfs)
     link_dest = (
-        _build_link_dest_block(sync, config, vol_paths, resolved_endpoints)
-        if has_btrfs
+        _build_link_dest_block(
+            sync,
+            config,
+            vol_paths,
+            resolved_endpoints,
+            link_dest_prefix="../",
+        )
+        if has_hard_link
         else ""
     )
-    rsync = _build_rsync_block(sync, config, vol_paths, resolved_endpoints)
+
+    # Rsync block
+    if has_hard_link:
+        rsync = _build_rsync_block(
+            sync,
+            config,
+            vol_paths,
+            resolved_endpoints,
+            dest_suffix="snapshots/$NBKP_TS",
+            has_link_dest=True,
+        )
+    else:
+        rsync = _build_rsync_block(sync, config, vol_paths, resolved_endpoints)
+
+    # Btrfs blocks
     snapshot = (
         _build_snapshot_block(sync, config, vol_paths, resolved_endpoints)
         if has_btrfs
         else ""
     )
-    max_snaps = btrfs_cfg.max_snapshots
     prune = (
         _build_prune_block(
             sync,
@@ -748,7 +1027,41 @@ def _build_sync_context(
             vol_paths,
             resolved_endpoints,
         )
-        if has_prune and max_snaps is not None
+        if has_btrfs and max_snaps is not None
+        else ""
+    )
+
+    # Hard-link blocks
+    orphan_cleanup = (
+        _build_hard_link_orphan_cleanup_block(
+            sync, config, vol_paths, resolved_endpoints
+        )
+        if has_hard_link
+        else ""
+    )
+    hl_mkdir = (
+        _build_hard_link_mkdir_block(
+            sync, config, vol_paths, resolved_endpoints
+        )
+        if has_hard_link
+        else ""
+    )
+    symlink = (
+        _build_hard_link_symlink_block(
+            sync, config, vol_paths, resolved_endpoints
+        )
+        if has_hard_link
+        else ""
+    )
+    hl_prune = (
+        _build_hard_link_prune_block(
+            sync,
+            config,
+            max_snaps,
+            vol_paths,
+            resolved_endpoints,
+        )
+        if has_hard_link and max_snaps is not None
         else ""
     )
 
@@ -757,13 +1070,18 @@ def _build_sync_context(
         fn_name=_slug_to_fn(slug),
         enabled=sync.enabled,
         has_btrfs=has_btrfs,
+        has_hard_link=has_hard_link,
         has_prune=has_prune,
-        max_snapshots=btrfs_cfg.max_snapshots,
+        max_snapshots=max_snaps,
         preflight=preflight,
         link_dest=link_dest,
         rsync=rsync,
         snapshot=snapshot,
         prune=prune,
+        orphan_cleanup=orphan_cleanup,
+        hl_mkdir=hl_mkdir,
+        symlink=symlink,
+        hl_prune=hl_prune,
     )
 
 

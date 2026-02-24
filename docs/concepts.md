@@ -36,6 +36,29 @@ destination:
     max-snapshots: 10   # optional, omit for unlimited
 ```
 
+### Hard-Link Snapshots
+
+A sync can optionally enable hard-link-based snapshots as an alternative to btrfs snapshots. This works on any filesystem that supports hard links (ext4, xfs, btrfs, etc.) but not on FAT/exFAT.
+
+Unlike btrfs snapshots (which sync to `${destination}/latest/` then snapshot it), hard-link snapshots sync **directly into a new snapshot directory**:
+
+1. Create `${destination}/snapshots/${timestamp}/`
+2. rsync into that directory with `--link-dest=../${previous-snapshot}` (unchanged files are hard-linked, saving disk space)
+3. On success: update symlink `${destination}/latest` → `snapshots/${timestamp}`
+4. Prune old snapshots with `rm -rf` (no btrfs commands needed)
+
+**Safety:** The `latest` symlink is only updated after a successful sync. If a sync fails midway, `latest` still points to the previous complete snapshot. Orphaned snapshot directories (from failed syncs) are detected and cleaned up before the next sync. Pruning never removes the snapshot that `latest` points to.
+
+Only one of `btrfs-snapshots` and `hard-link-snapshots` can be enabled per sync (they are mutually exclusive).
+
+```yaml
+destination:
+  volume: usb-drive
+  hard-link-snapshots:
+    enabled: true
+    max-snapshots: 10   # optional, omit for unlimited
+```
+
 ### Rsync Local Volume
 
 A reusable configuration for a local source or destination that can be shared between multiple syncs.
@@ -292,6 +315,17 @@ syncs:
         enabled: true
         max-snapshots: 10       # optional, omit for unlimited
 
+  # Local-to-local sync with hard-link snapshots
+  music-to-usb:
+    source:
+      volume: laptop
+      subdir: music
+    destination:
+      volume: usb-drive
+      hard-link-snapshots:
+        enabled: true
+        max-snapshots: 5
+
   # Sync with custom rsync options
   music-to-nas:
     source:
@@ -355,7 +389,8 @@ The generated script resolves its own directory at runtime via `NBKP_SCRIPT_DIR`
 - All 4 rsync command variants (local-to-local, local-to-remote, remote-to-local, remote-to-remote)
 - SSH options (port, key, `-o` options, proxy jump `-J`)
 - Rsync filters and filter-file support
-- Btrfs snapshot creation, link-dest incremental backups, and pruning
+- Btrfs snapshot creation and pruning
+- Hard-link snapshots: incremental backups via `--link-dest`, symlink management, and pruning
 - Pre-flight checks (volume markers, endpoint markers)
 - Nonzero exit on any sync failure
 

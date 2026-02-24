@@ -26,7 +26,13 @@ from .check import (
     VolumeStatus,
     check_all_syncs,
 )
-from .sync.btrfs import list_snapshots, prune_snapshots
+from .sync.btrfs import (
+    list_snapshots,
+    prune_snapshots as btrfs_prune_snapshots,
+)
+from .sync.hardlinks import (
+    prune_snapshots as hl_prune_snapshots,
+)
 from .output import (
     OutputFormat,
     print_config_error,
@@ -481,33 +487,57 @@ def prune(
         resolved_endpoints=resolved,
     )
 
+    def _is_prunable(slug: str, status: SyncStatus) -> bool:
+        if sync and slug not in sync:
+            return False
+        if not status.active:
+            return False
+        dst = status.config.destination
+        match dst.snapshot_mode:
+            case "btrfs":
+                return dst.btrfs_snapshots.max_snapshots is not None
+            case "hard-link":
+                return dst.hard_link_snapshots.max_snapshots is not None
+            case _:
+                return False
+
     prunable = [
         (slug, status)
         for slug, status in sync_statuses.items()
-        if (not sync or slug in sync)
-        and status.active
-        and status.config.destination.btrfs_snapshots.enabled
-        and status.config.destination.btrfs_snapshots.max_snapshots is not None
+        if _is_prunable(slug, status)
     ]
 
     results: list[PruneResult] = []
     for slug, status in prunable:
-        btrfs_cfg = status.config.destination.btrfs_snapshots
-        assert btrfs_cfg.max_snapshots is not None
+        dst = status.config.destination
         try:
-            deleted = prune_snapshots(
-                status.config,
-                cfg,
-                btrfs_cfg.max_snapshots,
-                dry_run=dry_run,
-                resolved_endpoints=resolved,
-            )
+            match dst.snapshot_mode:
+                case "btrfs":
+                    assert dst.btrfs_snapshots.max_snapshots is not None
+                    deleted = btrfs_prune_snapshots(
+                        status.config,
+                        cfg,
+                        dst.btrfs_snapshots.max_snapshots,
+                        dry_run=dry_run,
+                        resolved_endpoints=resolved,
+                    )
+                case "hard-link":
+                    assert dst.hard_link_snapshots.max_snapshots is not None
+                    deleted = hl_prune_snapshots(
+                        status.config,
+                        cfg,
+                        dst.hard_link_snapshots.max_snapshots,
+                        dry_run=dry_run,
+                        resolved_endpoints=resolved,
+                    )
+                case _:
+                    deleted = []
             remaining = list_snapshots(status.config, cfg, resolved)
             results.append(
                 PruneResult(
                     sync_slug=slug,
                     deleted=deleted,
-                    kept=len(remaining) + (len(deleted) if dry_run else 0),
+                    kept=(len(remaining) + (len(deleted) if dry_run else 0)),
                     dry_run=dry_run,
                 )
             )

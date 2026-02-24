@@ -9,6 +9,7 @@ from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
+    HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
     ResolvedEndpoint,
@@ -2326,6 +2327,281 @@ class TestCheckAllSyncs:
         assert set(sync_statuses.keys()) == {"s1"}
         assert set(vol_statuses.keys()) == {"src1", "dst1"}
         assert sync_statuses["s1"].active is True
+
+
+class TestCheckHardLinkDest:
+    def _make_hl_config(
+        self, tmp_src: Path, tmp_dst: Path
+    ) -> tuple[Config, SyncConfig]:
+        src_vol = LocalVolume(slug="src", path=str(tmp_src))
+        dst_vol = LocalVolume(slug="dst", path=str(tmp_dst))
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src", subdir="data"),
+            destination=DestinationSyncEndpoint(
+                volume="dst",
+                subdir="backup",
+                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+            ),
+        )
+        config = Config(
+            volumes={"src": src_vol, "dst": dst_vol},
+            syncs={"s1": sync},
+        )
+        return config, sync
+
+    def _setup_active_markers(self, src: Path, dst: Path) -> None:
+        (src / ".nbkp-vol").touch()
+        (dst / ".nbkp-vol").touch()
+        (src / "data").mkdir(exist_ok=True)
+        (src / "data" / ".nbkp-src").touch()
+        (dst / "backup").mkdir(exist_ok=True)
+        (dst / "backup" / ".nbkp-dst").touch()
+
+    def _make_active_vol_statuses(
+        self, config: Config
+    ) -> dict[str, VolumeStatus]:
+        return {
+            "src": VolumeStatus(
+                slug="src",
+                config=config.volumes["src"],
+                reasons=[],
+            ),
+            "dst": VolumeStatus(
+                slug="dst",
+                config=config.volumes["dst"],
+                reasons=[],
+            ),
+        }
+
+    @patch("nbkp.check.subprocess.run")
+    @patch(
+        "nbkp.check.shutil.which",
+        return_value="/usr/bin/fake",
+    )
+    def test_snapshots_dir_not_found(
+        self,
+        mock_which: MagicMock,
+        mock_subprocess: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_active_markers(src, dst)
+        # No snapshots dir
+
+        config, sync = self._make_hl_config(src, dst)
+        vol_statuses = self._make_active_vol_statuses(config)
+
+        mock_subprocess.return_value = MagicMock(
+            returncode=0, stdout="ext2/ext3\n"
+        )
+
+        status = check_sync(sync, config, vol_statuses)
+        assert status.active is False
+        assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
+
+    @patch("nbkp.check.subprocess.run")
+    @patch(
+        "nbkp.check.shutil.which",
+        return_value="/usr/bin/fake",
+    )
+    def test_no_hardlink_support_fat(
+        self,
+        mock_which: MagicMock,
+        mock_subprocess: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_active_markers(src, dst)
+        (dst / "backup" / "snapshots").mkdir()
+
+        config, sync = self._make_hl_config(src, dst)
+        vol_statuses = self._make_active_vol_statuses(config)
+
+        mock_subprocess.return_value = MagicMock(returncode=0, stdout="vfat\n")
+
+        status = check_sync(sync, config, vol_statuses)
+        assert status.active is False
+        assert SyncReason.DESTINATION_NO_HARDLINK_SUPPORT in status.reasons
+
+    @patch("nbkp.check.subprocess.run")
+    @patch(
+        "nbkp.check.shutil.which",
+        return_value="/usr/bin/fake",
+    )
+    def test_active_with_ext4(
+        self,
+        mock_which: MagicMock,
+        mock_subprocess: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_active_markers(src, dst)
+        (dst / "backup" / "snapshots").mkdir()
+
+        config, sync = self._make_hl_config(src, dst)
+        vol_statuses = self._make_active_vol_statuses(config)
+
+        mock_subprocess.return_value = MagicMock(
+            returncode=0, stdout="ext2/ext3\n"
+        )
+
+        status = check_sync(sync, config, vol_statuses)
+        assert status.active is True
+        assert status.reasons == []
+
+    @patch(
+        "nbkp.check.shutil.which",
+        side_effect=lambda cmd: (None if cmd == "stat" else f"/usr/bin/{cmd}"),
+    )
+    def test_stat_not_found(
+        self,
+        mock_which: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_active_markers(src, dst)
+
+        config, sync = self._make_hl_config(src, dst)
+        vol_statuses = self._make_active_vol_statuses(config)
+
+        status = check_sync(sync, config, vol_statuses)
+        assert status.active is False
+        assert SyncReason.STAT_NOT_FOUND_ON_DESTINATION in status.reasons
+        # No hardlink support check when stat is missing
+        assert SyncReason.DESTINATION_NO_HARDLINK_SUPPORT not in status.reasons
+
+    @patch("nbkp.check.subprocess.run")
+    @patch(
+        "nbkp.check.shutil.which",
+        return_value="/usr/bin/fake",
+    )
+    def test_no_btrfs_checks_for_hardlink(
+        self,
+        mock_which: MagicMock,
+        mock_subprocess: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Hard-link mode should not run any btrfs-specific checks."""
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_active_markers(src, dst)
+        (dst / "backup" / "snapshots").mkdir()
+
+        config, sync = self._make_hl_config(src, dst)
+        vol_statuses = self._make_active_vol_statuses(config)
+
+        mock_subprocess.return_value = MagicMock(
+            returncode=0, stdout="ext2/ext3\n"
+        )
+
+        status = check_sync(sync, config, vol_statuses)
+        assert SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION not in status.reasons
+        assert SyncReason.DESTINATION_NOT_BTRFS not in status.reasons
+        assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.reasons
+        assert SyncReason.DESTINATION_LATEST_NOT_FOUND not in status.reasons
+
+    @patch("nbkp.check.run_remote_command")
+    @patch(
+        "nbkp.check.shutil.which",
+        return_value="/usr/bin/rsync",
+    )
+    def test_remote_no_hardlink_support(
+        self,
+        mock_which: MagicMock,
+        mock_run: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / ".nbkp-vol").touch()
+        (src / "data").mkdir()
+        (src / "data" / ".nbkp-src").touch()
+
+        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
+        src_vol = LocalVolume(slug="src", path=str(src))
+        dst_vol = RemoteVolume(
+            slug="dst",
+            ssh_endpoint="dst-server",
+            path="/backup",
+        )
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src", subdir="data"),
+            destination=DestinationSyncEndpoint(
+                volume="dst",
+                subdir="backup",
+                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+            ),
+        )
+        config = Config(
+            ssh_endpoints={"dst-server": dst_server},
+            volumes={"src": src_vol, "dst": dst_vol},
+            syncs={"s1": sync},
+        )
+        vol_statuses = {
+            "src": VolumeStatus(
+                slug="src",
+                config=src_vol,
+                reasons=[],
+            ),
+            "dst": VolumeStatus(
+                slug="dst",
+                config=dst_vol,
+                reasons=[],
+            ),
+        }
+
+        def remote_side_effect(
+            server: SshEndpoint,
+            cmd: list[str],
+            proxy: SshEndpoint | None = None,
+        ) -> MagicMock:
+            if cmd == [
+                "test",
+                "-f",
+                "/backup/backup/.nbkp-dst",
+            ]:
+                return MagicMock(returncode=0)
+            if cmd == ["which", "rsync"]:
+                return MagicMock(returncode=0)
+            if cmd == ["which", "stat"]:
+                return MagicMock(returncode=0)
+            if cmd == [
+                "stat",
+                "-f",
+                "-c",
+                "%T",
+                "/backup",
+            ]:
+                return MagicMock(returncode=0, stdout="exfat\n")
+            if cmd == [
+                "test",
+                "-d",
+                "/backup/backup/snapshots",
+            ]:
+                return MagicMock(returncode=0)
+            return MagicMock(returncode=0)
+
+        mock_run.side_effect = remote_side_effect
+
+        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
+        assert status.active is False
+        assert SyncReason.DESTINATION_NO_HARDLINK_SUPPORT in status.reasons
 
 
 class TestCheckRemoteVolumeSpaces:

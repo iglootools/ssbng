@@ -133,6 +133,16 @@ def remote_btrfs_volume() -> RemoteVolume:
     )
 
 
+@pytest.fixture(scope="session")
+def remote_hardlink_volume() -> RemoteVolume:
+    """RemoteVolume pointing at /data/hl on the container."""
+    return RemoteVolume(
+        slug="test-hl",
+        ssh_endpoint="test-server",
+        path="/data/hl",
+    )
+
+
 def create_markers(
     server: SshEndpoint,
     path: str,
@@ -172,6 +182,10 @@ def _cleanup_remote(
         "find /data -mindepth 1 -maxdepth 1"
         " ! -name src ! -name latest -exec rm -rf {} +"
     )
+
+    # Clean hard-link test paths
+    run("rm -rf /data/hl/snapshots/* /data/hl/latest")
+    run("find /data/hl -name '.nbkp-*' -delete 2>/dev/null || true")
 
     # Clean btrfs paths — delete snapshot subvolumes first,
     # then latest

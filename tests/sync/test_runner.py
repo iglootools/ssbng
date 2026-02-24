@@ -203,12 +203,10 @@ class TestRunAllSyncs:
         assert len(results) == 0
 
     @patch("nbkp.sync.runner.create_snapshot")
-    @patch("nbkp.sync.runner.get_latest_snapshot")
     @patch("nbkp.sync.runner.run_rsync")
     def test_btrfs_snapshot_after_sync(
         self,
         mock_rsync: MagicMock,
-        mock_latest: MagicMock,
         mock_snap: MagicMock,
     ) -> None:
         config = _make_btrfs_config()
@@ -216,7 +214,6 @@ class TestRunAllSyncs:
         mock_rsync.return_value = MagicMock(
             returncode=0, stdout="done\n", stderr=""
         )
-        mock_latest.return_value = None
         mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
 
         results = run_all_syncs(config, sync_statuses)
@@ -224,31 +221,26 @@ class TestRunAllSyncs:
         assert results[0].snapshot_path == "/dst/snapshots/20240115T120000Z"
         mock_snap.assert_called_once()
 
-    @patch("nbkp.sync.runner.get_latest_snapshot")
     @patch("nbkp.sync.runner.run_rsync")
     def test_btrfs_snapshot_skipped_on_dry_run(
         self,
         mock_rsync: MagicMock,
-        mock_latest: MagicMock,
     ) -> None:
         config = _make_btrfs_config()
         _, sync_statuses = _active_statuses(config)
         mock_rsync.return_value = MagicMock(
             returncode=0, stdout="done\n", stderr=""
         )
-        mock_latest.return_value = None
 
         results = run_all_syncs(config, sync_statuses, dry_run=True)
         assert results[0].success is True
         assert results[0].snapshot_path is None
 
     @patch("nbkp.sync.runner.create_snapshot")
-    @patch("nbkp.sync.runner.get_latest_snapshot")
     @patch("nbkp.sync.runner.run_rsync")
-    def test_link_dest_from_latest_snapshot(
+    def test_btrfs_no_link_dest(
         self,
         mock_rsync: MagicMock,
-        mock_latest: MagicMock,
         mock_snap: MagicMock,
     ) -> None:
         config = _make_btrfs_config()
@@ -256,25 +248,19 @@ class TestRunAllSyncs:
         mock_rsync.return_value = MagicMock(
             returncode=0, stdout="done\n", stderr=""
         )
-        mock_latest.return_value = "/dst/snapshots/20240101T000000Z"
         mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
 
         run_all_syncs(config, sync_statuses)
 
-        # Verify link_dest was passed to run_rsync
+        # Btrfs workflow no longer passes --link-dest
         call_kwargs = mock_rsync.call_args
-        assert (
-            call_kwargs.kwargs.get("link_dest")
-            == "../../snapshots/20240101T000000Z"
-        )
+        assert call_kwargs.kwargs.get("link_dest") is None
 
     @patch("nbkp.sync.runner.create_snapshot")
-    @patch("nbkp.sync.runner.get_latest_snapshot")
     @patch("nbkp.sync.runner.run_rsync")
     def test_remote_to_remote_with_btrfs(
         self,
         mock_rsync: MagicMock,
-        mock_latest: MagicMock,
         mock_snap: MagicMock,
     ) -> None:
         config = _make_remote_to_remote_config()
@@ -282,7 +268,6 @@ class TestRunAllSyncs:
         mock_rsync.return_value = MagicMock(
             returncode=0, stdout="done\n", stderr=""
         )
-        mock_latest.return_value = None
         mock_snap.return_value = "/backup/snapshots/20240115T120000Z"
 
         results = run_all_syncs(config, sync_statuses)
@@ -291,12 +276,10 @@ class TestRunAllSyncs:
         mock_snap.assert_called_once()
 
     @patch("nbkp.sync.runner.create_snapshot")
-    @patch("nbkp.sync.runner.get_latest_snapshot")
     @patch("nbkp.sync.runner.run_rsync")
     def test_snapshot_failure(
         self,
         mock_rsync: MagicMock,
-        mock_latest: MagicMock,
         mock_snap: MagicMock,
     ) -> None:
         config = _make_btrfs_config()
@@ -304,21 +287,18 @@ class TestRunAllSyncs:
         mock_rsync.return_value = MagicMock(
             returncode=0, stdout="done\n", stderr=""
         )
-        mock_latest.return_value = None
         mock_snap.side_effect = RuntimeError("btrfs failed")
 
         results = run_all_syncs(config, sync_statuses)
         assert results[0].success is False
         assert "Snapshot failed" in (results[0].error or "")
 
-    @patch("nbkp.sync.runner.prune_snapshots")
+    @patch("nbkp.sync.runner.btrfs_prune_snapshots")
     @patch("nbkp.sync.runner.create_snapshot")
-    @patch("nbkp.sync.runner.get_latest_snapshot")
     @patch("nbkp.sync.runner.run_rsync")
     def test_auto_prune_after_snapshot(
         self,
         mock_rsync: MagicMock,
-        mock_latest: MagicMock,
         mock_snap: MagicMock,
         mock_prune: MagicMock,
     ) -> None:
@@ -327,7 +307,6 @@ class TestRunAllSyncs:
         mock_rsync.return_value = MagicMock(
             returncode=0, stdout="done\n", stderr=""
         )
-        mock_latest.return_value = None
         mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
         mock_prune.return_value = ["/dst/snapshots/old"]
 
@@ -336,14 +315,12 @@ class TestRunAllSyncs:
         assert results[0].pruned_paths == ["/dst/snapshots/old"]
         mock_prune.assert_called_once()
 
-    @patch("nbkp.sync.runner.prune_snapshots")
+    @patch("nbkp.sync.runner.btrfs_prune_snapshots")
     @patch("nbkp.sync.runner.create_snapshot")
-    @patch("nbkp.sync.runner.get_latest_snapshot")
     @patch("nbkp.sync.runner.run_rsync")
     def test_no_auto_prune_without_max_snapshots(
         self,
         mock_rsync: MagicMock,
-        mock_latest: MagicMock,
         mock_snap: MagicMock,
         mock_prune: MagicMock,
     ) -> None:
@@ -352,7 +329,6 @@ class TestRunAllSyncs:
         mock_rsync.return_value = MagicMock(
             returncode=0, stdout="done\n", stderr=""
         )
-        mock_latest.return_value = None
         mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
 
         results = run_all_syncs(config, sync_statuses)

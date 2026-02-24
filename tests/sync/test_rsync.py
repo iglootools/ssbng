@@ -840,6 +840,121 @@ class TestBuildRsyncCommandVerbose:
         assert "-vv" in inner
 
 
+class TestDestSuffix:
+    def test_default_latest(self) -> None:
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        assert cmd[-1] == "/mnt/dst/latest/"
+
+    def test_custom_suffix(self) -> None:
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(
+            sync, config, dest_suffix="snapshots/2026-02-21T12:00:00.000Z"
+        )
+        assert cmd[-1] == "/mnt/dst/snapshots/2026-02-21T12:00:00.000Z/"
+
+    def test_local_to_remote(self) -> None:
+        server = SshEndpoint(slug="nas", host="nas.local", user="backup")
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = RemoteVolume(slug="dst", ssh_endpoint="nas", path="/backup")
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            ssh_endpoints={"nas": server},
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+        resolved = resolve_all_endpoints(config)
+
+        cmd = build_rsync_command(
+            sync,
+            config,
+            resolved_endpoints=resolved,
+            dest_suffix="snapshots/T1",
+        )
+        assert cmd[-1] == "backup@nas.local:/backup/snapshots/T1/"
+
+    def test_remote_to_local(self) -> None:
+        server = SshEndpoint(slug="srv", host="srv.local", user="admin")
+        src = RemoteVolume(slug="src", ssh_endpoint="srv", path="/data")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            ssh_endpoints={"srv": server},
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+        resolved = resolve_all_endpoints(config)
+
+        cmd = build_rsync_command(
+            sync,
+            config,
+            resolved_endpoints=resolved,
+            dest_suffix="snapshots/T1",
+        )
+        assert cmd[-1] == "/mnt/dst/snapshots/T1/"
+
+    def test_remote_to_remote(self) -> None:
+        src_server = SshEndpoint(slug="src-server", host="src.local")
+        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
+        src = RemoteVolume(slug="src", ssh_endpoint="src-server", path="/data")
+        dst = RemoteVolume(
+            slug="dst", ssh_endpoint="dst-server", path="/backup"
+        )
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            ssh_endpoints={
+                "src-server": src_server,
+                "dst-server": dst_server,
+            },
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+        resolved = resolve_all_endpoints(config)
+
+        cmd = build_rsync_command(
+            sync,
+            config,
+            resolved_endpoints=resolved,
+            dest_suffix="snapshots/T1",
+        )
+        inner = cmd[-1]
+        assert "/backup/snapshots/T1/" in inner
+
+
 class TestRunRsync:
     @patch("nbkp.sync.rsync.subprocess.run")
     def test_run_rsync(self, mock_run: MagicMock) -> None:

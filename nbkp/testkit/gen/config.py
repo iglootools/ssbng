@@ -6,6 +6,7 @@ from ...config import (
     BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
+    HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
     SshEndpoint,
@@ -85,6 +86,16 @@ def config_show_config() -> Config:
                 destination=DestinationSyncEndpoint(
                     volume="nas-backup",
                     subdir="docs",
+                ),
+            ),
+            "music-to-usb": SyncConfig(
+                slug="music-to-usb",
+                source=SyncEndpoint(volume="laptop", subdir="music"),
+                destination=DestinationSyncEndpoint(
+                    volume="usb-drive",
+                    hard_link_snapshots=HardLinkSnapshotConfig(
+                        enabled=True, max_snapshots=5
+                    ),
                 ),
             ),
             "disabled-backup": SyncConfig(

@@ -9,6 +9,7 @@ from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
+    HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
     SshEndpoint,
@@ -364,12 +365,10 @@ class TestDisabledSync:
 
 
 class TestBtrfs:
-    def test_link_dest_resolution(self) -> None:
+    def test_no_link_dest(self) -> None:
         config = _btrfs_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert "NBKP_LATEST_SNAP=" in script
-        assert "RSYNC_LINK_DEST=" in script
-        assert "--link-dest=../../snapshots/" in script
+        assert "RSYNC_LINK_DEST" not in script
 
     def test_snapshot_creation(self) -> None:
         config = _btrfs_config()
@@ -397,7 +396,6 @@ class TestBtrfs:
     def test_no_prune_without_max(self) -> None:
         config = _btrfs_no_prune_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert "NBKP_LATEST_SNAP=" in script
         assert "Prune old snapshots" not in script
 
     def test_latest_and_snapshots_dir_checks(self) -> None:
@@ -813,6 +811,168 @@ class TestRemoteBtrfs:
             text=True,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+
+
+class TestHardLink:
+    def _hl_config(self) -> Config:
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            slug="hl-sync",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(
+                volume="dst",
+                hard_link_snapshots=HardLinkSnapshotConfig(
+                    enabled=True, max_snapshots=5
+                ),
+            ),
+        )
+        return Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"hl-sync": sync},
+        )
+
+    def _hl_no_prune_config(self) -> Config:
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            slug="hl-sync",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(
+                volume="dst",
+                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+            ),
+        )
+        return Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"hl-sync": sync},
+        )
+
+    def _hl_remote_config(self) -> Config:
+        server = SshEndpoint(
+            slug="nas",
+            host="nas.example.com",
+            user="backup",
+        )
+        src = LocalVolume(slug="src", path="/mnt/data")
+        dst = RemoteVolume(
+            slug="nas-vol",
+            ssh_endpoint="nas",
+            path="/volume1",
+        )
+        sync = SyncConfig(
+            slug="hl-remote",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(
+                volume="nas-vol",
+                hard_link_snapshots=HardLinkSnapshotConfig(
+                    enabled=True, max_snapshots=3
+                ),
+            ),
+        )
+        return Config(
+            ssh_endpoints={"nas": server},
+            volumes={"src": src, "nas-vol": dst},
+            syncs={"hl-remote": sync},
+        )
+
+    def test_orphan_cleanup(self) -> None:
+        config = self._hl_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert "readlink" in script
+        assert "latest" in script
+
+    def test_link_dest_resolution(self) -> None:
+        config = self._hl_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert "RSYNC_LINK_DEST" in script
+        assert "--link-dest" in script
+
+    def test_mkdir_snapshot_dir(self) -> None:
+        config = self._hl_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert "mkdir -p" in script
+        assert "NBKP_TS" in script
+        assert "/mnt/dst/snapshots/" in script
+
+    def test_rsync_to_snapshot(self) -> None:
+        config = self._hl_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert "/mnt/dst/snapshots/$NBKP_TS/" in script
+
+    def test_symlink_update(self) -> None:
+        config = self._hl_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert "ln -sfn" in script
+        assert "snapshots/$NBKP_TS" in script
+
+    def test_symlink_guarded_by_dry_run(self) -> None:
+        config = self._hl_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert 'if [ "$NBKP_DRY_RUN" = false ]' in script
+
+    def test_prune_with_max_snapshots(self) -> None:
+        config = self._hl_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert "Prune old snapshots" in script
+        assert "max: 5" in script
+        assert "rm -rf" in script
+
+    def test_no_prune_without_max(self) -> None:
+        config = self._hl_no_prune_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert "Prune old snapshots" not in script
+
+    def test_no_btrfs_commands(self) -> None:
+        config = self._hl_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert "btrfs subvolume" not in script
+        assert "btrfs property" not in script
+
+    def test_snapshots_dir_preflight_check(self) -> None:
+        config = self._hl_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert "snapshots/ directory not found" in script
+
+    def test_valid_syntax(self) -> None:
+        config = self._hl_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        result = subprocess.run(
+            ["bash", "-n"],
+            input=script,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+
+    def test_remote_valid_syntax(self) -> None:
+        config = self._hl_remote_config()
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config,
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints=resolved,
+        )
+        result = subprocess.run(
+            ["bash", "-n"],
+            input=script,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+
+    def test_remote_orphan_cleanup_uses_ssh(self) -> None:
+        config = self._hl_remote_config()
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config,
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints=resolved,
+        )
+        assert "nas.example.com" in script
+        assert "readlink" in script
 
 
 class TestRelativePaths:

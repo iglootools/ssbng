@@ -139,12 +139,43 @@ class BtrfsSnapshotConfig(_BaseModel):
     max_snapshots: Optional[int] = Field(default=None, ge=1)
 
 
+class HardLinkSnapshotConfig(_BaseModel):
+    """Configuration for hard-link-based snapshot management."""
+
+    model_config = ConfigDict(frozen=True)
+    enabled: bool = False
+    max_snapshots: Optional[int] = Field(default=None, ge=1)
+
+
 class DestinationSyncEndpoint(SyncEndpoint):
     """A destination sync endpoint with snapshot options."""
 
     btrfs_snapshots: BtrfsSnapshotConfig = Field(
         default_factory=lambda: BtrfsSnapshotConfig()
     )
+    hard_link_snapshots: HardLinkSnapshotConfig = Field(
+        default_factory=lambda: HardLinkSnapshotConfig()
+    )
+
+    @model_validator(mode="after")
+    def validate_snapshot_exclusivity(self) -> DestinationSyncEndpoint:
+        if self.btrfs_snapshots.enabled and self.hard_link_snapshots.enabled:
+            raise ValueError(
+                "btrfs-snapshots and hard-link-snapshots"
+                " are mutually exclusive"
+            )
+        return self
+
+    @property
+    def snapshot_mode(
+        self,
+    ) -> Literal["none", "btrfs", "hard-link"]:
+        if self.btrfs_snapshots.enabled:
+            return "btrfs"
+        elif self.hard_link_snapshots.enabled:
+            return "hard-link"
+        else:
+            return "none"
 
 
 class SyncConfig(_BaseModel):

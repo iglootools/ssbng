@@ -48,6 +48,9 @@ class SyncReason(str, enum.Enum):
     DESTINATION_SNAPSHOTS_DIR_NOT_FOUND = (
         "destination snapshots/ directory not found"
     )
+    DESTINATION_NO_HARDLINK_SUPPORT = (
+        "destination filesystem does not support hard links"
+    )
 
 
 class VolumeStatus(BaseModel):
@@ -183,6 +186,34 @@ def _check_btrfs_filesystem(
     return result.returncode == 0 and result.stdout.strip() == "btrfs"
 
 
+_NO_HARDLINK_FILESYSTEMS = {"vfat", "msdos", "exfat"}
+
+
+def _check_hardlink_support(
+    volume: Volume,
+    resolved_endpoints: ResolvedEndpoints,
+) -> bool:
+    """Check if the volume filesystem supports hard links.
+
+    Rejects known non-hardlink filesystems (FAT, exFAT).
+    """
+    cmd = ["stat", "-f", "-c", "%T", volume.path]
+    match volume:
+        case LocalVolume():
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+            )
+        case RemoteVolume():
+            ep = resolved_endpoints[volume.slug]
+            result = run_remote_command(ep.server, cmd, ep.proxy)
+    if result.returncode != 0:
+        return True  # Cannot determine; assume supported
+    fs_type = result.stdout.strip()
+    return fs_type not in _NO_HARDLINK_FILESYSTEMS
+
+
 def _resolve_endpoint(volume: Volume, subdir: str | None) -> str:
     """Resolve the full endpoint path for a volume."""
     if subdir:
@@ -289,6 +320,22 @@ def _check_btrfs_dest(
             reasons.append(SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND)
 
 
+def _check_hard_link_dest(
+    dst_vol: Volume,
+    sync: SyncConfig,
+    reasons: list[SyncReason],
+    resolved_endpoints: ResolvedEndpoints,
+) -> None:
+    """Run hard-link snapshot filesystem and directory checks."""
+    if not _check_hardlink_support(dst_vol, resolved_endpoints):
+        reasons.append(SyncReason.DESTINATION_NO_HARDLINK_SUPPORT)
+    ep = _resolve_endpoint(dst_vol, sync.destination.subdir)
+    if not _check_directory_exists(
+        dst_vol, f"{ep}/snapshots", resolved_endpoints
+    ):
+        reasons.append(SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND)
+
+
 def check_sync(
     sync: SyncConfig,
     config: Config,
@@ -373,6 +420,12 @@ def check_sync(
                             reasons,
                             re,
                         )
+            elif sync.destination.hard_link_snapshots.enabled:
+                has_stat = _check_command_available(dst_vol, "stat", re)
+                if not has_stat:
+                    reasons.append(SyncReason.STAT_NOT_FOUND_ON_DESTINATION)
+                else:
+                    _check_hard_link_dest(dst_vol, sync, reasons, re)
 
         return SyncStatus(
             slug=sync.slug,

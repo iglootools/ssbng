@@ -8,9 +8,11 @@ import pytest
 import yaml
 
 from nbkp.config import (
+    BtrfsSnapshotConfig,
     Config,
     ConfigError,
     DestinationSyncEndpoint,
+    HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
     SshEndpoint,
@@ -447,3 +449,83 @@ class TestLoadConfig:
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "include" in str(cause) or "exclude" in str(cause)
+
+    def test_hard_link_snapshots(self, tmp_path: Path) -> None:
+        config = Config(
+            volumes={
+                "v": LocalVolume(slug="v", path="/x"),
+            },
+            syncs={
+                "s": SyncConfig(
+                    slug="s",
+                    source=SyncEndpoint(volume="v"),
+                    destination=DestinationSyncEndpoint(
+                        volume="v",
+                        hard_link_snapshots=HardLinkSnapshotConfig(
+                            enabled=True, max_snapshots=10
+                        ),
+                    ),
+                ),
+            },
+        )
+        p = tmp_path / "hl.yaml"
+        p.write_text(_config_to_yaml(config))
+        cfg = load_config(str(p))
+        sync = cfg.syncs["s"]
+        assert sync.destination.hard_link_snapshots.enabled is True
+        assert sync.destination.hard_link_snapshots.max_snapshots == 10
+        assert sync.destination.btrfs_snapshots.enabled is False
+        assert sync.destination.snapshot_mode == "hard-link"
+
+    def test_hard_link_snapshots_no_max(self, tmp_path: Path) -> None:
+        config = Config(
+            volumes={
+                "v": LocalVolume(slug="v", path="/x"),
+            },
+            syncs={
+                "s": SyncConfig(
+                    slug="s",
+                    source=SyncEndpoint(volume="v"),
+                    destination=DestinationSyncEndpoint(
+                        volume="v",
+                        hard_link_snapshots=HardLinkSnapshotConfig(
+                            enabled=True
+                        ),
+                    ),
+                ),
+            },
+        )
+        p = tmp_path / "hl_no_max.yaml"
+        p.write_text(_config_to_yaml(config))
+        cfg = load_config(str(p))
+        sync = cfg.syncs["s"]
+        assert sync.destination.hard_link_snapshots.enabled is True
+        assert sync.destination.hard_link_snapshots.max_snapshots is None
+
+    def test_mutual_exclusivity_btrfs_and_hardlink(
+        self, tmp_path: Path
+    ) -> None:
+        with pytest.raises(Exception, match="mutually exclusive"):
+            DestinationSyncEndpoint(
+                volume="v",
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+            )
+
+    def test_snapshot_mode_none(self) -> None:
+        ep = DestinationSyncEndpoint(volume="v")
+        assert ep.snapshot_mode == "none"
+
+    def test_snapshot_mode_btrfs(self) -> None:
+        ep = DestinationSyncEndpoint(
+            volume="v",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+        )
+        assert ep.snapshot_mode == "btrfs"
+
+    def test_snapshot_mode_hard_link(self) -> None:
+        ep = DestinationSyncEndpoint(
+            volume="v",
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+        )
+        assert ep.snapshot_mode == "hard-link"

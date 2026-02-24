@@ -77,6 +77,7 @@ def build_rsync_command(
     link_dest: str | None = None,
     verbose: int = 0,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    dest_suffix: str = "latest",
 ) -> list[str]:
     """Build the rsync command for a sync operation.
 
@@ -105,6 +106,7 @@ def build_rsync_command(
                 verbose,
                 src_proxy=src_ep.proxy,
                 dst_proxy=dst_ep.proxy,
+                dest_suffix=dest_suffix,
             )
         case (RemoteVolume() as sv, LocalVolume()):
             src_ep = re[sv.slug]
@@ -119,7 +121,7 @@ def build_rsync_command(
             rsync_args.append(
                 format_remote_path(src_ep.server, src_path) + "/"
             )
-            rsync_args.append(f"{dst_path}/latest/")
+            rsync_args.append(f"{dst_path}/{dest_suffix}/")
             return rsync_args
         case (LocalVolume(), RemoteVolume() as dv):
             dst_ep = re[dv.slug]
@@ -133,14 +135,15 @@ def build_rsync_command(
             )
             rsync_args.append(f"{src_path}/")
             rsync_args.append(
-                format_remote_path(dst_ep.server, dst_path) + "/latest/"
+                format_remote_path(dst_ep.server, dst_path)
+                + f"/{dest_suffix}/"
             )
             return rsync_args
         case _:
             rsync_args = _base_rsync_args(sync, dry_run, link_dest, verbose)
             rsync_args.extend(_filter_args(sync))
             rsync_args.append(f"{src_path}/")
-            rsync_args.append(f"{dst_path}/latest/")
+            rsync_args.append(f"{dst_path}/{dest_suffix}/")
             return rsync_args
 
 
@@ -155,6 +158,7 @@ def _build_remote_to_remote(
     verbose: int = 0,
     src_proxy: SshEndpoint | None = None,
     dst_proxy: SshEndpoint | None = None,
+    dest_suffix: str = "latest",
 ) -> list[str]:
     """Build remote-to-remote rsync command (SSH into dest, rsync from src)."""
     options = (
@@ -177,7 +181,7 @@ def _build_remote_to_remote(
 
     src_remote = format_remote_path(src_server, src_path)
     inner_rsync_parts.append(f"{src_remote}/")
-    inner_rsync_parts.append(f"{dst_path}/latest/")
+    inner_rsync_parts.append(f"{dst_path}/{dest_suffix}/")
 
     inner_command = " ".join(shlex.quote(p) for p in inner_rsync_parts)
 
@@ -192,6 +196,7 @@ def run_rsync(
     verbose: int = 0,
     on_output: Callable[[str], None] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    dest_suffix: str = "latest",
 ) -> subprocess.CompletedProcess[str]:
     """Build and execute the rsync command for a sync."""
     cmd = build_rsync_command(
@@ -201,6 +206,7 @@ def run_rsync(
         link_dest,
         verbose,
         resolved_endpoints,
+        dest_suffix=dest_suffix,
     )
     if on_output is None:
         return subprocess.run(
