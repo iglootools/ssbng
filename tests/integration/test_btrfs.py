@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -31,13 +30,13 @@ from .conftest import ssh_exec
 pytestmark = pytest.mark.integration
 
 
-def _setup_btrfs_latest(docker_container: dict[str, Any]) -> None:
+def _setup_btrfs_latest(rsync_server: RsyncServer) -> None:
     """Create the 'latest' btrfs subvolume and snapshots dir."""
     ssh_exec(
-        docker_container,
+        rsync_server,
         "btrfs subvolume create /mnt/btrfs/latest",
     )
-    ssh_exec(docker_container, "mkdir -p /mnt/btrfs/snapshots")
+    ssh_exec(rsync_server, "mkdir -p /mnt/btrfs/snapshots")
 
 
 def _make_btrfs_config(
@@ -56,7 +55,10 @@ def _make_btrfs_config(
     )
     config = Config(
         rsync_servers={"test-server": rsync_server},
-        volumes={"src": src_vol, "dst": remote_btrfs_volume},
+        volumes={
+            "src": src_vol,
+            "dst": remote_btrfs_volume,
+        },
         syncs={"test-sync": sync},
     )
     return sync, config
@@ -66,11 +68,10 @@ class TestBtrfsSnapshots:
     def test_snapshot_created(
         self,
         tmp_path: Path,
-        docker_container: dict[str, Any],
         rsync_server: RsyncServer,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(docker_container)
+        _setup_btrfs_latest(rsync_server)
 
         src = tmp_path / "src"
         src.mkdir()
@@ -88,17 +89,16 @@ class TestBtrfsSnapshots:
         snapshot_path = create_snapshot(sync, config)
 
         # Verify snapshot exists
-        check = ssh_exec(docker_container, f"test -d {snapshot_path}")
+        check = ssh_exec(rsync_server, f"test -d {snapshot_path}")
         assert check.returncode == 0
 
     def test_snapshot_readonly(
         self,
         tmp_path: Path,
-        docker_container: dict[str, Any],
         rsync_server: RsyncServer,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(docker_container)
+        _setup_btrfs_latest(rsync_server)
 
         src = tmp_path / "src"
         src.mkdir()
@@ -112,7 +112,7 @@ class TestBtrfsSnapshots:
 
         # Check readonly property
         check = ssh_exec(
-            docker_container,
+            rsync_server,
             f"btrfs property get {snapshot_path} ro",
         )
         assert check.returncode == 0
@@ -121,11 +121,10 @@ class TestBtrfsSnapshots:
     def test_second_sync_link_dest(
         self,
         tmp_path: Path,
-        docker_container: dict[str, Any],
         rsync_server: RsyncServer,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(docker_container)
+        _setup_btrfs_latest(rsync_server)
 
         src = tmp_path / "src"
         src.mkdir()
@@ -152,21 +151,20 @@ class TestBtrfsSnapshots:
 
         # Create second snapshot
         snapshot_path = create_snapshot(sync, config)
-        check = ssh_exec(docker_container, f"test -d {snapshot_path}")
+        check = ssh_exec(rsync_server, f"test -d {snapshot_path}")
         assert check.returncode == 0
 
     def test_dry_run_no_snapshot(
         self,
         tmp_path: Path,
-        docker_container: dict[str, Any],
         rsync_server: RsyncServer,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(docker_container)
+        _setup_btrfs_latest(rsync_server)
 
         # Count existing snapshots before dry run
         before = ssh_exec(
-            docker_container,
+            rsync_server,
             "ls /mnt/btrfs/snapshots 2>/dev/null || true",
         )
         count_before = len(
@@ -187,7 +185,7 @@ class TestBtrfsSnapshots:
 
         # Verify no new snapshot was created
         after = ssh_exec(
-            docker_container,
+            rsync_server,
             "ls /mnt/btrfs/snapshots 2>/dev/null || true",
         )
         count_after = len(
@@ -214,11 +212,10 @@ class TestPruneSnapshots:
     def test_prune_deletes_oldest_snapshots(
         self,
         tmp_path: Path,
-        docker_container: dict[str, Any],
         rsync_server: RsyncServer,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(docker_container)
+        _setup_btrfs_latest(rsync_server)
 
         src = tmp_path / "src"
         src.mkdir()
@@ -242,11 +239,10 @@ class TestPruneSnapshots:
     def test_prune_dry_run_keeps_all(
         self,
         tmp_path: Path,
-        docker_container: dict[str, Any],
         rsync_server: RsyncServer,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(docker_container)
+        _setup_btrfs_latest(rsync_server)
 
         src = tmp_path / "src"
         src.mkdir()
@@ -270,11 +266,10 @@ class TestPruneSnapshots:
     def test_prune_noop_when_under_limit(
         self,
         tmp_path: Path,
-        docker_container: dict[str, Any],
         rsync_server: RsyncServer,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(docker_container)
+        _setup_btrfs_latest(rsync_server)
 
         src = tmp_path / "src"
         src.mkdir()

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -59,11 +58,10 @@ class TestLocalVolumeCheck:
 class TestRemoteVolumeCheck:
     def test_remote_volume_active(
         self,
-        docker_container: dict[str, Any],
         rsync_server: RsyncServer,
         remote_volume: RemoteVolume,
     ) -> None:
-        create_markers(docker_container, "/data", [".nbkp-vol"])
+        create_markers(rsync_server, "/data", [".nbkp-vol"])
         config = Config(
             rsync_servers={"test-server": rsync_server},
             volumes={"test-remote": remote_volume},
@@ -73,7 +71,6 @@ class TestRemoteVolumeCheck:
 
     def test_remote_volume_inactive(
         self,
-        docker_container: dict[str, Any],
         rsync_server: RsyncServer,
         remote_volume: RemoteVolume,
     ) -> None:
@@ -90,7 +87,6 @@ class TestSyncCheck:
     def test_sync_status_active(
         self,
         tmp_path: Path,
-        docker_container: dict[str, Any],
         rsync_server: RsyncServer,
         remote_volume: RemoteVolume,
     ) -> None:
@@ -101,7 +97,11 @@ class TestSyncCheck:
         (src_path / ".nbkp-src").touch()
 
         # Set up remote destination markers
-        create_markers(docker_container, "/data", [".nbkp-vol", ".nbkp-dst"])
+        create_markers(
+            rsync_server,
+            "/data",
+            [".nbkp-vol", ".nbkp-dst"],
+        )
 
         src_vol = LocalVolume(slug="src", path=str(src_path))
         sync = SyncConfig(
@@ -130,7 +130,6 @@ class TestSyncCheck:
 class TestBtrfsFilesystemCheck:
     def test_btrfs_path_detected(
         self,
-        docker_container: dict[str, Any],
         rsync_server: RsyncServer,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
@@ -142,7 +141,6 @@ class TestBtrfsFilesystemCheck:
 
     def test_non_btrfs_path_detected(
         self,
-        docker_container: dict[str, Any],
         rsync_server: RsyncServer,
         remote_volume: RemoteVolume,
     ) -> None:
@@ -156,12 +154,11 @@ class TestBtrfsFilesystemCheck:
 class TestBtrfsSubvolumeCheck:
     def test_subvolume_detected(
         self,
-        docker_container: dict[str, Any],
         rsync_server: RsyncServer,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         ssh_exec(
-            docker_container,
+            rsync_server,
             "btrfs subvolume create /mnt/btrfs/test-subvol",
         )
         config = Config(
@@ -175,18 +172,17 @@ class TestBtrfsSubvolumeCheck:
 
         # Cleanup
         ssh_exec(
-            docker_container,
+            rsync_server,
             "btrfs subvolume delete /mnt/btrfs/test-subvol",
         )
 
     def test_regular_dir_not_subvolume(
         self,
-        docker_container: dict[str, Any],
         rsync_server: RsyncServer,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         ssh_exec(
-            docker_container,
+            rsync_server,
             "mkdir -p /mnt/btrfs/regular-dir",
         )
         config = Config(
@@ -200,7 +196,7 @@ class TestBtrfsSubvolumeCheck:
 
         # Cleanup
         ssh_exec(
-            docker_container,
+            rsync_server,
             "rm -rf /mnt/btrfs/regular-dir",
         )
 
@@ -209,22 +205,21 @@ class TestSyncCheckBtrfs:
     def test_sync_inactive_when_not_subvolume(
         self,
         tmp_path: Path,
-        docker_container: dict[str, Any],
         rsync_server: RsyncServer,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         # Create a regular directory (not a subvolume)
         ssh_exec(
-            docker_container,
+            rsync_server,
             "mkdir -p /mnt/btrfs/not-a-subvol",
         )
         create_markers(
-            docker_container,
+            rsync_server,
             "/mnt/btrfs",
             [".nbkp-vol"],
         )
         create_markers(
-            docker_container,
+            rsync_server,
             "/mnt/btrfs/not-a-subvol",
             [".nbkp-dst"],
         )
@@ -246,7 +241,10 @@ class TestSyncCheckBtrfs:
         )
         config = Config(
             rsync_servers={"test-server": rsync_server},
-            volumes={"src": src_vol, "dst": remote_btrfs_volume},
+            volumes={
+                "src": src_vol,
+                "dst": remote_btrfs_volume,
+            },
             syncs={"test-sync": sync},
         )
 
@@ -263,6 +261,6 @@ class TestSyncCheckBtrfs:
 
         # Cleanup
         ssh_exec(
-            docker_container,
+            rsync_server,
             "rm -rf /mnt/btrfs/not-a-subvol",
         )

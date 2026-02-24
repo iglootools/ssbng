@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -27,12 +26,11 @@ class TestRemoteToLocal:
     def test_sync_from_container(
         self,
         tmp_path: Path,
-        docker_container: dict[str, Any],
         rsync_server: RsyncServer,
     ) -> None:
         # Create test files on container
         ssh_exec(
-            docker_container,
+            rsync_server,
             "echo 'hello from remote' > /data/src/remote-file.txt",
         )
 

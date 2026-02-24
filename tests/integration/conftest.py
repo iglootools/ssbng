@@ -3,35 +3,35 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
 import tempfile
-import time
 from pathlib import Path
-from typing import Any, Generator
+from typing import Generator
 
+import docker as dockerlib
 import pytest
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-    Ed25519PrivateKey,
-)
 
 from nbkp.config import RemoteVolume, RsyncServer, SshOptions
+from nbkp.testkit.docker import (
+    generate_ssh_keypair,
+    ssh_exec,
+    wait_for_ssh,
+)
 
-DOCKER_DIR = Path(__file__).parent / "docker"
+DOCKER_DIR = (
+    Path(__file__).resolve().parent.parent.parent
+    / "nbkp"
+    / "testkit"
+    / "dockerbuild"
+)
 
 
 def _docker_available() -> bool:
     """Check if Docker is available and running."""
     try:
-        result = subprocess.run(
-            ["docker", "info"],
-            capture_output=True,
-            timeout=10,
-        )
-        return result.returncode == 0
-    except FileNotFoundError:
-        return False
-    except subprocess.TimeoutExpired:
+        client = dockerlib.from_env()
+        client.ping()
+        return True
+    except dockerlib.errors.DockerException:
         return False
 
 
@@ -42,32 +42,11 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture(scope="session")
 def ssh_key_pair() -> Generator[tuple[Path, Path], None, None]:
-    """Generate an ephemeral ed25519 SSH key pair for tests.
-
-    Ed25519: fast generation, small keys, no parameter choices
-    to get wrong — ideal for throwaway test keys.
-    """
+    """Generate an ephemeral ed25519 SSH key pair for tests."""
     tmpdir = Path(tempfile.mkdtemp(prefix="nbkp-test-ssh-"))
-    private_key = tmpdir / "id_ed25519"
-    public_key = tmpdir / "id_ed25519.pub"
+    pair = generate_ssh_keypair(tmpdir)
 
-    # ssh-keygen -t ed25519 -f <private_key> -N "" -C nbkp-integration-test
-    key = Ed25519PrivateKey.generate()
-    private_key.write_bytes(
-        key.private_bytes(
-            serialization.Encoding.PEM,
-            serialization.PrivateFormat.OpenSSH,
-            serialization.NoEncryption(),
-        )
-    )
-    private_key.chmod(0o600)
-    pub_bytes = key.public_key().public_bytes(
-        serialization.Encoding.OpenSSH,
-        serialization.PublicFormat.OpenSSH,
-    )
-    public_key.write_text(f"{pub_bytes.decode()} nbkp-integration-test\n")
-
-    yield private_key, public_key
+    yield pair
 
     shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -75,11 +54,8 @@ def ssh_key_pair() -> Generator[tuple[Path, Path], None, None]:
 @pytest.fixture(scope="session")
 def docker_container(
     ssh_key_pair: tuple[Path, Path],
-) -> Generator[dict[str, Any], None, None]:
-    """Start Docker container and yield connection info.
-
-    Yields a dict with keys: host, port, user, private_key.
-    """
+) -> Generator[RsyncServer, None, None]:
+    """Start Docker container and yield RsyncServer."""
     from testcontainers.core.container import DockerContainer
     from testcontainers.core.image import DockerImage
     from testcontainers.core.wait_strategies import (
@@ -111,68 +87,30 @@ def docker_container(
     )
     container.start()
 
-    port = int(container.get_exposed_port(22))
-    info: dict[str, Any] = {
-        "host": container.get_container_host_ip(),
-        "port": port,
-        "user": "testuser",
-        "private_key": str(private_key),
-    }
-
-    _wait_for_ssh(info, timeout=30)
-    yield info
-
-    container.stop()
-    image.remove()
-
-
-def _wait_for_ssh(info: dict[str, Any], timeout: int = 30) -> None:
-    """Poll SSH until it accepts connections."""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        result = subprocess.run(
-            [
-                "ssh",
-                "-o",
-                "ConnectTimeout=2",
-                "-o",
-                "StrictHostKeyChecking=no",
-                "-o",
-                "UserKnownHostsFile=/dev/null",
-                "-o",
-                "BatchMode=yes",
-                "-p",
-                str(info["port"]),
-                "-i",
-                info["private_key"],
-                f"{info['user']}@{info['host']}",
-                "echo ready",
-            ],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode == 0 and "ready" in result.stdout:
-            return
-        time.sleep(1)
-    raise TimeoutError(f"SSH not ready after {timeout}s")
-
-
-@pytest.fixture(scope="session")
-def rsync_server(
-    docker_container: dict[str, Any],
-) -> RsyncServer:
-    """RsyncServer pointing at the Docker container."""
-    return RsyncServer(
+    server = RsyncServer(
         slug="test-server",
-        host=docker_container["host"],
-        port=docker_container["port"],
-        user=docker_container["user"],
-        ssh_key=docker_container["private_key"],
+        host=container.get_container_host_ip(),
+        port=int(container.get_exposed_port(22)),
+        user="testuser",
+        ssh_key=str(private_key),
         ssh_options=SshOptions(
             strict_host_key_checking=False,
             known_hosts_file="/dev/null",
         ),
     )
+
+    wait_for_ssh(server, timeout=30)
+    yield server
+
+    container.stop()
+
+
+@pytest.fixture(scope="session")
+def rsync_server(
+    docker_container: RsyncServer,
+) -> RsyncServer:
+    """RsyncServer pointing at the Docker container."""
+    return docker_container
 
 
 @pytest.fixture(scope="session")
@@ -195,41 +133,14 @@ def remote_btrfs_volume() -> RemoteVolume:
     )
 
 
-def ssh_exec(
-    docker_info: dict[str, Any], command: str
-) -> subprocess.CompletedProcess[str]:
-    """Run a command on the container via SSH."""
-    return subprocess.run(
-        [
-            "ssh",
-            "-o",
-            "ConnectTimeout=10",
-            "-o",
-            "StrictHostKeyChecking=no",
-            "-o",
-            "UserKnownHostsFile=/dev/null",
-            "-o",
-            "BatchMode=yes",
-            "-p",
-            str(docker_info["port"]),
-            "-i",
-            docker_info["private_key"],
-            f"{docker_info['user']}@{docker_info['host']}",
-            command,
-        ],
-        capture_output=True,
-        text=True,
-    )
-
-
 def create_markers(
-    docker_info: dict[str, Any],
+    server: RsyncServer,
     path: str,
     markers: list[str],
 ) -> None:
     """Create marker files on the container via SSH."""
     for marker in markers:
-        result = ssh_exec(docker_info, f"touch {path}/{marker}")
+        result = ssh_exec(server, f"touch {path}/{marker}", check=False)
         assert (
             result.returncode == 0
         ), f"Failed to create marker {marker}: {result.stderr}"
@@ -242,65 +153,51 @@ def _cleanup_remote(
     """Clean up /data and /mnt/btrfs paths between tests."""
     yield
 
-    # Only clean up if docker_container was used by this test
-    if "docker_container" not in request.fixturenames:
+    # Only clean up if rsync_server was used by this test
+    if "rsync_server" not in request.fixturenames:
         return
 
-    docker_container = request.getfixturevalue("docker_container")
+    server: RsyncServer = request.getfixturevalue("rsync_server")
+
+    def run(cmd: str) -> None:
+        ssh_exec(server, cmd, check=False)
 
     # Clean /data paths
-    ssh_exec(docker_container, "rm -rf /data/src/* /data/latest/*")
-    ssh_exec(
-        docker_container,
-        "find /data -name '.nbkp-*' -delete",
-    )
+    run("rm -rf /data/src/* /data/latest/*")
+    run("find /data -name '.nbkp-*' -delete")
     # Recreate latest in case it was removed
-    ssh_exec(docker_container, "mkdir -p /data/latest")
+    run("mkdir -p /data/latest")
     # Remove any subdir structures created by tests
-    ssh_exec(
-        docker_container,
+    run(
         "find /data -mindepth 1 -maxdepth 1"
-        " ! -name src ! -name latest -exec rm -rf {} +",
+        " ! -name src ! -name latest -exec rm -rf {} +"
     )
 
     # Clean btrfs paths — delete snapshot subvolumes first,
     # then latest
     snapshots_result = ssh_exec(
-        docker_container,
+        server,
         "ls /mnt/btrfs/snapshots 2>/dev/null || true",
+        check=False,
     )
     if snapshots_result.stdout.strip():
         for snap in snapshots_result.stdout.strip().split("\n"):
             snap = snap.strip()
             if snap:
-                ssh_exec(
-                    docker_container,
+                run(
                     "btrfs property set"
                     f" /mnt/btrfs/snapshots/{snap} ro false"
-                    " 2>/dev/null || true",
+                    " 2>/dev/null || true"
                 )
-                ssh_exec(
-                    docker_container,
+                run(
                     "btrfs subvolume delete"
                     f" /mnt/btrfs/snapshots/{snap}"
-                    " 2>/dev/null || true",
+                    " 2>/dev/null || true"
                 )
 
     # Delete latest subvolume if it exists
-    ssh_exec(
-        docker_container,
-        "btrfs property set" " /mnt/btrfs/latest ro false 2>/dev/null || true",
-    )
-    ssh_exec(
-        docker_container,
-        "btrfs subvolume delete" " /mnt/btrfs/latest 2>/dev/null || true",
-    )
-    ssh_exec(
-        docker_container,
-        "rm -rf /mnt/btrfs/snapshots 2>/dev/null || true",
-    )
-    ssh_exec(docker_container, "rm -rf /mnt/btrfs/src/*")
-    ssh_exec(
-        docker_container,
-        "find /mnt/btrfs -name '.nbkp-*' -delete",
-    )
+    run("btrfs property set" " /mnt/btrfs/latest ro false 2>/dev/null || true")
+    run("btrfs subvolume delete" " /mnt/btrfs/latest 2>/dev/null || true")
+    run("rm -rf /mnt/btrfs/snapshots 2>/dev/null || true")
+    run("rm -rf /mnt/btrfs/src/*")
+    run("find /mnt/btrfs -name '.nbkp-*' -delete")

@@ -9,7 +9,7 @@ if [ -f /tmp/authorized_keys ]; then
 fi
 
 # Create btrfs filesystem on a file-backed image
-truncate -s 512M /var/btrfs.img
+truncate -s 4G /var/btrfs.img
 mkfs.btrfs -f /var/btrfs.img
 mkdir -p /mnt/btrfs
 mount -o user_subvol_rm_allowed /var/btrfs.img /mnt/btrfs

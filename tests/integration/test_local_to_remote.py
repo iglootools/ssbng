@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -27,12 +26,11 @@ class TestLocalToRemote:
     def test_sync_to_container(
         self,
         tmp_path: Path,
-        docker_container: dict[str, Any],
         rsync_server: RsyncServer,
         remote_volume: RemoteVolume,
     ) -> None:
         # Create markers on remote
-        create_markers(docker_container, "/data", [".nbkp-vol", ".nbkp-dst"])
+        create_markers(rsync_server, "/data", [".nbkp-vol", ".nbkp-dst"])
 
         # Create local source files
         src_dir = tmp_path / "src"
@@ -55,21 +53,27 @@ class TestLocalToRemote:
         assert result.returncode == 0
 
         # Verify file arrived on container
-        check = ssh_exec(docker_container, "cat /data/latest/hello.txt")
+        check = ssh_exec(rsync_server, "cat /data/latest/hello.txt")
         assert check.returncode == 0
         assert check.stdout.strip() == "hello from local"
 
     def test_sync_with_subdir(
         self,
         tmp_path: Path,
-        docker_container: dict[str, Any],
         rsync_server: RsyncServer,
         remote_volume: RemoteVolume,
     ) -> None:
         # Create remote subdir structure and markers
-        ssh_exec(docker_container, "mkdir -p /data/photos-backup/latest")
-        create_markers(docker_container, "/data", [".nbkp-vol"])
-        create_markers(docker_container, "/data/photos-backup", [".nbkp-dst"])
+        ssh_exec(
+            rsync_server,
+            "mkdir -p /data/photos-backup/latest",
+        )
+        create_markers(rsync_server, "/data", [".nbkp-vol"])
+        create_markers(
+            rsync_server,
+            "/data/photos-backup",
+            [".nbkp-dst"],
+        )
 
         # Create local source with subdir
         src_dir = tmp_path / "src" / "photos"
@@ -94,7 +98,7 @@ class TestLocalToRemote:
         assert result.returncode == 0
 
         check = ssh_exec(
-            docker_container,
+            rsync_server,
             "cat /data/photos-backup/latest/img.jpg",
         )
         assert check.returncode == 0

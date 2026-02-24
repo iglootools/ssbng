@@ -1,115 +1,34 @@
-"""Fake data builders for manual testing and output validation."""
+"""Fake check/troubleshoot data for manual testing."""
 
 from __future__ import annotations
 
-from .config import (
-    BtrfsSnapshotConfig,
-    Config,
-    DestinationSyncEndpoint,
-    LocalVolume,
-    RemoteVolume,
-    RsyncServer,
-    SyncConfig,
-    SyncEndpoint,
-)
-from .sync import PruneResult, SyncResult
-from .check import (
+from ...check import (
     SyncReason,
     SyncStatus,
     VolumeReason,
     VolumeStatus,
 )
-
-_SNAP_BASE = "/mnt/usb-backup/snapshots"
-
-
-def _bastion_server() -> RsyncServer:
-    return RsyncServer(
-        slug="bastion",
-        host="bastion.example.com",
-        user="admin",
-    )
-
-
-def _nas_server() -> RsyncServer:
-    return RsyncServer(
-        slug="nas",
-        host="nas.example.com",
-        port=5022,
-        user="backup",
-        ssh_key="~/.ssh/nas_ed25519",
-        proxy_jump="bastion",
-    )
-
-
-def _base_volumes() -> dict[str, LocalVolume | RemoteVolume]:
-    return {
-        "laptop": LocalVolume(slug="laptop", path="/mnt/data"),
-        "usb-drive": LocalVolume(slug="usb-drive", path="/mnt/usb-backup"),
-        "nas-backup": RemoteVolume(
-            slug="nas-backup",
-            rsync_server="nas",
-            path="/volume1/backups",
-        ),
-    }
-
-
-# ── config show ─────────────────────────────────────────────────
-
-
-def config_show_config() -> Config:
-    """Config exercising all display paths for config show."""
-    return Config(
-        rsync_servers={
-            "bastion": _bastion_server(),
-            "nas": _nas_server(),
-        },
-        volumes=_base_volumes(),
-        syncs={
-            "photos-to-usb": SyncConfig(
-                slug="photos-to-usb",
-                source=SyncEndpoint(volume="laptop", subdir="photos"),
-                destination=DestinationSyncEndpoint(
-                    volume="usb-drive",
-                    btrfs_snapshots=BtrfsSnapshotConfig(
-                        enabled=True, max_snapshots=10
-                    ),
-                ),
-                filters=["+ *.jpg", "- *.tmp"],
-            ),
-            "docs-to-nas": SyncConfig(
-                slug="docs-to-nas",
-                source=SyncEndpoint(volume="laptop", subdir="documents"),
-                destination=DestinationSyncEndpoint(
-                    volume="nas-backup",
-                    subdir="docs",
-                ),
-            ),
-            "disabled-backup": SyncConfig(
-                slug="disabled-backup",
-                source=SyncEndpoint(volume="laptop"),
-                destination=DestinationSyncEndpoint(
-                    volume="usb-drive",
-                ),
-                enabled=False,
-            ),
-        },
-    )
-
-
-# ── status ──────────────────────────────────────────────────────
+from ...config import (
+    BtrfsSnapshotConfig,
+    Config,
+    DestinationSyncEndpoint,
+    LocalVolume,
+    SyncConfig,
+    SyncEndpoint,
+)
+from .config import base_volumes, bastion_server, nas_server
 
 
 def check_config() -> Config:
     """Config with local + remote volumes and varied syncs."""
-    volumes = _base_volumes()
+    volumes = base_volumes()
     volumes["external-drive"] = LocalVolume(
         slug="external-drive", path="/mnt/external"
     )
     return Config(
         rsync_servers={
-            "bastion": _bastion_server(),
-            "nas": _nas_server(),
+            "bastion": bastion_server(),
+            "nas": nas_server(),
         },
         volumes=volumes,
         syncs={
@@ -223,17 +142,14 @@ def check_data(
     return vol_statuses, sync_statuses
 
 
-# ── troubleshoot ────────────────────────────────────────────────
-
-
 def troubleshoot_config() -> Config:
     """Config designed to trigger every troubleshoot reason."""
     return Config(
         rsync_servers={
-            "bastion": _bastion_server(),
-            "nas": _nas_server(),
+            "bastion": bastion_server(),
+            "nas": nas_server(),
         },
-        volumes=_base_volumes(),
+        volumes=base_volumes(),
         syncs={
             "disabled-sync": SyncConfig(
                 slug="disabled-sync",
@@ -387,104 +303,3 @@ def troubleshoot_data(
     }
 
     return vol_statuses, sync_statuses
-
-
-# ── run results ─────────────────────────────────────────────────
-
-
-def run_results() -> list[SyncResult]:
-    """Sync results: success, success+snapshot, failure."""
-    snap = f"{_SNAP_BASE}/2026-02-19T10:30:00.000Z"
-    return [
-        SyncResult(
-            sync_slug="music-to-usb",
-            success=True,
-            dry_run=False,
-            rsync_exit_code=0,
-            output="",
-        ),
-        SyncResult(
-            sync_slug="photos-to-usb",
-            success=True,
-            dry_run=False,
-            rsync_exit_code=0,
-            output="",
-            snapshot_path=snap,
-            pruned_paths=[
-                f"{_SNAP_BASE}/2026-02-01T08:00:00.000Z",
-                f"{_SNAP_BASE}/2026-02-10T12:00:00.000Z",
-            ],
-        ),
-        SyncResult(
-            sync_slug="docs-to-nas",
-            success=False,
-            dry_run=False,
-            rsync_exit_code=23,
-            output=(
-                "rsync: [sender] link_stat"
-                ' "/mnt/data/documents" failed:'
-                " No such file or directory (2)\n"
-                "rsync error: some files/attrs"
-                " were not transferred (code 23)\n"
-            ),
-            error="rsync exited with code 23",
-        ),
-    ]
-
-
-def dry_run_result() -> SyncResult:
-    """Single dry-run success result."""
-    return SyncResult(
-        sync_slug="photos-to-usb",
-        success=True,
-        dry_run=True,
-        rsync_exit_code=0,
-        output="",
-    )
-
-
-# ── prune results ───────────────────────────────────────────────
-
-
-def prune_results() -> list[PruneResult]:
-    """Prune results: success, noop, error."""
-    return [
-        PruneResult(
-            sync_slug="photos-to-usb",
-            deleted=[
-                f"{_SNAP_BASE}/2026-01-01T00:00:00.000Z",
-                f"{_SNAP_BASE}/2026-01-15T00:00:00.000Z",
-                f"{_SNAP_BASE}/2026-02-01T00:00:00.000Z",
-            ],
-            kept=7,
-            dry_run=False,
-        ),
-        PruneResult(
-            sync_slug="music-to-usb",
-            deleted=[],
-            kept=5,
-            dry_run=False,
-        ),
-        PruneResult(
-            sync_slug="docs-to-nas",
-            deleted=[],
-            kept=0,
-            dry_run=False,
-            error="btrfs delete failed: Permission denied",
-        ),
-    ]
-
-
-def prune_dry_run_results() -> list[PruneResult]:
-    """Prune dry-run results."""
-    return [
-        PruneResult(
-            sync_slug="photos-to-usb",
-            deleted=[
-                f"{_SNAP_BASE}/2026-01-01T00:00:00.000Z",
-                f"{_SNAP_BASE}/2026-01-15T00:00:00.000Z",
-            ],
-            kept=10,
-            dry_run=True,
-        ),
-    ]
