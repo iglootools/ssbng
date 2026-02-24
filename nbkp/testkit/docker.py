@@ -126,9 +126,7 @@ def wait_for_ssh(
         except OSError:
             pass
         time.sleep(1)
-    raise TimeoutError(
-        f"SSH not ready after {timeout}s"
-    )
+    raise TimeoutError(f"SSH not ready after {timeout}s")
 
 
 def ssh_exec(

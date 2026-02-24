@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import enum
-import textwrap
 
 from pydantic import ValidationError
 from rich.console import Console
+from rich.padding import Padding
 from rich.panel import Panel
+from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
@@ -80,9 +81,12 @@ def print_human_check(
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
     config: Config,
+    *,
+    console: Console | None = None,
 ) -> None:
     """Print human-readable status output."""
-    console = Console()
+    if console is None:
+        console = Console()
 
     vol_table = Table(
         title="Volumes:",
@@ -130,9 +134,15 @@ def print_human_check(
     console.print(sync_table)
 
 
-def print_human_results(results: list[SyncResult], dry_run: bool) -> None:
+def print_human_results(
+    results: list[SyncResult],
+    dry_run: bool,
+    *,
+    console: Console | None = None,
+) -> None:
     """Print human-readable run results."""
-    console = Console()
+    if console is None:
+        console = Console()
     mode = " (dry run)" if dry_run else ""
 
     table = Table(
@@ -169,10 +179,14 @@ def print_human_results(results: list[SyncResult], dry_run: bool) -> None:
 
 
 def print_human_prune_results(
-    results: list[PruneResult], dry_run: bool
+    results: list[PruneResult],
+    dry_run: bool,
+    *,
+    console: Console | None = None,
 ) -> None:
     """Print human-readable prune results."""
-    console = Console()
+    if console is None:
+        console = Console()
     mode = " (dry run)" if dry_run else ""
 
     table = Table(
@@ -273,6 +287,25 @@ _UTIL_LINUX_INSTALL = (
 )
 
 
+def _print_cmd(
+    console: Console,
+    cmd: str,
+    indent: int = 2,
+) -> None:
+    """Print a shell command with bash syntax highlighting.
+
+    ``indent`` is the number of ``_INDENT`` levels (each 2 spaces).
+    """
+    syntax = Syntax(
+        cmd,
+        "bash",
+        theme="monokai",
+        background_color="default",
+    )
+    pad = len(_INDENT) * indent
+    console.print(Padding(syntax, (0, 0, 0, pad)))
+
+
 def _print_marker_fix(
     console: Console,
     vol: LocalVolume | RemoteVolume,
@@ -283,10 +316,11 @@ def _print_marker_fix(
     """Print marker creation fix with mount reminder."""
     p2 = _INDENT * 2
     console.print(f"{p2}Ensure the volume is mounted, then:")
-    mkdir_cmd = f"mkdir -p {path}"
-    touch_cmd = f"touch {path}/{marker}"
-    console.print(f"{p2}{_wrap_cmd(mkdir_cmd, vol, config)}")
-    console.print(f"{p2}{_wrap_cmd(touch_cmd, vol, config)}")
+    _print_cmd(console, _wrap_cmd(f"mkdir -p {path}", vol, config))
+    _print_cmd(
+        console,
+        _wrap_cmd(f"touch {path}/{marker}", vol, config),
+    )
 
 
 def _print_ssh_troubleshoot(
@@ -297,32 +331,32 @@ def _print_ssh_troubleshoot(
     p2 = _INDENT * 2
     p3 = _INDENT * 3
     ssh_cmd = _ssh_prefix(server)
+    port_flag = f"-p {server.port} " if server.port != 22 else ""
+    user_host = f"{server.user}@{server.host}" if server.user else server.host
     console.print(f"{p2}Server {server.host} is unreachable.")
     console.print(f"{p2}Verify connectivity:")
-    console.print(f"{p3}{ssh_cmd} echo ok")
+    _print_cmd(console, f"{ssh_cmd} echo ok", indent=3)
     console.print(f"{p2}If authentication fails:")
     if server.ssh_key:
-        console.print(
-            f"{p3}1. Ensure the key exists:" f" ls -l {server.ssh_key}"
-        )
-        console.print(
-            f"{p3}2. Copy it to the server:"
-            f" ssh-copy-id"
-            f" {'-p ' + str(server.port) + ' ' if server.port != 22 else ''}"
-            f"-i {server.ssh_key}"
-            f" {server.user + '@' if server.user else ''}"
-            f"{server.host}"
+        console.print(f"{p3}1. Ensure the key exists:")
+        _print_cmd(console, f"ls -l {server.ssh_key}", indent=4)
+        console.print(f"{p3}2. Copy it to the server:")
+        _print_cmd(
+            console,
+            f"ssh-copy-id {port_flag}" f"-i {server.ssh_key} {user_host}",
+            indent=4,
         )
     else:
-        console.print(f"{p3}1. Generate a key:" " ssh-keygen -t ed25519")
-        console.print(
-            f"{p3}2. Copy it to the server:"
-            f" ssh-copy-id"
-            f" {'-p ' + str(server.port) + ' ' if server.port != 22 else ''}"
-            f"{server.user + '@' if server.user else ''}"
-            f"{server.host}"
+        console.print(f"{p3}1. Generate a key:")
+        _print_cmd(console, "ssh-keygen -t ed25519", indent=4)
+        console.print(f"{p3}2. Copy it to the server:")
+        _print_cmd(
+            console,
+            f"ssh-copy-id {port_flag}{user_host}",
+            indent=4,
         )
-    console.print(f"{p3}3. Verify passwordless login:" f" {ssh_cmd} echo ok")
+    console.print(f"{p3}3. Verify passwordless login:")
+    _print_cmd(console, f"{ssh_cmd} echo ok", indent=4)
 
 
 def _print_sync_reason_fix(
@@ -333,7 +367,6 @@ def _print_sync_reason_fix(
 ) -> None:
     """Print fix instructions for a sync reason."""
     p2 = _INDENT * 2
-    p3 = _INDENT * 3
     match reason:
         case SyncReason.DISABLED:
             console.print(f"{p2}Enable the sync in the" " configuration file.")
@@ -373,27 +406,27 @@ def _print_sync_reason_fix(
             src = config.volumes[sync.source.volume]
             host = _host_label(src, config)
             console.print(f"{p2}Install rsync on {host}:")
-            console.print(textwrap.indent(_RSYNC_INSTALL, p3))
+            _print_cmd(console, _RSYNC_INSTALL, indent=3)
         case SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION:
             dst = config.volumes[sync.destination.volume]
             host = _host_label(dst, config)
             console.print(f"{p2}Install rsync on {host}:")
-            console.print(textwrap.indent(_RSYNC_INSTALL, p3))
+            _print_cmd(console, _RSYNC_INSTALL, indent=3)
         case SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION:
             dst = config.volumes[sync.destination.volume]
             host = _host_label(dst, config)
             console.print(f"{p2}Install btrfs-progs on {host}:")
-            console.print(textwrap.indent(_BTRFS_INSTALL, p3))
+            _print_cmd(console, _BTRFS_INSTALL, indent=3)
         case SyncReason.STAT_NOT_FOUND_ON_DESTINATION:
             dst = config.volumes[sync.destination.volume]
             host = _host_label(dst, config)
             console.print(f"{p2}Install coreutils (stat)" f" on {host}:")
-            console.print(textwrap.indent(_COREUTILS_INSTALL, p3))
+            _print_cmd(console, _COREUTILS_INSTALL, indent=3)
         case SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION:
             dst = config.volumes[sync.destination.volume]
             host = _host_label(dst, config)
             console.print(f"{p2}Install util-linux (findmnt)" f" on {host}:")
-            console.print(textwrap.indent(_UTIL_LINUX_INSTALL, p3))
+            _print_cmd(console, _UTIL_LINUX_INSTALL, indent=3)
         case SyncReason.DESTINATION_NOT_BTRFS:
             console.print(
                 f"{p2}The destination is not on" " a btrfs filesystem."
@@ -404,10 +437,13 @@ def _print_sync_reason_fix(
             cmds = [
                 f"sudo btrfs subvolume create {ep}/latest",
                 f"sudo mkdir {ep}/snapshots",
-                ("sudo chown <user>:<group>" f" {ep}/latest {ep}/snapshots"),
+                "sudo chown <user>:<group>" f" {ep}/latest {ep}/snapshots",
             ]
             for cmd in cmds:
-                console.print(f"{p2}{_wrap_cmd(cmd, dst, config)}")
+                _print_cmd(
+                    console,
+                    _wrap_cmd(cmd, dst, config),
+                )
         case SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM:
             dst = config.volumes[sync.destination.volume]
             console.print(
@@ -418,7 +454,7 @@ def _print_sync_reason_fix(
                 " remount,user_subvol_rm_allowed"
                 f" {dst.path}"
             )
-            console.print(f"{p2}{_wrap_cmd(cmd, dst, config)}")
+            _print_cmd(console, _wrap_cmd(cmd, dst, config))
             console.print(
                 f"{p2}To persist, add"
                 " user_subvol_rm_allowed to"
@@ -430,28 +466,37 @@ def _print_sync_reason_fix(
             ep = _endpoint_path(dst, sync.destination.subdir)
             cmds = [
                 f"sudo btrfs subvolume create {ep}/latest",
-                ("sudo chown <user>:<group>" f" {ep}/latest"),
+                "sudo chown <user>:<group>" f" {ep}/latest",
             ]
             for cmd in cmds:
-                console.print(f"{p2}{_wrap_cmd(cmd, dst, config)}")
+                _print_cmd(
+                    console,
+                    _wrap_cmd(cmd, dst, config),
+                )
         case SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND:
             dst = config.volumes[sync.destination.volume]
             ep = _endpoint_path(dst, sync.destination.subdir)
             cmds = [
                 f"sudo mkdir {ep}/snapshots",
-                ("sudo chown <user>:<group>" f" {ep}/snapshots"),
+                "sudo chown <user>:<group>" f" {ep}/snapshots",
             ]
             for cmd in cmds:
-                console.print(f"{p2}{_wrap_cmd(cmd, dst, config)}")
+                _print_cmd(
+                    console,
+                    _wrap_cmd(cmd, dst, config),
+                )
 
 
 def print_human_troubleshoot(
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
     config: Config,
+    *,
+    console: Console | None = None,
 ) -> None:
     """Print troubleshooting instructions."""
-    console = Console()
+    if console is None:
+        console = Console()
     has_issues = False
 
     failed_vols = [vs for vs in vol_statuses.values() if vs.reasons]
@@ -497,9 +542,14 @@ def _endpoint_display(
     return endpoint.volume
 
 
-def print_human_config(config: Config) -> None:
+def print_human_config(
+    config: Config,
+    *,
+    console: Console | None = None,
+) -> None:
     """Print human-readable configuration."""
-    console = Console()
+    if console is None:
+        console = Console()
 
     if config.rsync_servers:
         server_table = Table(title="Rsync Servers:")
@@ -567,9 +617,14 @@ def print_human_config(config: Config) -> None:
     console.print(sync_table)
 
 
-def print_config_error(e: ConfigError) -> None:
+def print_config_error(
+    e: ConfigError,
+    *,
+    console: Console | None = None,
+) -> None:
     """Print a ConfigError as a Rich panel to stderr."""
-    console = Console(stderr=True)
+    if console is None:
+        console = Console(stderr=True)
     cause = e.__cause__
     match cause:
         case ValidationError():
@@ -578,7 +633,8 @@ def print_config_error(e: ConfigError) -> None:
                 loc = " → ".join(str(p) for p in err["loc"])
                 msg = err["msg"]
                 if msg.startswith("Value error, "):
-                    msg = msg[len("Value error, ") :]
+                    prefix_len = len("Value error, ")
+                    msg = msg[prefix_len:]
                 if loc:
                     lines.append(f"{loc}: {msg}")
                 else:

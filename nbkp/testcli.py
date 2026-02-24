@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tempfile
+from io import StringIO
 from pathlib import Path
 from typing import Annotated
 
@@ -74,6 +75,30 @@ app = typer.Typer(
 # ── Commands ─────────────────────────────────────────────────────
 
 
+def _capture_console() -> tuple[Console, StringIO]:
+    """Create a Console that captures output to a StringIO buffer."""
+    buf = StringIO()
+    console = Console(
+        file=buf,
+        force_terminal=True,
+        width=_console.width - 4,
+    )
+    return console, buf
+
+
+def _print_panel(title: str, buf: StringIO) -> None:
+    """Wrap captured console output in a titled panel."""
+    content = Text.from_ansi(buf.getvalue().rstrip("\n"))
+    _console.print(
+        Panel(
+            content,
+            title=f"[bold]{title}[/bold]",
+            border_style="cyan",
+            padding=(0, 1),
+        )
+    )
+
+
 @app.command()
 def output() -> None:
     """Render all human output functions with fake data."""
@@ -86,56 +111,70 @@ def output() -> None:
 
 
 def _show_config_show() -> None:
-    _console.rule("print_human_config")
+    console, buf = _capture_console()
     config = config_show_config()
-    print_human_config(config)
+    print_human_config(config, console=console)
+    _print_panel("print_human_config", buf)
 
 
 def _show_check() -> None:
-    _console.rule("print_human_check")
+    console, buf = _capture_console()
     config = check_config()
     vol_statuses, sync_statuses = check_data(config)
-    print_human_check(vol_statuses, sync_statuses, config)
+    print_human_check(vol_statuses, sync_statuses, config, console=console)
+    _print_panel("print_human_check", buf)
 
 
 def _show_results() -> None:
-    _console.rule("print_human_results (run)")
-    print_human_results(run_results(), dry_run=False)
+    console, buf = _capture_console()
+    print_human_results(run_results(), dry_run=False, console=console)
+    _print_panel("print_human_results (run)", buf)
 
-    _console.rule("print_human_results (dry run)")
-    print_human_results([dry_run_result()], dry_run=True)
+    console, buf = _capture_console()
+    print_human_results([dry_run_result()], dry_run=True, console=console)
+    _print_panel("print_human_results (dry run)", buf)
 
 
 def _show_prune() -> None:
-    _console.rule("print_human_prune_results (prune)")
-    print_human_prune_results(prune_results(), dry_run=False)
+    console, buf = _capture_console()
+    print_human_prune_results(prune_results(), dry_run=False, console=console)
+    _print_panel("print_human_prune_results (prune)", buf)
 
-    _console.rule("print_human_prune_results (dry run)")
-    print_human_prune_results(prune_dry_run_results(), dry_run=True)
+    console, buf = _capture_console()
+    print_human_prune_results(
+        prune_dry_run_results(), dry_run=True, console=console
+    )
+    _print_panel("print_human_prune_results (dry run)", buf)
 
 
 def _show_troubleshoot() -> None:
-    _console.rule("print_human_troubleshoot")
+    console, buf = _capture_console()
     config = troubleshoot_config()
     vol_statuses, sync_statuses = troubleshoot_data(config)
-    print_human_troubleshoot(vol_statuses, sync_statuses, config)
+    print_human_troubleshoot(
+        vol_statuses, sync_statuses, config, console=console
+    )
+    _print_panel("print_human_troubleshoot", buf)
 
 
 def _show_config_errors() -> None:
-    _console.rule("print_config_error (file not found)")
+    console, buf = _capture_console()
     print_config_error(
-        ConfigError("Config file not found: /etc/nbkp/config.yaml")
+        ConfigError("Config file not found: /etc/nbkp/config.yaml"),
+        console=console,
     )
+    _print_panel("print_config_error (file not found)", buf)
 
-    _console.rule("print_config_error (invalid YAML)")
+    console, buf = _capture_console()
     try:
         yaml.safe_load("not_a_list:\n  - [invalid")
     except yaml.YAMLError as ye:
         err = ConfigError(f"Invalid YAML in /etc/nbkp/config.yaml: {ye}")
         err.__cause__ = ye
-        print_config_error(err)
+        print_config_error(err, console=console)
+    _print_panel("print_config_error (invalid YAML)", buf)
 
-    _console.rule("print_config_error (invalid volume type)")
+    console, buf = _capture_console()
     try:
         ConfigModel.model_validate(
             {"volumes": {"v": {"type": "ftp", "path": "/x"}}}
@@ -143,9 +182,10 @@ def _show_config_errors() -> None:
     except ValidationError as ve:
         err = ConfigError(str(ve))
         err.__cause__ = ve
-        print_config_error(err)
+        print_config_error(err, console=console)
+    _print_panel("print_config_error (invalid volume type)", buf)
 
-    _console.rule("print_config_error (unknown server reference)")
+    console, buf = _capture_console()
     try:
         ConfigModel.model_validate(
             {
@@ -163,9 +203,10 @@ def _show_config_errors() -> None:
     except ValidationError as ve:
         err = ConfigError(str(ve))
         err.__cause__ = ve
-        print_config_error(err)
+        print_config_error(err, console=console)
+    _print_panel("print_config_error (unknown server reference)", buf)
 
-    _console.rule("print_config_error (missing required field)")
+    console, buf = _capture_console()
     try:
         ConfigModel.model_validate(
             {"volumes": {"v": {"type": "local"}}, "syncs": {}}
@@ -173,7 +214,8 @@ def _show_config_errors() -> None:
     except ValidationError as ve:
         err = ConfigError(str(ve))
         err.__cause__ = ve
-        print_config_error(err)
+        print_config_error(err, console=console)
+    _print_panel("print_config_error (missing required field)", buf)
 
 
 @app.command()
@@ -318,23 +360,20 @@ def seed(
     ]
     if docker:
         assert docker_server is not None
-        rows.append((
-            "Docker",
-            f"{CONTAINER_NAME}"
-            f" (port {docker_server.port})",
-        ))
+        rows.append(
+            (
+                "Docker",
+                f"{CONTAINER_NAME}" f" (port {docker_server.port})",
+            )
+        )
     label_w = max(len(r[0]) for r in rows)
     summary = Text()
     for i, (label, value) in enumerate(rows):
         if i > 0:
             summary.append("\n")
-        summary.append(
-            f"{label:<{label_w}}  ", style="bold"
-        )
+        summary.append(f"{label:<{label_w}}  ", style="bold")
         summary.append(value)
-    _console.print(
-        Panel(summary, border_style="blue", padding=(0, 1))
-    )
+    _console.print(Panel(summary, border_style="blue", padding=(0, 1)))
 
     lines = [
         f'CFG="{config_path}"',
