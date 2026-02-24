@@ -148,6 +148,8 @@ def print_human_results(results: list[SyncResult], dry_run: bool) -> None:
             details_parts.append(f"Error: {r.error}")
         if r.snapshot_path:
             details_parts.append(f"Snapshot: {r.snapshot_path}")
+        if r.pruned_paths:
+            details_parts.append(f"Pruned: {len(r.pruned_paths)} snapshot(s)")
         if r.output and not r.success:
             lines = r.output.strip().split("\n")[:5]
             details_parts.extend(lines)

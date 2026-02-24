@@ -41,6 +41,7 @@ def run_all_syncs(
     dry_run: bool = False,
     only_syncs: list[str] | None = None,
     verbose: int = 0,
+    prune: bool = True,
     on_rsync_output: Callable[[str], None] | None = None,
     on_sync_start: Callable[[str], None] | None = None,
     on_sync_end: Callable[[str, SyncResult], None] | None = None,
@@ -81,6 +82,7 @@ def run_all_syncs(
                 config,
                 dry_run,
                 verbose,
+                prune,
                 on_rsync_output,
             )
 
@@ -97,6 +99,7 @@ def _run_single_sync(
     config: Config,
     dry_run: bool,
     verbose: int = 0,
+    prune: bool = True,
     on_rsync_output: Callable[[str], None] | None = None,
 ) -> SyncResult:
     """Run a single sync operation."""
@@ -154,7 +157,7 @@ def _run_single_sync(
                     output=proc.stdout,
                     error=f"Snapshot failed: {e}",
                 )
-            if btrfs_cfg.max_snapshots is not None:
+            if prune and btrfs_cfg.max_snapshots is not None:
                 pruned_paths = prune_snapshots(
                     sync, config, btrfs_cfg.max_snapshots
                 )

@@ -103,6 +103,13 @@ def run(
             help="Increase rsync verbosity (-v, -vv, -vvv)",
         ),
     ] = 0,
+    prune: Annotated[
+        bool,
+        typer.Option(
+            "--prune/--no-prune",
+            help="Prune old snapshots after sync",
+        ),
+    ] = True,
     allow_removable_devices: Annotated[
         bool,
         typer.Option(
@@ -167,6 +174,7 @@ def run(
             dry_run=dry_run,
             only_syncs=sync,
             verbose=verbose,
+            prune=prune,
             on_rsync_output=stream_output,
             on_sync_start=on_sync_start if use_spinner else None,
             on_sync_end=on_sync_end if use_spinner else None,
