@@ -8,6 +8,7 @@ from typing import Annotated
 
 import typer
 import yaml
+from rich.console import Console
 
 from .config import (
     Config,
@@ -35,6 +36,7 @@ from .testdata import (
 )
 
 _INDENT = "  "
+_console = Console()
 
 app = typer.Typer(
     name="nbkp-test",
@@ -57,30 +59,30 @@ def output() -> None:
 
 
 def _show_status() -> None:
-    typer.echo("\n=== print_human_status ===\n")
+    _console.rule("print_human_status")
     config = status_config()
     vol_statuses, sync_statuses = status_data(config)
     print_human_status(vol_statuses, sync_statuses, config)
 
 
 def _show_results() -> None:
-    typer.echo("\n=== print_human_results (run) ===\n")
+    _console.rule("print_human_results (run)")
     print_human_results(run_results(), dry_run=False)
 
-    typer.echo("\n=== print_human_results (dry run) ===\n")
+    _console.rule("print_human_results (dry run)")
     print_human_results([dry_run_result()], dry_run=True)
 
 
 def _show_prune() -> None:
-    typer.echo("\n=== print_human_prune_results (prune) ===\n")
+    _console.rule("print_human_prune_results (prune)")
     print_human_prune_results(prune_results(), dry_run=False)
 
-    typer.echo("\n=== print_human_prune_results (dry run) ===\n")
+    _console.rule("print_human_prune_results (dry run)")
     print_human_prune_results(prune_dry_run_results(), dry_run=True)
 
 
 def _show_troubleshoot() -> None:
-    typer.echo("\n=== print_human_troubleshoot ===\n")
+    _console.rule("print_human_troubleshoot")
     config = troubleshoot_config()
     vol_statuses, sync_statuses = troubleshoot_data(config)
     print_human_troubleshoot(vol_statuses, sync_statuses, config)
@@ -91,12 +93,12 @@ def _show_config_errors() -> None:
     from .config import ConfigError
     from .config.protocol import Config as ConfigModel
 
-    typer.echo("\n=== print_config_error (file not found) ===\n")
+    _console.rule("print_config_error (file not found)")
     print_config_error(
         ConfigError("Config file not found: /etc/nbkp/config.yaml")
     )
 
-    typer.echo("\n=== print_config_error (invalid YAML) ===\n")
+    _console.rule("print_config_error (invalid YAML)")
     try:
         yaml.safe_load("not_a_list:\n  - [invalid")
     except yaml.YAMLError as ye:
@@ -104,7 +106,7 @@ def _show_config_errors() -> None:
         err.__cause__ = ye
         print_config_error(err)
 
-    typer.echo("\n=== print_config_error (invalid volume type) ===\n")
+    _console.rule("print_config_error (invalid volume type)")
     try:
         ConfigModel.model_validate(
             {"volumes": {"v": {"type": "ftp", "path": "/x"}}}
@@ -114,7 +116,7 @@ def _show_config_errors() -> None:
         err.__cause__ = ve
         print_config_error(err)
 
-    typer.echo("\n=== print_config_error (unknown server reference) ===\n")
+    _console.rule("print_config_error (unknown server reference)")
     try:
         ConfigModel.model_validate(
             {
@@ -134,7 +136,7 @@ def _show_config_errors() -> None:
         err.__cause__ = ve
         print_config_error(err)
 
-    typer.echo("\n=== print_config_error (missing required field) ===\n")
+    _console.rule("print_config_error (missing required field)")
     try:
         ConfigModel.model_validate(
             {"volumes": {"v": {"type": "local"}}, "syncs": {}}
