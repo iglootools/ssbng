@@ -41,11 +41,11 @@ app = typer.Typer(
 def status(
     config: Annotated[
         Optional[str],
-        typer.Option("--config", help="Path to config file"),
+        typer.Option("--config", "-c", help="Path to config file"),
     ] = None,
     output: Annotated[
         OutputFormat,
-        typer.Option("--output", help="Output format"),
+        typer.Option("--output", "-o", help="Output format"),
     ] = OutputFormat.HUMAN,
     allow_removable_devices: Annotated[
         bool,
@@ -80,7 +80,7 @@ def status(
 def run(
     config: Annotated[
         Optional[str],
-        typer.Option("--config", help="Path to config file"),
+        typer.Option("--config", "-c", help="Path to config file"),
     ] = None,
     dry_run: Annotated[
         bool,
@@ -88,11 +88,11 @@ def run(
     ] = False,
     sync: Annotated[
         Optional[list[str]],
-        typer.Option("--sync", help="Sync name(s) to run"),
+        typer.Option("--sync", "-s", help="Sync name(s) to run"),
     ] = None,
     output: Annotated[
         OutputFormat,
-        typer.Option("--output", help="Output format"),
+        typer.Option("--output", "-o", help="Output format"),
     ] = OutputFormat.HUMAN,
     verbose: Annotated[
         int,
@@ -200,7 +200,7 @@ def run(
 def sh(
     config: Annotated[
         Optional[str],
-        typer.Option("--config", help="Path to config file"),
+        typer.Option("--config", "-c", help="Path to config file"),
     ] = None,
     output_file: Annotated[
         Optional[str],
@@ -268,7 +268,7 @@ def sh(
 def troubleshoot(
     config: Annotated[
         Optional[str],
-        typer.Option("--config", help="Path to config file"),
+        typer.Option("--config", "-c", help="Path to config file"),
     ] = None,
 ) -> None:
     """Diagnose issues and show how to fix them."""
@@ -283,11 +283,11 @@ def troubleshoot(
 def prune(
     config: Annotated[
         Optional[str],
-        typer.Option("--config", help="Path to config file"),
+        typer.Option("--config", "-c", help="Path to config file"),
     ] = None,
     sync: Annotated[
         Optional[list[str]],
-        typer.Option("--sync", help="Sync name(s) to prune"),
+        typer.Option("--sync", "-s", help="Sync name(s) to prune"),
     ] = None,
     dry_run: Annotated[
         bool,
@@ -295,7 +295,7 @@ def prune(
     ] = False,
     output: Annotated[
         OutputFormat,
-        typer.Option("--output", help="Output format"),
+        typer.Option("--output", "-o", help="Output format"),
     ] = OutputFormat.HUMAN,
 ) -> None:
     """Prune old snapshots beyond max-snapshots limit."""
