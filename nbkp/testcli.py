@@ -8,15 +8,18 @@ from typing import Annotated
 
 import typer
 import yaml
+from pydantic import ValidationError
 from rich.console import Console
 
 from .config import (
     Config,
+    ConfigError,
     DestinationSyncEndpoint,
     LocalVolume,
     SyncConfig,
     SyncEndpoint,
 )
+from .config.protocol import Config as ConfigModel
 from .output import (
     print_config_error,
     print_human_prune_results,
@@ -89,10 +92,6 @@ def _show_troubleshoot() -> None:
 
 
 def _show_config_errors() -> None:
-    from pydantic import ValidationError
-    from .config import ConfigError
-    from .config.protocol import Config as ConfigModel
-
     _console.rule("print_config_error (file not found)")
     print_config_error(
         ConfigError("Config file not found: /etc/nbkp/config.yaml")
