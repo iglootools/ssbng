@@ -222,7 +222,6 @@ class EndpointFilter(_BaseModel):
 class Config(_BaseModel):
     """Top-level NBKP configuration."""
 
-    location: Optional[str] = None
     ssh_endpoints: Dict[str, SshEndpoint] = Field(default_factory=dict)
 
     @model_validator(mode="before")
