@@ -14,6 +14,7 @@ from .config import (
     Config,
     LocalVolume,
     RemoteVolume,
+    ResolvedEndpoints,
     SyncConfig,
     Volume,
 )
@@ -77,13 +78,17 @@ class SyncStatus(BaseModel):
         return len(self.reasons) == 0
 
 
-def check_volume(volume: Volume, config: Config) -> VolumeStatus:
+def check_volume(
+    volume: Volume,
+    resolved_endpoints: ResolvedEndpoints | None = None,
+) -> VolumeStatus:
     """Check if a volume is active."""
+    re = resolved_endpoints or {}
     match volume:
         case LocalVolume():
             return _check_local_volume(volume)
         case RemoteVolume():
-            return _check_remote_volume(volume, config)
+            return _check_remote_volume(volume, re)
 
 
 def _check_local_volume(volume: LocalVolume) -> VolumeStatus:
@@ -99,12 +104,16 @@ def _check_local_volume(volume: LocalVolume) -> VolumeStatus:
     )
 
 
-def _check_remote_volume(volume: RemoteVolume, config: Config) -> VolumeStatus:
+def _check_remote_volume(
+    volume: RemoteVolume,
+    resolved_endpoints: ResolvedEndpoints,
+) -> VolumeStatus:
     """Check if a remote volume is active (SSH + .nbkp-vol marker)."""
-    server = config.rsync_servers[volume.rsync_server]
+    ep = resolved_endpoints[volume.slug]
     marker_path = f"{volume.path}/.nbkp-vol"
-    proxy = config.resolve_proxy(server)
-    result = run_remote_command(server, ["test", "-f", marker_path], proxy)
+    result = run_remote_command(
+        ep.server, ["test", "-f", marker_path], ep.proxy
+    )
     reasons: list[VolumeReason] = (
         [] if result.returncode == 0 else [VolumeReason.UNREACHABLE]
     )
@@ -119,7 +128,7 @@ def _check_endpoint_marker(
     volume: Volume,
     subdir: str | None,
     marker_name: str,
-    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
     """Check if an endpoint marker file exists."""
     if subdir:
@@ -131,29 +140,34 @@ def _check_endpoint_marker(
         case LocalVolume():
             return Path(rel_path).exists()
         case RemoteVolume():
-            server = config.rsync_servers[volume.rsync_server]
-            proxy = config.resolve_proxy(server)
+            ep = resolved_endpoints[volume.slug]
             result = run_remote_command(
-                server, ["test", "-f", rel_path], proxy
+                ep.server, ["test", "-f", rel_path], ep.proxy
             )
             return result.returncode == 0
 
 
 def _check_command_available(
-    volume: Volume, command: str, config: Config
+    volume: Volume,
+    command: str,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
     """Check if a command is available on the volume's host."""
     match volume:
         case LocalVolume():
             return shutil.which(command) is not None
         case RemoteVolume():
-            server = config.rsync_servers[volume.rsync_server]
-            proxy = config.resolve_proxy(server)
-            result = run_remote_command(server, ["which", command], proxy)
+            ep = resolved_endpoints[volume.slug]
+            result = run_remote_command(
+                ep.server, ["which", command], ep.proxy
+            )
             return result.returncode == 0
 
 
-def _check_btrfs_filesystem(volume: Volume, config: Config) -> bool:
+def _check_btrfs_filesystem(
+    volume: Volume,
+    resolved_endpoints: ResolvedEndpoints,
+) -> bool:
     """Check if the volume path is on a btrfs filesystem."""
     cmd = ["stat", "-f", "-c", "%T", volume.path]
     match volume:
@@ -164,9 +178,8 @@ def _check_btrfs_filesystem(volume: Volume, config: Config) -> bool:
                 text=True,
             )
         case RemoteVolume():
-            server = config.rsync_servers[volume.rsync_server]
-            proxy = config.resolve_proxy(server)
-            result = run_remote_command(server, cmd, proxy)
+            ep = resolved_endpoints[volume.slug]
+            result = run_remote_command(ep.server, cmd, ep.proxy)
     return result.returncode == 0 and result.stdout.strip() == "btrfs"
 
 
@@ -178,22 +191,27 @@ def _resolve_endpoint(volume: Volume, subdir: str | None) -> str:
         return volume.path
 
 
-def _check_directory_exists(volume: Volume, path: str, config: Config) -> bool:
+def _check_directory_exists(
+    volume: Volume,
+    path: str,
+    resolved_endpoints: ResolvedEndpoints,
+) -> bool:
     """Check if a directory exists on the volume's host."""
     match volume:
         case LocalVolume():
             return Path(path).is_dir()
         case RemoteVolume():
-            server = config.rsync_servers[volume.rsync_server]
-            proxy = config.resolve_proxy(server)
-            result = run_remote_command(server, ["test", "-d", path], proxy)
+            ep = resolved_endpoints[volume.slug]
+            result = run_remote_command(
+                ep.server, ["test", "-d", path], ep.proxy
+            )
             return result.returncode == 0
 
 
 def _check_btrfs_subvolume(
     volume: Volume,
     subdir: str | None,
-    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
     """Check if the endpoint path is a btrfs subvolume.
 
@@ -209,16 +227,15 @@ def _check_btrfs_subvolume(
                 text=True,
             )
         case RemoteVolume():
-            server = config.rsync_servers[volume.rsync_server]
-            proxy = config.resolve_proxy(server)
-            result = run_remote_command(server, cmd, proxy)
+            ep = resolved_endpoints[volume.slug]
+            result = run_remote_command(ep.server, cmd, ep.proxy)
     return result.returncode == 0 and result.stdout.strip() == "256"
 
 
 def _check_btrfs_mount_option(
     volume: Volume,
     option: str,
-    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
     """Check if the volume is mounted with a specific mount option."""
     cmd = ["findmnt", "-n", "-o", "OPTIONS", volume.path]
@@ -230,9 +247,8 @@ def _check_btrfs_mount_option(
                 text=True,
             )
         case RemoteVolume():
-            server = config.rsync_servers[volume.rsync_server]
-            proxy = config.resolve_proxy(server)
-            result = run_remote_command(server, cmd, proxy)
+            ep = resolved_endpoints[volume.slug]
+            result = run_remote_command(ep.server, cmd, ep.proxy)
     if result.returncode != 0:
         return False
     options = result.stdout.strip().split(",")
@@ -242,30 +258,34 @@ def _check_btrfs_mount_option(
 def _check_btrfs_dest(
     dst_vol: Volume,
     sync: SyncConfig,
-    config: Config,
     has_findmnt: bool,
     reasons: list[SyncReason],
+    resolved_endpoints: ResolvedEndpoints,
 ) -> None:
     """Run btrfs filesystem, subvolume, and directory checks."""
-    if not _check_btrfs_filesystem(dst_vol, config):
+    if not _check_btrfs_filesystem(dst_vol, resolved_endpoints):
         reasons.append(SyncReason.DESTINATION_NOT_BTRFS)
     elif not _check_btrfs_subvolume(
         dst_vol,
         sync.destination.subdir,
-        config,
+        resolved_endpoints,
     ):
         reasons.append(SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME)
     else:
         if has_findmnt and not _check_btrfs_mount_option(
             dst_vol,
             "user_subvol_rm_allowed",
-            config,
+            resolved_endpoints,
         ):
             reasons.append(SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM)
         ep = _resolve_endpoint(dst_vol, sync.destination.subdir)
-        if not _check_directory_exists(dst_vol, f"{ep}/latest", config):
+        if not _check_directory_exists(
+            dst_vol, f"{ep}/latest", resolved_endpoints
+        ):
             reasons.append(SyncReason.DESTINATION_LATEST_NOT_FOUND)
-        if not _check_directory_exists(dst_vol, f"{ep}/snapshots", config):
+        if not _check_directory_exists(
+            dst_vol, f"{ep}/snapshots", resolved_endpoints
+        ):
             reasons.append(SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND)
 
 
@@ -273,8 +293,10 @@ def check_sync(
     sync: SyncConfig,
     config: Config,
     volume_statuses: dict[str, VolumeStatus],
+    resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> SyncStatus:
     """Check if a sync is active, accumulating all failure reasons."""
+    re = resolved_endpoints or {}
     src_vol_name = sync.source.volume
     dst_vol_name = sync.destination.volume
 
@@ -305,10 +327,13 @@ def check_sync(
         # Source checks (only if source volume is active)
         if src_status.active:
             if not _check_endpoint_marker(
-                src_vol, sync.source.subdir, ".nbkp-src", config
+                src_vol,
+                sync.source.subdir,
+                ".nbkp-src",
+                re,
             ):
                 reasons.append(SyncReason.SOURCE_MARKER_NOT_FOUND)
-            if not _check_command_available(src_vol, "rsync", config):
+            if not _check_command_available(src_vol, "rsync", re):
                 reasons.append(SyncReason.RSYNC_NOT_FOUND_ON_SOURCE)
 
         # Destination checks (only if destination volume is active)
@@ -317,20 +342,18 @@ def check_sync(
                 dst_vol,
                 sync.destination.subdir,
                 ".nbkp-dst",
-                config,
+                re,
             ):
                 reasons.append(SyncReason.DESTINATION_MARKER_NOT_FOUND)
-            if not _check_command_available(dst_vol, "rsync", config):
+            if not _check_command_available(dst_vol, "rsync", re):
                 reasons.append(SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION)
             if sync.destination.btrfs_snapshots.enabled:
-                if not _check_command_available(dst_vol, "btrfs", config):
+                if not _check_command_available(dst_vol, "btrfs", re):
                     reasons.append(SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION)
                 else:
-                    has_stat = _check_command_available(
-                        dst_vol, "stat", config
-                    )
+                    has_stat = _check_command_available(dst_vol, "stat", re)
                     has_findmnt = _check_command_available(
-                        dst_vol, "findmnt", config
+                        dst_vol, "findmnt", re
                     )
 
                     if not has_stat:
@@ -346,9 +369,9 @@ def check_sync(
                         _check_btrfs_dest(
                             dst_vol,
                             sync,
-                            config,
                             has_findmnt,
                             reasons,
+                            re,
                         )
 
         return SyncStatus(
@@ -364,12 +387,14 @@ def check_all_syncs(
     config: Config,
     on_progress: Callable[[str], None] | None = None,
     only_syncs: list[str] | None = None,
+    resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     """Check volumes and syncs, caching volume checks.
 
     When *only_syncs* is given, only those syncs (and the
     volumes they reference) are checked.
     """
+    re = resolved_endpoints or {}
     syncs = (
         {s: sc for s, sc in config.syncs.items() if s in only_syncs}
         if only_syncs
@@ -386,13 +411,13 @@ def check_all_syncs(
     volume_statuses: dict[str, VolumeStatus] = {}
     for slug in needed_volumes:
         volume = config.volumes[slug]
-        volume_statuses[slug] = check_volume(volume, config)
+        volume_statuses[slug] = check_volume(volume, re)
         if on_progress:
             on_progress(slug)
 
     sync_statuses: dict[str, SyncStatus] = {}
     for slug, sync in syncs.items():
-        sync_statuses[slug] = check_sync(sync, config, volume_statuses)
+        sync_statuses[slug] = check_sync(sync, config, volume_statuses, re)
         if on_progress:
             on_progress(slug)
 

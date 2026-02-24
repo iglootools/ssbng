@@ -5,7 +5,14 @@ from __future__ import annotations
 import subprocess
 from datetime import datetime, timezone
 
-from ..config import Config, LocalVolume, RemoteVolume, SyncConfig, Volume
+from ..config import (
+    Config,
+    LocalVolume,
+    RemoteVolume,
+    ResolvedEndpoints,
+    SyncConfig,
+    Volume,
+)
 from ..remote import run_remote_command
 
 
@@ -23,11 +30,13 @@ def create_snapshot(
     config: Config,
     *,
     now: datetime | None = None,
+    resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> str:
     """Create a read-only btrfs snapshot of latest/ into snapshots/.
 
     Returns the snapshot path.
     """
+    re = resolved_endpoints or {}
     if now is None:
         now = datetime.now(timezone.utc)
     dest_path = resolve_dest_path(sync, config)
@@ -48,9 +57,8 @@ def create_snapshot(
     dst_vol = config.volumes[sync.destination.volume]
     match dst_vol:
         case RemoteVolume():
-            server = config.rsync_servers[dst_vol.rsync_server]
-            proxy = config.resolve_proxy(server)
-            result = run_remote_command(server, cmd, proxy)
+            ep = re[dst_vol.slug]
+            result = run_remote_command(ep.server, cmd, ep.proxy)
         case LocalVolume():
             result = subprocess.run(
                 cmd,
@@ -64,17 +72,23 @@ def create_snapshot(
         return snapshot_path
 
 
-def list_snapshots(sync: SyncConfig, config: Config) -> list[str]:
+def list_snapshots(
+    sync: SyncConfig,
+    config: Config,
+    resolved_endpoints: ResolvedEndpoints | None = None,
+) -> list[str]:
     """List all snapshot paths sorted oldest-first."""
+    re = resolved_endpoints or {}
     dest_path = resolve_dest_path(sync, config)
     snapshots_dir = f"{dest_path}/snapshots"
 
     dst_vol = config.volumes[sync.destination.volume]
     match dst_vol:
         case RemoteVolume():
-            server = config.rsync_servers[dst_vol.rsync_server]
-            proxy = config.resolve_proxy(server)
-            result = run_remote_command(server, ["ls", snapshots_dir], proxy)
+            ep = re[dst_vol.slug]
+            result = run_remote_command(
+                ep.server, ["ls", snapshots_dir], ep.proxy
+            )
         case LocalVolume():
             result = subprocess.run(
                 ["ls", snapshots_dir],
@@ -89,9 +103,13 @@ def list_snapshots(sync: SyncConfig, config: Config) -> list[str]:
         return [f"{snapshots_dir}/{e}" for e in entries]
 
 
-def get_latest_snapshot(sync: SyncConfig, config: Config) -> str | None:
+def get_latest_snapshot(
+    sync: SyncConfig,
+    config: Config,
+    resolved_endpoints: ResolvedEndpoints | None = None,
+) -> str | None:
     """Get the path to the most recent snapshot, or None."""
-    snapshots = list_snapshots(sync, config)
+    snapshots = list_snapshots(sync, config, resolved_endpoints)
     if snapshots:
         return snapshots[-1]
     else:
@@ -101,15 +119,14 @@ def get_latest_snapshot(sync: SyncConfig, config: Config) -> str | None:
 def _make_snapshot_writable(
     path: str,
     volume: Volume,
-    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> None:
     """Unset the readonly property so the snapshot can be deleted."""
     cmd = ["btrfs", "property", "set", path, "ro", "false"]
     match volume:
         case RemoteVolume():
-            server = config.rsync_servers[volume.rsync_server]
-            proxy = config.resolve_proxy(server)
-            result = run_remote_command(server, cmd, proxy)
+            ep = resolved_endpoints[volume.slug]
+            result = run_remote_command(ep.server, cmd, ep.proxy)
         case LocalVolume():
             result = subprocess.run(
                 cmd,
@@ -126,7 +143,7 @@ def _make_snapshot_writable(
 def delete_snapshot(
     path: str,
     volume: Volume,
-    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> None:
     """Delete a single btrfs snapshot subvolume.
 
@@ -134,14 +151,13 @@ def delete_snapshot(
     is mounted with user_subvol_rm_allowed instead of granting
     CAP_SYS_ADMIN), then deletes the subvolume.
     """
-    _make_snapshot_writable(path, volume, config)
+    _make_snapshot_writable(path, volume, resolved_endpoints)
 
     cmd = ["btrfs", "subvolume", "delete", path]
     match volume:
         case RemoteVolume():
-            server = config.rsync_servers[volume.rsync_server]
-            proxy = config.resolve_proxy(server)
-            result = run_remote_command(server, cmd, proxy)
+            ep = resolved_endpoints[volume.slug]
+            result = run_remote_command(ep.server, cmd, ep.proxy)
         case LocalVolume():
             result = subprocess.run(
                 cmd,
@@ -159,12 +175,14 @@ def prune_snapshots(
     max_snapshots: int,
     *,
     dry_run: bool = False,
+    resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> list[str]:
     """Delete oldest snapshots exceeding max_snapshots.
 
     Returns list of deleted (or would-be-deleted) paths.
     """
-    snapshots = list_snapshots(sync, config)
+    re = resolved_endpoints or {}
+    snapshots = list_snapshots(sync, config, re)
     excess = len(snapshots) - max_snapshots
     if excess <= 0:
         return []
@@ -173,6 +191,6 @@ def prune_snapshots(
     if not dry_run:
         dst_vol = config.volumes[sync.destination.volume]
         for path in to_delete:
-            delete_snapshot(path, dst_vol, config)
+            delete_snapshot(path, dst_vol, re)
 
     return to_delete

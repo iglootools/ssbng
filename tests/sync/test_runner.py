@@ -10,7 +10,7 @@ from nbkp.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
-    RsyncServer,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
 )
@@ -72,20 +72,20 @@ def _make_btrfs_config_with_max() -> Config:
 
 
 def _make_remote_to_remote_config() -> Config:
-    src_server = RsyncServer(
+    src_server = SshEndpoint(
         slug="src-server", host="src.local", user="srcuser"
     )
-    dst_server = RsyncServer(
+    dst_server = SshEndpoint(
         slug="dst-server", host="dst.local", user="dstuser"
     )
     src = RemoteVolume(
         slug="src",
-        rsync_server="src-server",
+        ssh_endpoint="src-server",
         path="/data",
     )
     dst = RemoteVolume(
         slug="dst",
-        rsync_server="dst-server",
+        ssh_endpoint="dst-server",
         path="/backup",
     )
     sync = SyncConfig(
@@ -97,7 +97,7 @@ def _make_remote_to_remote_config() -> Config:
         ),
     )
     return Config(
-        rsync_servers={
+        ssh_endpoints={
             "src-server": src_server,
             "dst-server": dst_server,
         },

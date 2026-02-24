@@ -16,7 +16,12 @@ from ...config import (
     SyncConfig,
     SyncEndpoint,
 )
-from .config import base_volumes, bastion_server, nas_server
+from .config import (
+    base_volumes,
+    bastion_server,
+    nas_public_server,
+    nas_server,
+)
 
 
 def check_config() -> Config:
@@ -26,9 +31,10 @@ def check_config() -> Config:
         slug="external-drive", path="/mnt/external"
     )
     return Config(
-        rsync_servers={
+        ssh_endpoints={
             "bastion": bastion_server(),
             "nas": nas_server(),
+            "nas-public": nas_public_server(),
         },
         volumes=volumes,
         syncs={
@@ -145,9 +151,10 @@ def check_data(
 def troubleshoot_config() -> Config:
     """Config designed to trigger every troubleshoot reason."""
     return Config(
-        rsync_servers={
+        ssh_endpoints={
             "bastion": bastion_server(),
             "nas": nas_server(),
+            "nas-public": nas_public_server(),
         },
         volumes=base_volumes(),
         syncs={

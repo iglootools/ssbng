@@ -11,9 +11,10 @@ from nbkp.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
-    RsyncServer,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
+    resolve_all_endpoints,
 )
 from nbkp.sync.rsync import run_rsync
 
@@ -26,11 +27,11 @@ class TestRemoteToLocal:
     def test_sync_from_container(
         self,
         tmp_path: Path,
-        rsync_server: RsyncServer,
+        ssh_endpoint: SshEndpoint,
     ) -> None:
         # Create test files on container
         ssh_exec(
-            rsync_server,
+            ssh_endpoint,
             "echo 'hello from remote' > /data/src/remote-file.txt",
         )
 
@@ -41,7 +42,7 @@ class TestRemoteToLocal:
         dst_vol = LocalVolume(slug="dst", path=str(dst_dir))
         src_vol = RemoteVolume(
             slug="src-remote",
-            rsync_server="test-server",
+            ssh_endpoint="test-server",
             path="/data/src",
         )
         sync = SyncConfig(
@@ -50,12 +51,17 @@ class TestRemoteToLocal:
             destination=DestinationSyncEndpoint(volume="dst"),
         )
         config = Config(
-            rsync_servers={"test-server": rsync_server},
+            ssh_endpoints={"test-server": ssh_endpoint},
             volumes={"src": src_vol, "dst": dst_vol},
             syncs={"test-sync": sync},
         )
 
-        result = run_rsync(sync, config)
+        resolved = resolve_all_endpoints(config)
+        result = run_rsync(
+            sync,
+            config,
+            resolved_endpoints=resolved,
+        )
         assert result.returncode == 0
         assert (
             dst_dir / "latest" / "remote-file.txt"

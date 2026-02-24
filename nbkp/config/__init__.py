@@ -5,14 +5,20 @@ from .protocol import (
     BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
+    EndpointFilter,
     LocalVolume,
     RemoteVolume,
-    RsyncServer,
+    SshEndpoint,
     Slug,
-    SshOptions,
+    SshConnectionOptions,
     SyncConfig,
     SyncEndpoint,
     Volume,
+)
+from .resolution import (
+    ResolvedEndpoint,
+    ResolvedEndpoints,
+    resolve_all_endpoints,
 )
 
 __all__ = [
@@ -20,14 +26,18 @@ __all__ = [
     "Config",
     "ConfigError",
     "DestinationSyncEndpoint",
+    "EndpointFilter",
     "LocalVolume",
     "RemoteVolume",
-    "RsyncServer",
+    "ResolvedEndpoint",
+    "ResolvedEndpoints",
+    "SshEndpoint",
     "Slug",
-    "SshOptions",
+    "SshConnectionOptions",
     "SyncConfig",
     "SyncEndpoint",
     "Volume",
     "find_config_file",
     "load_config",
+    "resolve_all_endpoints",
 ]

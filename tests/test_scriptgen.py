@@ -11,10 +11,11 @@ from nbkp.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
-    RsyncServer,
-    SshOptions,
+    SshEndpoint,
+    SshConnectionOptions,
     SyncConfig,
     SyncEndpoint,
+    resolve_all_endpoints,
 )
 from nbkp.scriptgen import ScriptOptions, generate_script
 
@@ -38,16 +39,16 @@ def _local_to_local_config() -> Config:
 
 def _local_to_remote_config() -> Config:
     src = LocalVolume(slug="src", path="/mnt/data")
-    server = RsyncServer(
+    server = SshEndpoint(
         slug="nas",
         host="nas.example.com",
         port=5022,
         user="backup",
-        ssh_key="~/.ssh/nas_ed25519",
+        key="~/.ssh/nas_ed25519",
     )
     dst = RemoteVolume(
         slug="nas-vol",
-        rsync_server="nas",
+        ssh_endpoint="nas",
         path="/volume1/backups",
     )
     sync = SyncConfig(
@@ -58,21 +59,21 @@ def _local_to_remote_config() -> Config:
         ),
     )
     return Config(
-        rsync_servers={"nas": server},
+        ssh_endpoints={"nas": server},
         volumes={"src": src, "nas-vol": dst},
         syncs={"photos-to-nas": sync},
     )
 
 
 def _remote_to_local_config() -> Config:
-    server = RsyncServer(
+    server = SshEndpoint(
         slug="remote",
         host="remote.example.com",
         user="admin",
     )
     src = RemoteVolume(
         slug="remote-vol",
-        rsync_server="remote",
+        ssh_endpoint="remote",
         path="/data",
     )
     dst = LocalVolume(slug="local", path="/mnt/backup")
@@ -82,19 +83,19 @@ def _remote_to_local_config() -> Config:
         destination=DestinationSyncEndpoint(volume="local"),
     )
     return Config(
-        rsync_servers={"remote": server},
+        ssh_endpoints={"remote": server},
         volumes={"remote-vol": src, "local": dst},
         syncs={"pull-data": sync},
     )
 
 
 def _remote_to_remote_config() -> Config:
-    src_server = RsyncServer(
+    src_server = SshEndpoint(
         slug="src-server",
         host="src.example.com",
         user="srcuser",
     )
-    dst_server = RsyncServer(
+    dst_server = SshEndpoint(
         slug="dst-server",
         host="dst.example.com",
         user="dstuser",
@@ -102,12 +103,12 @@ def _remote_to_remote_config() -> Config:
     )
     src = RemoteVolume(
         slug="src-vol",
-        rsync_server="src-server",
+        ssh_endpoint="src-server",
         path="/data",
     )
     dst = RemoteVolume(
         slug="dst-vol",
-        rsync_server="dst-server",
+        ssh_endpoint="dst-server",
         path="/backup",
     )
     sync = SyncConfig(
@@ -116,7 +117,7 @@ def _remote_to_remote_config() -> Config:
         destination=DestinationSyncEndpoint(volume="dst-vol"),
     )
     return Config(
-        rsync_servers={
+        ssh_endpoints={
             "src-server": src_server,
             "dst-server": dst_server,
         },
@@ -191,12 +192,12 @@ def _filters_config() -> Config:
 
 
 def _proxy_jump_config() -> Config:
-    bastion = RsyncServer(
+    bastion = SshEndpoint(
         slug="bastion",
         host="bastion.example.com",
         user="admin",
     )
-    nas = RsyncServer(
+    nas = SshEndpoint(
         slug="nas",
         host="nas.internal",
         port=5022,
@@ -206,7 +207,7 @@ def _proxy_jump_config() -> Config:
     src = LocalVolume(slug="src", path="/mnt/data")
     dst = RemoteVolume(
         slug="nas-vol",
-        rsync_server="nas",
+        ssh_endpoint="nas",
         path="/volume1",
     )
     sync = SyncConfig(
@@ -215,7 +216,7 @@ def _proxy_jump_config() -> Config:
         destination=DestinationSyncEndpoint(volume="nas-vol"),
     )
     return Config(
-        rsync_servers={"bastion": bastion, "nas": nas},
+        ssh_endpoints={"bastion": bastion, "nas": nas},
         volumes={"src": src, "nas-vol": dst},
         syncs={"proxy-sync": sync},
     )
@@ -280,7 +281,10 @@ class TestVolumeChecks:
 
     def test_remote_volume_check(self) -> None:
         config = _local_to_remote_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+        )
         # Remote volume check uses ssh
         assert "ssh" in script
         assert "/volume1/backups/.nbkp-vol" in script
@@ -310,7 +314,10 @@ class TestLocalToLocal:
 class TestLocalToRemote:
     def test_rsync_with_ssh(self) -> None:
         config = _local_to_remote_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+        )
         assert "rsync" in script
         assert "/mnt/data/photos/" in script
         assert "backup@nas.example.com:/volume1/backups" in script
@@ -322,7 +329,10 @@ class TestLocalToRemote:
 class TestRemoteToLocal:
     def test_rsync_with_remote_source(self) -> None:
         config = _remote_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+        )
         assert "admin@remote.example.com:/data/" in script
         assert "/mnt/backup/latest/" in script
 
@@ -330,7 +340,10 @@ class TestRemoteToLocal:
 class TestRemoteToRemote:
     def test_ssh_wrapper(self) -> None:
         config = _remote_to_remote_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+        )
         # R2R: SSH into dest, run rsync from there
         assert "dst.example.com" in script
         assert "src.example.com" in script
@@ -421,7 +434,10 @@ class TestPreflightChecks:
 
     def test_remote_preflight_uses_ssh(self) -> None:
         config = _local_to_remote_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+        )
         # Remote destination checks should use ssh
         assert "ssh" in script
         assert ".nbkp-dst" in script
@@ -465,18 +481,21 @@ class TestFilters:
 class TestProxyJump:
     def test_proxy_jump_in_ssh(self) -> None:
         config = _proxy_jump_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+        )
         assert "-J" in script
         assert "admin@bastion.example.com" in script
 
 
-class TestSshOptions:
-    def test_ssh_options_in_script(self) -> None:
-        server = RsyncServer(
+class TestSshConnectionOptions:
+    def test_connection_options_in_script(self) -> None:
+        server = SshEndpoint(
             slug="nas",
             host="nas.example.com",
             user="backup",
-            ssh_options=SshOptions(
+            connection_options=SshConnectionOptions(
                 compress=True,
                 server_alive_interval=60,
                 strict_host_key_checking=False,
@@ -486,7 +505,7 @@ class TestSshOptions:
         src = LocalVolume(slug="src", path="/mnt/data")
         dst = RemoteVolume(
             slug="nas-vol",
-            rsync_server="nas",
+            ssh_endpoint="nas",
             path="/backup",
         )
         sync = SyncConfig(
@@ -495,11 +514,14 @@ class TestSshOptions:
             destination=DestinationSyncEndpoint(volume="nas-vol"),
         )
         config = Config(
-            rsync_servers={"nas": server},
+            ssh_endpoints={"nas": server},
             volumes={"src": src, "nas-vol": dst},
             syncs={"ssh-opts-sync": sync},
         )
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+        )
         assert "Compression=yes" in script
         assert "ServerAliveInterval=60" in script
         assert "StrictHostKeyChecking=no" in script
@@ -520,7 +542,10 @@ class TestShellValidity:
 
     def test_local_to_remote_valid_syntax(self) -> None:
         config = _local_to_remote_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+        )
         result = subprocess.run(
             ["bash", "-n"],
             input=script,
@@ -531,7 +556,10 @@ class TestShellValidity:
 
     def test_remote_to_local_valid_syntax(self) -> None:
         config = _remote_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+        )
         result = subprocess.run(
             ["bash", "-n"],
             input=script,
@@ -542,7 +570,10 @@ class TestShellValidity:
 
     def test_remote_to_remote_valid_syntax(self) -> None:
         config = _remote_to_remote_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+        )
         result = subprocess.run(
             ["bash", "-n"],
             input=script,
@@ -586,7 +617,10 @@ class TestShellValidity:
 
     def test_proxy_jump_valid_syntax(self) -> None:
         config = _proxy_jump_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+        )
         result = subprocess.run(
             ["bash", "-n"],
             input=script,
@@ -737,7 +771,7 @@ class TestSummary:
 
 class TestRemoteBtrfs:
     def test_remote_btrfs_snapshot(self) -> None:
-        server = RsyncServer(
+        server = SshEndpoint(
             slug="nas",
             host="nas.example.com",
             user="backup",
@@ -745,7 +779,7 @@ class TestRemoteBtrfs:
         src = LocalVolume(slug="src", path="/mnt/data")
         dst = RemoteVolume(
             slug="nas-vol",
-            rsync_server="nas",
+            ssh_endpoint="nas",
             path="/volume1",
         )
         sync = SyncConfig(
@@ -759,11 +793,14 @@ class TestRemoteBtrfs:
             ),
         )
         config = Config(
-            rsync_servers={"nas": server},
+            ssh_endpoints={"nas": server},
             volumes={"src": src, "nas-vol": dst},
             syncs={"remote-btrfs": sync},
         )
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+        )
         # Btrfs commands should be wrapped in SSH
         assert "btrfs subvolume snapshot" in script
         assert "btrfs property set" in script
@@ -824,12 +861,15 @@ class TestRelativePaths:
 
     def test_relative_src_local_to_remote(self) -> None:
         config = _local_to_remote_config()
+        resolved = resolve_all_endpoints(config)
         options = ScriptOptions(
             config_path="/etc/nbkp/config.yaml",
             output_file="/mnt/data/backup.sh",
             relative_src=True,
         )
-        script = generate_script(config, options, now=_NOW)
+        script = generate_script(
+            config, options, now=_NOW, resolved_endpoints=resolved
+        )
         # Local source relativized
         assert "${NBKP_SCRIPT_DIR}" in script
         # Remote dest stays absolute
@@ -837,12 +877,15 @@ class TestRelativePaths:
 
     def test_relative_dst_remote_to_local(self) -> None:
         config = _remote_to_local_config()
+        resolved = resolve_all_endpoints(config)
         options = ScriptOptions(
             config_path="/etc/nbkp/config.yaml",
             output_file="/mnt/backup/backup.sh",
             relative_dst=True,
         )
-        script = generate_script(config, options, now=_NOW)
+        script = generate_script(
+            config, options, now=_NOW, resolved_endpoints=resolved
+        )
         # Local dest relativized
         assert "${NBKP_SCRIPT_DIR}" in script
         # Remote source stays absolute
@@ -850,13 +893,16 @@ class TestRelativePaths:
 
     def test_relative_remote_to_remote_unchanged(self) -> None:
         config = _remote_to_remote_config()
+        resolved = resolve_all_endpoints(config)
         options = ScriptOptions(
             config_path="/etc/nbkp/config.yaml",
             output_file="/tmp/backup.sh",
             relative_src=True,
             relative_dst=True,
         )
-        script = generate_script(config, options, now=_NOW)
+        script = generate_script(
+            config, options, now=_NOW, resolved_endpoints=resolved
+        )
         # Remote volumes are never relativized
         assert "NBKP_SCRIPT_DIR" not in script
 

@@ -18,7 +18,8 @@ from .config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
-    RsyncServer,
+    ResolvedEndpoints,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
 )
@@ -60,18 +61,19 @@ def _sync_options(sync: SyncConfig) -> str:
 
 
 def format_volume_display(
-    vol: LocalVolume | RemoteVolume, config: Config
+    vol: LocalVolume | RemoteVolume,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Format a volume for human display."""
     match vol:
         case RemoteVolume():
-            server = config.rsync_servers[vol.rsync_server]
-            if server.user:
-                host_part = f"{server.user}@{server.host}"
+            ep = resolved_endpoints[vol.slug]
+            if ep.server.user:
+                host_part = f"{ep.server.user}@{ep.server.host}"
             else:
-                host_part = server.host
-            if server.port != 22:
-                host_part += f":{server.port}"
+                host_part = ep.server.host
+            if ep.server.port != 22:
+                host_part += f":{ep.server.port}"
             return f"{host_part}:{vol.path}"
         case LocalVolume():
             return vol.path
@@ -83,8 +85,10 @@ def print_human_check(
     config: Config,
     *,
     console: Console | None = None,
+    resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> None:
     """Print human-readable status output."""
+    re = resolved_endpoints or {}
     if console is None:
         console = Console()
 
@@ -106,7 +110,7 @@ def print_human_check(
         vol_table.add_row(
             vs.slug,
             vol_type,
-            format_volume_display(vol, config),
+            format_volume_display(vol, re),
             _status_text(vs.active, vs.reasons),
         )
 
@@ -213,13 +217,13 @@ def print_human_prune_results(
     console.print(table)
 
 
-def _ssh_prefix(server: RsyncServer) -> str:
+def _ssh_prefix(server: SshEndpoint) -> str:
     """Build human-friendly SSH command prefix."""
     parts = ["ssh"]
     if server.port != 22:
         parts.extend(["-p", str(server.port)])
-    if server.ssh_key:
-        parts.extend(["-i", server.ssh_key])
+    if server.key:
+        parts.extend(["-i", server.key])
     host = f"{server.user}@{server.host}" if server.user else server.host
     parts.append(host)
     return " ".join(parts)
@@ -228,15 +232,15 @@ def _ssh_prefix(server: RsyncServer) -> str:
 def _wrap_cmd(
     cmd: str,
     vol: LocalVolume | RemoteVolume,
-    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Wrap a shell command for remote execution."""
     match vol:
         case LocalVolume():
             return cmd
         case RemoteVolume():
-            server = config.rsync_servers[vol.rsync_server]
-            return f"{_ssh_prefix(server)} '{cmd}'"
+            ep = resolved_endpoints[vol.slug]
+            return f"{_ssh_prefix(ep.server)} '{cmd}'"
 
 
 def _endpoint_path(
@@ -252,15 +256,15 @@ def _endpoint_path(
 
 def _host_label(
     vol: LocalVolume | RemoteVolume,
-    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Human-readable host label for a volume."""
     match vol:
         case LocalVolume():
             return "this machine"
         case RemoteVolume():
-            server = config.rsync_servers[vol.rsync_server]
-            return server.host
+            ep = resolved_endpoints[vol.slug]
+            return ep.server.host
 
 
 _INDENT = "  "
@@ -311,21 +315,28 @@ def _print_marker_fix(
     vol: LocalVolume | RemoteVolume,
     path: str,
     marker: str,
-    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> None:
     """Print marker creation fix with mount reminder."""
     p2 = _INDENT * 2
     console.print(f"{p2}Ensure the volume is mounted, then:")
-    _print_cmd(console, _wrap_cmd(f"mkdir -p {path}", vol, config))
     _print_cmd(
         console,
-        _wrap_cmd(f"touch {path}/{marker}", vol, config),
+        _wrap_cmd(f"mkdir -p {path}", vol, resolved_endpoints),
+    )
+    _print_cmd(
+        console,
+        _wrap_cmd(
+            f"touch {path}/{marker}",
+            vol,
+            resolved_endpoints,
+        ),
     )
 
 
 def _print_ssh_troubleshoot(
     console: Console,
-    server: RsyncServer,
+    server: SshEndpoint,
 ) -> None:
     """Print SSH connectivity troubleshooting instructions."""
     p2 = _INDENT * 2
@@ -337,13 +348,13 @@ def _print_ssh_troubleshoot(
     console.print(f"{p2}Verify connectivity:")
     _print_cmd(console, f"{ssh_cmd} echo ok", indent=3)
     console.print(f"{p2}If authentication fails:")
-    if server.ssh_key:
+    if server.key:
         console.print(f"{p3}1. Ensure the key exists:")
-        _print_cmd(console, f"ls -l {server.ssh_key}", indent=4)
+        _print_cmd(console, f"ls -l {server.key}", indent=4)
         console.print(f"{p3}2. Copy it to the server:")
         _print_cmd(
             console,
-            f"ssh-copy-id {port_flag}" f"-i {server.ssh_key} {user_host}",
+            f"ssh-copy-id {port_flag}" f"-i {server.key} {user_host}",
             indent=4,
         )
     else:
@@ -364,6 +375,7 @@ def _print_sync_reason_fix(
     sync: SyncConfig,
     reason: SyncReason,
     config: Config,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> None:
     """Print fix instructions for a sync reason."""
     p2 = _INDENT * 2
@@ -374,8 +386,8 @@ def _print_sync_reason_fix(
             src = config.volumes[sync.source.volume]
             match src:
                 case RemoteVolume():
-                    server = config.rsync_servers[src.rsync_server]
-                    _print_ssh_troubleshoot(console, server)
+                    ep = resolved_endpoints[src.slug]
+                    _print_ssh_troubleshoot(console, ep.server)
                 case LocalVolume():
                     console.print(
                         f"{p2}Source volume"
@@ -386,8 +398,8 @@ def _print_sync_reason_fix(
             dst = config.volumes[sync.destination.volume]
             match dst:
                 case RemoteVolume():
-                    server = config.rsync_servers[dst.rsync_server]
-                    _print_ssh_troubleshoot(console, server)
+                    ep = resolved_endpoints[dst.slug]
+                    _print_ssh_troubleshoot(console, ep.server)
                 case LocalVolume():
                     console.print(
                         f"{p2}Destination volume"
@@ -397,34 +409,46 @@ def _print_sync_reason_fix(
         case SyncReason.SOURCE_MARKER_NOT_FOUND:
             src = config.volumes[sync.source.volume]
             path = _endpoint_path(src, sync.source.subdir)
-            _print_marker_fix(console, src, path, ".nbkp-src", config)
+            _print_marker_fix(
+                console,
+                src,
+                path,
+                ".nbkp-src",
+                resolved_endpoints,
+            )
         case SyncReason.DESTINATION_MARKER_NOT_FOUND:
             dst = config.volumes[sync.destination.volume]
             path = _endpoint_path(dst, sync.destination.subdir)
-            _print_marker_fix(console, dst, path, ".nbkp-dst", config)
+            _print_marker_fix(
+                console,
+                dst,
+                path,
+                ".nbkp-dst",
+                resolved_endpoints,
+            )
         case SyncReason.RSYNC_NOT_FOUND_ON_SOURCE:
             src = config.volumes[sync.source.volume]
-            host = _host_label(src, config)
+            host = _host_label(src, resolved_endpoints)
             console.print(f"{p2}Install rsync on {host}:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
         case SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION:
             dst = config.volumes[sync.destination.volume]
-            host = _host_label(dst, config)
+            host = _host_label(dst, resolved_endpoints)
             console.print(f"{p2}Install rsync on {host}:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
         case SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION:
             dst = config.volumes[sync.destination.volume]
-            host = _host_label(dst, config)
+            host = _host_label(dst, resolved_endpoints)
             console.print(f"{p2}Install btrfs-progs on {host}:")
             _print_cmd(console, _BTRFS_INSTALL, indent=3)
         case SyncReason.STAT_NOT_FOUND_ON_DESTINATION:
             dst = config.volumes[sync.destination.volume]
-            host = _host_label(dst, config)
+            host = _host_label(dst, resolved_endpoints)
             console.print(f"{p2}Install coreutils (stat)" f" on {host}:")
             _print_cmd(console, _COREUTILS_INSTALL, indent=3)
         case SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION:
             dst = config.volumes[sync.destination.volume]
-            host = _host_label(dst, config)
+            host = _host_label(dst, resolved_endpoints)
             console.print(f"{p2}Install util-linux (findmnt)" f" on {host}:")
             _print_cmd(console, _UTIL_LINUX_INSTALL, indent=3)
         case SyncReason.DESTINATION_NOT_BTRFS:
@@ -433,16 +457,16 @@ def _print_sync_reason_fix(
             )
         case SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME:
             dst = config.volumes[sync.destination.volume]
-            ep = _endpoint_path(dst, sync.destination.subdir)
+            path = _endpoint_path(dst, sync.destination.subdir)
             cmds = [
-                f"sudo btrfs subvolume create {ep}/latest",
-                f"sudo mkdir {ep}/snapshots",
-                "sudo chown <user>:<group>" f" {ep}/latest {ep}/snapshots",
+                f"sudo btrfs subvolume create {path}/latest",
+                f"sudo mkdir {path}/snapshots",
+                "sudo chown <user>:<group>" f" {path}/latest {path}/snapshots",
             ]
             for cmd in cmds:
                 _print_cmd(
                     console,
-                    _wrap_cmd(cmd, dst, config),
+                    _wrap_cmd(cmd, dst, resolved_endpoints),
                 )
         case SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM:
             dst = config.volumes[sync.destination.volume]
@@ -454,7 +478,10 @@ def _print_sync_reason_fix(
                 " remount,user_subvol_rm_allowed"
                 f" {dst.path}"
             )
-            _print_cmd(console, _wrap_cmd(cmd, dst, config))
+            _print_cmd(
+                console,
+                _wrap_cmd(cmd, dst, resolved_endpoints),
+            )
             console.print(
                 f"{p2}To persist, add"
                 " user_subvol_rm_allowed to"
@@ -463,27 +490,27 @@ def _print_sync_reason_fix(
             )
         case SyncReason.DESTINATION_LATEST_NOT_FOUND:
             dst = config.volumes[sync.destination.volume]
-            ep = _endpoint_path(dst, sync.destination.subdir)
+            path = _endpoint_path(dst, sync.destination.subdir)
             cmds = [
-                f"sudo btrfs subvolume create {ep}/latest",
-                "sudo chown <user>:<group>" f" {ep}/latest",
+                f"sudo btrfs subvolume create {path}/latest",
+                "sudo chown <user>:<group>" f" {path}/latest",
             ]
             for cmd in cmds:
                 _print_cmd(
                     console,
-                    _wrap_cmd(cmd, dst, config),
+                    _wrap_cmd(cmd, dst, resolved_endpoints),
                 )
         case SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND:
             dst = config.volumes[sync.destination.volume]
-            ep = _endpoint_path(dst, sync.destination.subdir)
+            path = _endpoint_path(dst, sync.destination.subdir)
             cmds = [
-                f"sudo mkdir {ep}/snapshots",
-                "sudo chown <user>:<group>" f" {ep}/snapshots",
+                f"sudo mkdir {path}/snapshots",
+                "sudo chown <user>:<group>" f" {path}/snapshots",
             ]
             for cmd in cmds:
                 _print_cmd(
                     console,
-                    _wrap_cmd(cmd, dst, config),
+                    _wrap_cmd(cmd, dst, resolved_endpoints),
                 )
 
 
@@ -493,8 +520,10 @@ def print_human_troubleshoot(
     config: Config,
     *,
     console: Console | None = None,
+    resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> None:
     """Print troubleshooting instructions."""
+    re = resolved_endpoints or {}
     if console is None:
         console = Console()
     has_issues = False
@@ -515,19 +544,25 @@ def print_human_troubleshoot(
                         vol,
                         vol.path,
                         ".nbkp-vol",
-                        config,
+                        re,
                     )
                 case VolumeReason.UNREACHABLE:
                     match vol:
                         case RemoteVolume():
-                            server = config.rsync_servers[vol.rsync_server]
-                            _print_ssh_troubleshoot(console, server)
+                            ep = re[vol.slug]
+                            _print_ssh_troubleshoot(console, ep.server)
 
     for ss in failed_syncs:
         console.print(f"\n[bold]Sync {ss.slug!r}:[/bold]")
         for sync_reason in ss.reasons:
             console.print(f"{_INDENT}{sync_reason.value}")
-            _print_sync_reason_fix(console, ss.config, sync_reason, config)
+            _print_sync_reason_fix(
+                console,
+                ss.config,
+                sync_reason,
+                config,
+                re,
+            )
 
     if not has_issues:
         console.print("No issues found." " All volumes and syncs are active.")
@@ -546,28 +581,32 @@ def print_human_config(
     config: Config,
     *,
     console: Console | None = None,
+    resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> None:
     """Print human-readable configuration."""
+    re = resolved_endpoints or {}
     if console is None:
         console = Console()
 
-    if config.rsync_servers:
-        server_table = Table(title="Rsync Servers:")
+    if config.ssh_endpoints:
+        server_table = Table(title="SSH Endpoints:")
         server_table.add_column("Name", style="bold")
         server_table.add_column("Host")
         server_table.add_column("Port")
         server_table.add_column("User")
-        server_table.add_column("SSH Key")
+        server_table.add_column("Key")
         server_table.add_column("Proxy Jump")
+        server_table.add_column("Location")
 
-        for server in config.rsync_servers.values():
+        for server in config.ssh_endpoints.values():
             server_table.add_row(
                 server.slug,
                 server.host,
                 str(server.port),
                 server.user or "",
-                server.ssh_key or "",
+                server.key or "",
                 server.proxy_jump or "",
+                server.location or "",
             )
 
         console.print(server_table)
@@ -587,7 +626,7 @@ def print_human_config(
         vol_table.add_row(
             vol.slug,
             vol_type,
-            format_volume_display(vol, config),
+            format_volume_display(vol, re),
         )
 
     console.print(vol_table)

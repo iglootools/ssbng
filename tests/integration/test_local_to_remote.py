@@ -11,9 +11,10 @@ from nbkp.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
-    RsyncServer,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
+    resolve_all_endpoints,
 )
 from nbkp.sync.rsync import run_rsync
 
@@ -26,11 +27,11 @@ class TestLocalToRemote:
     def test_sync_to_container(
         self,
         tmp_path: Path,
-        rsync_server: RsyncServer,
+        ssh_endpoint: SshEndpoint,
         remote_volume: RemoteVolume,
     ) -> None:
         # Create markers on remote
-        create_markers(rsync_server, "/data", [".nbkp-vol", ".nbkp-dst"])
+        create_markers(ssh_endpoint, "/data", [".nbkp-vol", ".nbkp-dst"])
 
         # Create local source files
         src_dir = tmp_path / "src"
@@ -44,33 +45,38 @@ class TestLocalToRemote:
             destination=DestinationSyncEndpoint(volume="dst"),
         )
         config = Config(
-            rsync_servers={"test-server": rsync_server},
+            ssh_endpoints={"test-server": ssh_endpoint},
             volumes={"src": src_vol, "dst": remote_volume},
             syncs={"test-sync": sync},
         )
 
-        result = run_rsync(sync, config)
+        resolved = resolve_all_endpoints(config)
+        result = run_rsync(
+            sync,
+            config,
+            resolved_endpoints=resolved,
+        )
         assert result.returncode == 0
 
         # Verify file arrived on container
-        check = ssh_exec(rsync_server, "cat /data/latest/hello.txt")
+        check = ssh_exec(ssh_endpoint, "cat /data/latest/hello.txt")
         assert check.returncode == 0
         assert check.stdout.strip() == "hello from local"
 
     def test_sync_with_subdir(
         self,
         tmp_path: Path,
-        rsync_server: RsyncServer,
+        ssh_endpoint: SshEndpoint,
         remote_volume: RemoteVolume,
     ) -> None:
         # Create remote subdir structure and markers
         ssh_exec(
-            rsync_server,
+            ssh_endpoint,
             "mkdir -p /data/photos-backup/latest",
         )
-        create_markers(rsync_server, "/data", [".nbkp-vol"])
+        create_markers(ssh_endpoint, "/data", [".nbkp-vol"])
         create_markers(
-            rsync_server,
+            ssh_endpoint,
             "/data/photos-backup",
             [".nbkp-dst"],
         )
@@ -89,16 +95,21 @@ class TestLocalToRemote:
             ),
         )
         config = Config(
-            rsync_servers={"test-server": rsync_server},
+            ssh_endpoints={"test-server": ssh_endpoint},
             volumes={"src": src_vol, "dst": remote_volume},
             syncs={"test-sync": sync},
         )
 
-        result = run_rsync(sync, config)
+        resolved = resolve_all_endpoints(config)
+        result = run_rsync(
+            sync,
+            config,
+            resolved_endpoints=resolved,
+        )
         assert result.returncode == 0
 
         check = ssh_exec(
-            rsync_server,
+            ssh_endpoint,
             "cat /data/photos-backup/latest/img.jpg",
         )
         assert check.returncode == 0

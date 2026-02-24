@@ -12,7 +12,7 @@ from nbkp.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
-    RsyncServer,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
 )
@@ -30,20 +30,20 @@ def config_to_yaml(config: Config) -> str:
 def _sample_config() -> Config:
     """Build the full sample Config."""
     return Config(
-        rsync_servers={
-            "nas-server": RsyncServer(
+        ssh_endpoints={
+            "nas-server": SshEndpoint(
                 slug="nas-server",
                 host="nas.example.com",
                 port=5022,
                 user="backup",
-                ssh_key="~/.ssh/key",
+                key="~/.ssh/key",
             ),
         },
         volumes={
             "local-data": LocalVolume(slug="local-data", path="/mnt/data"),
             "nas": RemoteVolume(
                 slug="nas",
-                rsync_server="nas-server",
+                ssh_endpoint="nas-server",
                 path="/volume1/backups",
             ),
         },
@@ -102,19 +102,19 @@ def local_volume() -> LocalVolume:
 
 
 @pytest.fixture()
-def rsync_server() -> RsyncServer:
-    return RsyncServer(
+def ssh_endpoint() -> SshEndpoint:
+    return SshEndpoint(
         slug="nas-server",
         host="nas.example.com",
         port=5022,
         user="backup",
-        ssh_key="~/.ssh/key",
+        key="~/.ssh/key",
     )
 
 
 @pytest.fixture()
-def rsync_server_minimal() -> RsyncServer:
-    return RsyncServer(
+def ssh_endpoint_minimal() -> SshEndpoint:
+    return SshEndpoint(
         slug="nas2-server",
         host="nas2.example.com",
     )
@@ -124,7 +124,7 @@ def rsync_server_minimal() -> RsyncServer:
 def remote_volume() -> RemoteVolume:
     return RemoteVolume(
         slug="nas",
-        rsync_server="nas-server",
+        ssh_endpoint="nas-server",
         path="/volume1/backups",
     )
 
@@ -133,7 +133,7 @@ def remote_volume() -> RemoteVolume:
 def remote_volume_minimal() -> RemoteVolume:
     return RemoteVolume(
         slug="nas2",
-        rsync_server="nas2-server",
+        ssh_endpoint="nas2-server",
         path="/backups",
     )
 

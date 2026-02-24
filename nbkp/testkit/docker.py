@@ -10,7 +10,7 @@ from pathlib import Path
 import docker as dockerlib
 import typer
 
-from ..config import RsyncServer
+from ..config import SshEndpoint
 from ..remote.fabricssh import run_remote_command
 
 DOCKER_DIR = Path(__file__).resolve().parent / "dockerbuild"
@@ -110,7 +110,7 @@ def start_docker_container(pub_key: Path) -> int:
 
 
 def wait_for_ssh(
-    server: RsyncServer,
+    server: SshEndpoint,
     timeout: int = 30,
 ) -> None:
     """Poll SSH until the daemon sends its banner."""
@@ -130,7 +130,7 @@ def wait_for_ssh(
 
 
 def ssh_exec(
-    server: RsyncServer,
+    server: SshEndpoint,
     command: str,
     *,
     check: bool = True,
@@ -147,7 +147,7 @@ def ssh_exec(
     return result
 
 
-def setup_remote(server: RsyncServer) -> None:
+def setup_remote(server: SshEndpoint) -> None:
     """Create markers and btrfs subvolumes on container."""
 
     def run(cmd: str) -> None:

@@ -21,7 +21,8 @@ from .config import (
     Config,
     LocalVolume,
     RemoteVolume,
-    RsyncServer,
+    ResolvedEndpoints,
+    SshEndpoint,
     SyncConfig,
 )
 from .remote.ssh import build_ssh_base_args
@@ -45,12 +46,14 @@ def generate_script(
     options: ScriptOptions,
     *,
     now: datetime | None = None,
+    resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> str:
     """Generate a standalone bash script from config."""
+    re = resolved_endpoints or {}
     if now is None:
         now = datetime.now(timezone.utc)
     vol_paths = _build_vol_paths(config, options)
-    ctx = _build_script_context(config, options, vol_paths, now)
+    ctx = _build_script_context(config, options, vol_paths, now, re)
     template = _load_template()
     return template.render(ctx) + "\n"
 
@@ -187,8 +190,8 @@ def _format_shell_command(
 
 
 def _format_remote_test(
-    server: RsyncServer,
-    proxy: RsyncServer | None,
+    server: SshEndpoint,
+    proxy: SshEndpoint | None,
     test_args: list[str],
 ) -> str:
     ssh_args = build_ssh_base_args(server, proxy)
@@ -197,8 +200,8 @@ def _format_remote_test(
 
 
 def _format_remote_check(
-    server: RsyncServer,
-    proxy: RsyncServer | None,
+    server: SshEndpoint,
+    proxy: SshEndpoint | None,
     cmd: list[str],
 ) -> str:
     ssh_args = build_ssh_base_args(server, proxy)
@@ -212,8 +215,8 @@ def _format_remote_check(
 
 
 def _format_remote_command_str(
-    server: RsyncServer,
-    proxy: RsyncServer | None,
+    server: SshEndpoint,
+    proxy: SshEndpoint | None,
     cmd: list[str],
 ) -> str:
     ssh_args = build_ssh_base_args(server, proxy)
@@ -226,54 +229,55 @@ def _format_remote_command_str(
 
 def _test_cmd(
     vol: LocalVolume | RemoteVolume,
-    config: Config,
     test_args: list[str],
+    resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Shell expression for `test ... `."""
     match vol:
         case LocalVolume():
             return "test " + " ".join(_qp(a) for a in test_args)
         case RemoteVolume():
-            server = config.rsync_servers[vol.rsync_server]
-            proxy = config.resolve_proxy(server)
-            return _format_remote_test(server, proxy, test_args)
+            ep = resolved_endpoints[vol.slug]
+            return _format_remote_test(ep.server, ep.proxy, test_args)
 
 
 def _which_cmd(
     vol: LocalVolume | RemoteVolume,
-    config: Config,
     command: str,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Shell expression to check command availability."""
     match vol:
         case LocalVolume():
             return f"command -v {_sq(command)} >/dev/null 2>&1"
         case RemoteVolume():
-            server = config.rsync_servers[vol.rsync_server]
-            proxy = config.resolve_proxy(server)
-            return _format_remote_check(server, proxy, ["which", command])
+            ep = resolved_endpoints[vol.slug]
+            return _format_remote_check(
+                ep.server, ep.proxy, ["which", command]
+            )
 
 
 def _ls_snapshots_cmd(
     dst_vol: LocalVolume | RemoteVolume,
-    config: Config,
     snaps_dir: str,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Shell expression to list snapshot dirs."""
     match dst_vol:
         case LocalVolume():
             return f"ls {_qp(snaps_dir)}"
         case RemoteVolume():
-            server = config.rsync_servers[dst_vol.rsync_server]
-            proxy = config.resolve_proxy(server)
-            return _format_remote_command_str(server, proxy, ["ls", snaps_dir])
+            ep = resolved_endpoints[dst_vol.slug]
+            return _format_remote_command_str(
+                ep.server, ep.proxy, ["ls", snaps_dir]
+            )
 
 
 def _snapshot_cmd(
     dst_vol: LocalVolume | RemoteVolume,
-    config: Config,
     latest: str,
     snaps_dir: str,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Shell command to create a btrfs snapshot."""
     snap_args = [
@@ -288,8 +292,7 @@ def _snapshot_cmd(
         case LocalVolume():
             return _format_shell_command(snap_args, cont_indent="        ")
         case RemoteVolume():
-            server = config.rsync_servers[dst_vol.rsync_server]
-            proxy = config.resolve_proxy(server)
+            ep = resolved_endpoints[dst_vol.slug]
             remote_args = [
                 "btrfs",
                 "subvolume",
@@ -298,13 +301,13 @@ def _snapshot_cmd(
                 latest,
                 f"{snaps_dir}/\\$NBKP_TS",
             ]
-            return _format_remote_command_str(server, proxy, remote_args)
+            return _format_remote_command_str(ep.server, ep.proxy, remote_args)
 
 
 def _btrfs_prop_cmd(
     dst_vol: LocalVolume | RemoteVolume,
-    config: Config,
     snaps_dir: str,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Shell command to set ro=false on $snap."""
     match dst_vol:
@@ -313,11 +316,10 @@ def _btrfs_prop_cmd(
                 f"btrfs property set" f' {_qp(snaps_dir)}/"$snap"' f" ro false"
             )
         case RemoteVolume():
-            server = config.rsync_servers[dst_vol.rsync_server]
-            proxy = config.resolve_proxy(server)
+            ep = resolved_endpoints[dst_vol.slug]
             return _format_remote_command_str(
-                server,
-                proxy,
+                ep.server,
+                ep.proxy,
                 [
                     "btrfs",
                     "property",
@@ -331,19 +333,18 @@ def _btrfs_prop_cmd(
 
 def _btrfs_del_cmd(
     dst_vol: LocalVolume | RemoteVolume,
-    config: Config,
     snaps_dir: str,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Shell command to delete $snap."""
     match dst_vol:
         case LocalVolume():
             return f"btrfs subvolume delete" f' {_qp(snaps_dir)}/"$snap"'
         case RemoteVolume():
-            server = config.rsync_servers[dst_vol.rsync_server]
-            proxy = config.resolve_proxy(server)
+            ep = resolved_endpoints[dst_vol.slug]
             return _format_remote_command_str(
-                server,
-                proxy,
+                ep.server,
+                ep.proxy,
                 [
                     "btrfs",
                     "subvolume",
@@ -358,21 +359,21 @@ def _btrfs_del_cmd(
 
 def _build_check_line(
     vol: LocalVolume | RemoteVolume,
-    config: Config,
     test_args: list[str],
     error_msg: str,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> str:
-    cmd = _test_cmd(vol, config, test_args)
+    cmd = _test_cmd(vol, test_args, resolved_endpoints)
     return f"{cmd}" f' || {{ nbkp_log "ERROR: {error_msg}"; return 1; }}'
 
 
 def _build_which_line(
     vol: LocalVolume | RemoteVolume,
-    config: Config,
     command: str,
     error_msg: str,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> str:
-    check = _which_cmd(vol, config, command)
+    check = _which_cmd(vol, command, resolved_endpoints)
     return f"{check}" f' || {{ nbkp_log "ERROR: {error_msg}"; return 1; }}'
 
 
@@ -380,6 +381,7 @@ def _build_preflight_block(
     sync: SyncConfig,
     config: Config,
     vol_paths: dict[str, str],
+    resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Build preflight check lines at indent 0."""
     src_vol = config.volumes[sync.source.volume]
@@ -398,9 +400,9 @@ def _build_preflight_block(
     lines.append(
         _build_check_line(
             src_vol,
-            config,
             ["-f", src_marker],
             f"source marker {src_marker} not found",
+            resolved_endpoints,
         )
     )
 
@@ -409,16 +411,19 @@ def _build_preflight_block(
     lines.append(
         _build_check_line(
             dst_vol,
-            config,
             ["-f", dst_marker],
             f"destination marker {dst_marker} not found",
+            resolved_endpoints,
         )
     )
 
     # rsync on source
     lines.append(
         _build_which_line(
-            src_vol, config, "rsync", "rsync not found on source"
+            src_vol,
+            "rsync",
+            "rsync not found on source",
+            resolved_endpoints,
         )
     )
 
@@ -426,9 +431,9 @@ def _build_preflight_block(
     lines.append(
         _build_which_line(
             dst_vol,
-            config,
             "rsync",
             "rsync not found on destination",
+            resolved_endpoints,
         )
     )
 
@@ -437,27 +442,27 @@ def _build_preflight_block(
         lines.append(
             _build_which_line(
                 dst_vol,
-                config,
                 "btrfs",
                 "btrfs not found on destination",
+                resolved_endpoints,
             )
         )
         latest_dir = f"{dst_path}/latest"
         lines.append(
             _build_check_line(
                 dst_vol,
-                config,
                 ["-d", latest_dir],
                 "destination latest/ directory not found" f" ({latest_dir})",
+                resolved_endpoints,
             )
         )
         snaps_dir = f"{dst_path}/snapshots"
         lines.append(
             _build_check_line(
                 dst_vol,
-                config,
                 ["-d", snaps_dir],
                 "destination snapshots/ directory not found" f" ({snaps_dir})",
+                resolved_endpoints,
             )
         )
 
@@ -468,6 +473,7 @@ def _build_link_dest_block(
     sync: SyncConfig,
     config: Config,
     vol_paths: dict[str, str],
+    resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Build link-dest resolution block at indent 0."""
     dst_vol = config.volumes[sync.destination.volume]
@@ -477,7 +483,7 @@ def _build_link_dest_block(
         sync.destination.subdir,
     )
     snaps_dir = f"{dest_path}/snapshots"
-    ls_cmd = _ls_snapshots_cmd(dst_vol, config, snaps_dir)
+    ls_cmd = _ls_snapshots_cmd(dst_vol, snaps_dir, resolved_endpoints)
 
     return dedent(f"""\
         NBKP_LATEST_SNAP=$({ls_cmd} 2>/dev/null | sort | tail -1)
@@ -491,11 +497,17 @@ def _build_rsync_block(
     sync: SyncConfig,
     config: Config,
     vol_paths: dict[str, str],
+    resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Build rsync command block at indent 0."""
     i2 = "    "  # continuation indent within this block
     cmd = build_rsync_command(
-        sync, config, dry_run=False, link_dest=None, verbose=0
+        sync,
+        config,
+        dry_run=False,
+        link_dest=None,
+        verbose=0,
+        resolved_endpoints=resolved_endpoints,
     )
 
     # Substitute local volume paths
@@ -535,6 +547,7 @@ def _build_snapshot_block(
     sync: SyncConfig,
     config: Config,
     vol_paths: dict[str, str],
+    resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Build btrfs snapshot block at indent 0."""
     dst_vol = config.volumes[sync.destination.volume]
@@ -545,7 +558,7 @@ def _build_snapshot_block(
     )
     latest = f"{dest_path}/latest"
     snaps_dir = f"{dest_path}/snapshots"
-    snap = _snapshot_cmd(dst_vol, config, latest, snaps_dir)
+    snap = _snapshot_cmd(dst_vol, latest, snaps_dir, resolved_endpoints)
 
     return dedent(f"""\
         if [ "$NBKP_DRY_RUN" = false ]; then
@@ -559,6 +572,7 @@ def _build_prune_block(
     config: Config,
     max_snapshots: int,
     vol_paths: dict[str, str],
+    resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Build btrfs prune block at indent 0."""
     dst_vol = config.volumes[sync.destination.volume]
@@ -568,9 +582,9 @@ def _build_prune_block(
         sync.destination.subdir,
     )
     snaps_dir = f"{dest_path}/snapshots"
-    ls_cmd = _ls_snapshots_cmd(dst_vol, config, snaps_dir)
-    prop_cmd = _btrfs_prop_cmd(dst_vol, config, snaps_dir)
-    del_cmd = _btrfs_del_cmd(dst_vol, config, snaps_dir)
+    ls_cmd = _ls_snapshots_cmd(dst_vol, snaps_dir, resolved_endpoints)
+    prop_cmd = _btrfs_prop_cmd(dst_vol, snaps_dir, resolved_endpoints)
+    del_cmd = _btrfs_del_cmd(dst_vol, snaps_dir, resolved_endpoints)
 
     # fmt: off
     pipe_while = (
@@ -600,8 +614,8 @@ def _build_prune_block(
 def _build_volume_check(
     slug: str,
     vol: LocalVolume | RemoteVolume,
-    config: Config,
     vol_paths: dict[str, str],
+    resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     vpath = vol_paths[slug]
     marker = f"{vpath}/.nbkp-vol"
@@ -609,9 +623,8 @@ def _build_volume_check(
         case LocalVolume():
             test_cmd = f"test -f {_qp(marker)}"
         case RemoteVolume():
-            server = config.rsync_servers[vol.rsync_server]
-            proxy = config.resolve_proxy(server)
-            test_cmd = _format_remote_test(server, proxy, ["-f", marker])
+            ep = resolved_endpoints[vol.slug]
+            test_cmd = _format_remote_test(ep.server, ep.proxy, ["-f", marker])
     return (
         f"{test_cmd}"
         f" || {{ nbkp_log"
@@ -629,6 +642,7 @@ def _build_disabled_body(
     sync: SyncConfig,
     config: Config,
     vol_paths: dict[str, str],
+    resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Build the commented-out function body for a disabled sync."""
     enabled_sync = SyncConfig(
@@ -641,7 +655,13 @@ def _build_disabled_body(
         filters=sync.filters,
         filter_file=sync.filter_file,
     )
-    ctx = _build_sync_context(slug, enabled_sync, config, vol_paths)
+    ctx = _build_sync_context(
+        slug,
+        enabled_sync,
+        config,
+        vol_paths,
+        resolved_endpoints,
+    )
 
     # Render the function body the same way the template would
     lines = _render_enabled_function(ctx)
@@ -698,23 +718,36 @@ def _build_sync_context(
     sync: SyncConfig,
     config: Config,
     vol_paths: dict[str, str],
+    resolved_endpoints: ResolvedEndpoints,
 ) -> _SyncContext:
     """Build a _SyncContext with all pre-computed blocks."""
     has_btrfs = sync.destination.btrfs_snapshots.enabled
     btrfs_cfg = sync.destination.btrfs_snapshots
     has_prune = has_btrfs and btrfs_cfg.max_snapshots is not None
 
-    preflight = _build_preflight_block(sync, config, vol_paths)
-    link_dest = (
-        _build_link_dest_block(sync, config, vol_paths) if has_btrfs else ""
+    preflight = _build_preflight_block(
+        sync, config, vol_paths, resolved_endpoints
     )
-    rsync = _build_rsync_block(sync, config, vol_paths)
+    link_dest = (
+        _build_link_dest_block(sync, config, vol_paths, resolved_endpoints)
+        if has_btrfs
+        else ""
+    )
+    rsync = _build_rsync_block(sync, config, vol_paths, resolved_endpoints)
     snapshot = (
-        _build_snapshot_block(sync, config, vol_paths) if has_btrfs else ""
+        _build_snapshot_block(sync, config, vol_paths, resolved_endpoints)
+        if has_btrfs
+        else ""
     )
     max_snaps = btrfs_cfg.max_snapshots
     prune = (
-        _build_prune_block(sync, config, max_snaps, vol_paths)
+        _build_prune_block(
+            sync,
+            config,
+            max_snaps,
+            vol_paths,
+            resolved_endpoints,
+        )
         if has_prune and max_snaps is not None
         else ""
     )
@@ -739,6 +772,7 @@ def _build_script_context(
     options: ScriptOptions,
     vol_paths: dict[str, str],
     now: datetime,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> dict[str, object]:
     """Build the full template context dict."""
     timestamp = now.isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -750,17 +784,25 @@ def _build_script_context(
     has_script_dir = any("$" in p for p in vol_paths.values())
 
     volume_checks = [
-        _build_volume_check(slug, vol, config, vol_paths)
+        _build_volume_check(slug, vol, vol_paths, resolved_endpoints)
         for slug, vol in config.volumes.items()
     ]
 
     syncs: list[_SyncContext] = []
     for slug, sync in config.syncs.items():
-        ctx = _build_sync_context(slug, sync, config, vol_paths)
+        ctx = _build_sync_context(
+            slug, sync, config, vol_paths, resolved_endpoints
+        )
         if sync.enabled:
             syncs.append(ctx)
         else:
-            disabled_body = _build_disabled_body(slug, sync, config, vol_paths)
+            disabled_body = _build_disabled_body(
+                slug,
+                sync,
+                config,
+                vol_paths,
+                resolved_endpoints,
+            )
             syncs.append(
                 _SyncContext(
                     slug=ctx.slug,

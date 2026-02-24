@@ -5,10 +5,10 @@ from __future__ import annotations
 import shlex
 import subprocess
 
-from ..config import RsyncServer, SshOptions
+from ..config import SshEndpoint, SshConnectionOptions
 
 
-def _ssh_o_options(opts: SshOptions) -> list[str]:
+def _ssh_o_options(opts: SshConnectionOptions) -> list[str]:
     """Derive SSH -o option values from structured options."""
     result = [
         f"ConnectTimeout={opts.connect_timeout}",
@@ -27,7 +27,7 @@ def _ssh_o_options(opts: SshOptions) -> list[str]:
     return result
 
 
-def _format_proxy_jump(proxy: RsyncServer) -> str:
+def _format_proxy_jump(proxy: SshEndpoint) -> str:
     """Format proxy server as [user@]host[:port] for SSH -J."""
     host = f"{proxy.user}@{proxy.host}" if proxy.user else proxy.host
     if proxy.port != 22:
@@ -36,8 +36,8 @@ def _format_proxy_jump(proxy: RsyncServer) -> str:
 
 
 def build_ssh_base_args(
-    server: RsyncServer,
-    proxy_server: RsyncServer | None = None,
+    server: SshEndpoint,
+    proxy_server: SshEndpoint | None = None,
 ) -> list[str]:
     """Build base SSH command args for a remote volume.
 
@@ -45,12 +45,12 @@ def build_ssh_base_args(
         ssh -o ConnectTimeout=10 -o BatchMode=yes [opts] host
     """
     args = ["ssh"]
-    for opt in _ssh_o_options(server.ssh_options):
+    for opt in _ssh_o_options(server.connection_options):
         args.extend(["-o", opt])
     if server.port != 22:
         args.extend(["-p", str(server.port)])
-    if server.ssh_key:
-        args.extend(["-i", server.ssh_key])
+    if server.key:
+        args.extend(["-i", server.key])
     if proxy_server is not None:
         args.extend(["-J", _format_proxy_jump(proxy_server)])
 
@@ -60,9 +60,9 @@ def build_ssh_base_args(
 
 
 def run_remote_command(
-    server: RsyncServer,
+    server: SshEndpoint,
     command: list[str],
-    proxy_server: RsyncServer | None = None,
+    proxy_server: SshEndpoint | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run a command on a remote host via SSH."""
     cmd_string = " ".join(shlex.quote(arg) for arg in command)
@@ -75,8 +75,8 @@ def run_remote_command(
 
 
 def build_ssh_e_option(
-    server: RsyncServer,
-    proxy_server: RsyncServer | None = None,
+    server: SshEndpoint,
+    proxy_server: SshEndpoint | None = None,
 ) -> list[str]:
     """Build rsync's -e option for SSH with custom port/key.
 
@@ -84,19 +84,19 @@ def build_ssh_e_option(
         ["-e", "ssh -o ConnectTimeout=10 -o BatchMode=yes ..."]
     """
     ssh_cmd_parts = ["ssh"]
-    for opt in _ssh_o_options(server.ssh_options):
+    for opt in _ssh_o_options(server.connection_options):
         ssh_cmd_parts.extend(["-o", opt])
     if server.port != 22:
         ssh_cmd_parts.extend(["-p", str(server.port)])
-    if server.ssh_key:
-        ssh_cmd_parts.extend(["-i", server.ssh_key])
+    if server.key:
+        ssh_cmd_parts.extend(["-i", server.key])
     if proxy_server is not None:
         ssh_cmd_parts.extend(["-J", _format_proxy_jump(proxy_server)])
 
     return ["-e", " ".join(ssh_cmd_parts)]
 
 
-def format_remote_path(server: RsyncServer, path: str) -> str:
+def format_remote_path(server: SshEndpoint, path: str) -> str:
     """Format a remote path as [user@]host:path."""
     host = f"{server.user}@{server.host}" if server.user else server.host
     return f"{host}:{path}"

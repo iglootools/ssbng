@@ -6,14 +6,26 @@ import json
 import os
 import stat
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from .config import Config, ConfigError, load_config
-from .check import SyncReason, SyncStatus, VolumeStatus, check_all_syncs
+from .config import (
+    Config,
+    ConfigError,
+    EndpointFilter,
+    ResolvedEndpoints,
+    load_config,
+    resolve_all_endpoints,
+)
+from .check import (
+    SyncReason,
+    SyncStatus,
+    VolumeStatus,
+    check_all_syncs,
+)
 from .sync.btrfs import list_snapshots, prune_snapshots
 from .output import (
     OutputFormat,
@@ -66,12 +78,38 @@ def check(
             ),
         ),
     ] = False,
+    location: Annotated[
+        Optional[str],
+        typer.Option(
+            "--location",
+            "-l",
+            help="Prefer endpoints at this location",
+        ),
+    ] = None,
+    private: Annotated[
+        bool,
+        typer.Option(
+            "--private",
+            help="Prefer private (LAN) endpoints",
+        ),
+    ] = False,
+    public: Annotated[
+        bool,
+        typer.Option(
+            "--public",
+            help="Prefer public (WAN) endpoints",
+        ),
+    ] = False,
 ) -> None:
     """Check status of volumes and syncs."""
     cfg = _load_config_or_exit(config)
+    resolved = _resolve_endpoints(cfg, location, private, public)
     output_format = output
     vol_statuses, sync_statuses, has_errors = _check_and_display(
-        cfg, output_format, strict
+        cfg,
+        output_format,
+        strict,
+        resolved_endpoints=resolved,
     )
 
     if output_format is OutputFormat.JSON:
@@ -103,7 +141,8 @@ def show(
         case OutputFormat.JSON:
             typer.echo(json.dumps(cfg.model_dump(by_alias=True), indent=2))
         case OutputFormat.HUMAN:
-            print_human_config(cfg)
+            resolved = resolve_all_endpoints(cfg)
+            print_human_config(cfg, resolved_endpoints=resolved)
 
 
 @app.command()
@@ -150,12 +189,39 @@ def run(
             ),
         ),
     ] = False,
+    location: Annotated[
+        Optional[str],
+        typer.Option(
+            "--location",
+            "-l",
+            help="Prefer endpoints at this location",
+        ),
+    ] = None,
+    private: Annotated[
+        bool,
+        typer.Option(
+            "--private",
+            help="Prefer private (LAN) endpoints",
+        ),
+    ] = False,
+    public: Annotated[
+        bool,
+        typer.Option(
+            "--public",
+            help="Prefer public (WAN) endpoints",
+        ),
+    ] = False,
 ) -> None:
     """Run backup syncs."""
     cfg = _load_config_or_exit(config)
+    resolved = _resolve_endpoints(cfg, location, private, public)
     output_format = output
     vol_statuses, sync_statuses, has_errors = _check_and_display(
-        cfg, output_format, strict, only_syncs=sync
+        cfg,
+        output_format,
+        strict,
+        only_syncs=sync,
+        resolved_endpoints=resolved,
     )
 
     if has_errors:
@@ -193,9 +259,7 @@ def run(
                 status_display.stop()
                 status_display = None
             if console is not None:
-                icon = (
-                    "[green]✓[/green]" if result.success else ("[red]✗[/red]")
-                )
+                icon = "[green]✓[/green]" if result.success else "[red]✗[/red]"
                 console.print(f"{icon} {slug}")
 
         results = run_all_syncs(
@@ -206,8 +270,9 @@ def run(
             verbose=verbose,
             prune=prune,
             on_rsync_output=stream_output,
-            on_sync_start=on_sync_start if use_spinner else None,
-            on_sync_end=on_sync_end if use_spinner else None,
+            on_sync_start=(on_sync_start if use_spinner else None),
+            on_sync_end=(on_sync_end if use_spinner else None),
+            resolved_endpoints=resolved,
         )
 
         match output_format:
@@ -245,7 +310,8 @@ def sh(
         typer.Option(
             "--relative-src",
             help=(
-                "Make source paths relative to script location"
+                "Make source paths relative to"
+                " script location"
                 " (requires --output-file)"
             ),
         ),
@@ -255,9 +321,32 @@ def sh(
         typer.Option(
             "--relative-dst",
             help=(
-                "Make destination paths relative to script location"
+                "Make destination paths relative to"
+                " script location"
                 " (requires --output-file)"
             ),
+        ),
+    ] = False,
+    location: Annotated[
+        Optional[str],
+        typer.Option(
+            "--location",
+            "-l",
+            help="Prefer endpoints at this location",
+        ),
+    ] = None,
+    private: Annotated[
+        bool,
+        typer.Option(
+            "--private",
+            help="Prefer private (LAN) endpoints",
+        ),
+    ] = False,
+    public: Annotated[
+        bool,
+        typer.Option(
+            "--public",
+            help="Prefer public (WAN) endpoints",
         ),
     ] = False,
 ) -> None:
@@ -274,6 +363,7 @@ def sh(
         raise typer.Exit(2)
 
     cfg = _load_config_or_exit(config)
+    resolved = _resolve_endpoints(cfg, location, private, public)
     script = generate_script(
         cfg,
         ScriptOptions(
@@ -284,6 +374,7 @@ def sh(
             relative_src=relative_src,
             relative_dst=relative_dst,
         ),
+        resolved_endpoints=resolved,
     )
     if output_file is not None:
         path = Path(output_file)
@@ -300,13 +391,43 @@ def troubleshoot(
         Optional[str],
         typer.Option("--config", "-c", help="Path to config file"),
     ] = None,
+    location: Annotated[
+        Optional[str],
+        typer.Option(
+            "--location",
+            "-l",
+            help="Prefer endpoints at this location",
+        ),
+    ] = None,
+    private: Annotated[
+        bool,
+        typer.Option(
+            "--private",
+            help="Prefer private (LAN) endpoints",
+        ),
+    ] = False,
+    public: Annotated[
+        bool,
+        typer.Option(
+            "--public",
+            help="Prefer public (WAN) endpoints",
+        ),
+    ] = False,
 ) -> None:
     """Diagnose issues and show how to fix them."""
     cfg = _load_config_or_exit(config)
+    resolved = _resolve_endpoints(cfg, location, private, public)
     vol_statuses, sync_statuses = _check_all_with_progress(
-        cfg, use_progress=True
+        cfg,
+        use_progress=True,
+        resolved_endpoints=resolved,
     )
-    print_human_troubleshoot(vol_statuses, sync_statuses, cfg)
+    print_human_troubleshoot(
+        vol_statuses,
+        sync_statuses,
+        cfg,
+        resolved_endpoints=resolved,
+    )
 
 
 @app.command()
@@ -327,12 +448,37 @@ def prune(
         OutputFormat,
         typer.Option("--output", "-o", help="Output format"),
     ] = OutputFormat.HUMAN,
+    location: Annotated[
+        Optional[str],
+        typer.Option(
+            "--location",
+            "-l",
+            help="Prefer endpoints at this location",
+        ),
+    ] = None,
+    private: Annotated[
+        bool,
+        typer.Option(
+            "--private",
+            help="Prefer private (LAN) endpoints",
+        ),
+    ] = False,
+    public: Annotated[
+        bool,
+        typer.Option(
+            "--public",
+            help="Prefer public (WAN) endpoints",
+        ),
+    ] = False,
 ) -> None:
     """Prune old snapshots beyond max-snapshots limit."""
     cfg = _load_config_or_exit(config)
+    resolved = _resolve_endpoints(cfg, location, private, public)
     output_format = output
     _, sync_statuses = _check_all_with_progress(
-        cfg, use_progress=output_format is OutputFormat.HUMAN
+        cfg,
+        use_progress=output_format is OutputFormat.HUMAN,
+        resolved_endpoints=resolved,
     )
 
     prunable = [
@@ -354,8 +500,9 @@ def prune(
                 cfg,
                 btrfs_cfg.max_snapshots,
                 dry_run=dry_run,
+                resolved_endpoints=resolved,
             )
-            remaining = list_snapshots(status.config, cfg)
+            remaining = list_snapshots(status.config, cfg, resolved)
             results.append(
                 PruneResult(
                     sync_slug=slug,
@@ -377,7 +524,12 @@ def prune(
 
     match output_format:
         case OutputFormat.JSON:
-            typer.echo(json.dumps([r.model_dump() for r in results], indent=2))
+            typer.echo(
+                json.dumps(
+                    [r.model_dump() for r in results],
+                    indent=2,
+                )
+            )
         case OutputFormat.HUMAN:
             print_human_prune_results(results, dry_run)
 
@@ -385,7 +537,9 @@ def prune(
         raise typer.Exit(1)
 
 
-def _load_config_or_exit(config_path: str | None) -> Config:
+def _load_config_or_exit(
+    config_path: str | None,
+) -> Config:
     """Load config or exit with code 2 on error."""
     try:
         return load_config(config_path)
@@ -394,15 +548,47 @@ def _load_config_or_exit(config_path: str | None) -> Config:
         raise typer.Exit(2)
 
 
+def _build_endpoint_filter(
+    location: str | None,
+    private: bool,
+    public: bool,
+) -> EndpointFilter | None:
+    """Build an EndpointFilter from CLI options."""
+    network: Literal["private", "public"] | None = None
+    if private:
+        network = "private"
+    elif public:
+        network = "public"
+    if location is None and network is None:
+        return None
+    return EndpointFilter(location=location, network=network)
+
+
+def _resolve_endpoints(
+    cfg: Config,
+    location: str | None,
+    private: bool,
+    public: bool,
+) -> ResolvedEndpoints:
+    """Build filter and resolve all endpoints once."""
+    ef = _build_endpoint_filter(location, private, public)
+    return resolve_all_endpoints(cfg, ef)
+
+
 def _check_all_with_progress(
     cfg: Config,
     use_progress: bool,
     only_syncs: list[str] | None = None,
+    resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     """Run check_all_syncs with an optional progress bar."""
     total = len(cfg.volumes) + len(cfg.syncs)
     if not use_progress or total == 0:
-        return check_all_syncs(cfg, only_syncs=only_syncs)
+        return check_all_syncs(
+            cfg,
+            only_syncs=only_syncs,
+            resolved_endpoints=resolved_endpoints,
+        )
 
     with Progress(
         SpinnerColumn(),
@@ -419,6 +605,7 @@ def _check_all_with_progress(
             cfg,
             on_progress=on_progress,
             only_syncs=only_syncs,
+            resolved_endpoints=resolved_endpoints,
         )
 
 
@@ -427,6 +614,7 @@ def _check_and_display(
     output_format: OutputFormat,
     strict: bool,
     only_syncs: list[str] | None = None,
+    resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> tuple[
     dict[str, VolumeStatus],
     dict[str, SyncStatus],
@@ -442,10 +630,16 @@ def _check_and_display(
         cfg,
         use_progress=output_format is OutputFormat.HUMAN,
         only_syncs=only_syncs,
+        resolved_endpoints=resolved_endpoints,
     )
 
     if output_format is OutputFormat.HUMAN:
-        print_human_check(vol_statuses, sync_statuses, cfg)
+        print_human_check(
+            vol_statuses,
+            sync_statuses,
+            cfg,
+            resolved_endpoints=resolved_endpoints,
+        )
 
     if strict:
         has_errors = any(not s.active for s in sync_statuses.values())

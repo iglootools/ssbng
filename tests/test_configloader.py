@@ -13,8 +13,8 @@ from nbkp.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
-    RsyncServer,
-    SshOptions,
+    SshEndpoint,
+    SshConnectionOptions,
     SyncConfig,
     SyncEndpoint,
     find_config_file,
@@ -61,14 +61,14 @@ class TestFindConfigFile:
 class TestLoadConfig:
     def test_full_config(self, sample_config_file: Path) -> None:
         cfg = load_config(str(sample_config_file))
-        assert "nas-server" in cfg.rsync_servers
-        server = cfg.rsync_servers["nas-server"]
+        assert "nas-server" in cfg.ssh_endpoints
+        server = cfg.ssh_endpoints["nas-server"]
         assert server.slug == "nas-server"
         assert server.host == "nas.example.com"
         assert server.port == 5022
         assert server.user == "backup"
-        assert server.ssh_key == "~/.ssh/key"
-        assert server.ssh_options.connect_timeout == 10
+        assert server.key == "~/.ssh/key"
+        assert server.connection_options.connect_timeout == 10
         assert "local-data" in cfg.volumes
         assert "nas" in cfg.volumes
         assert "photos-to-nas" in cfg.syncs
@@ -77,7 +77,7 @@ class TestLoadConfig:
         assert local.path == "/mnt/data"
         remote = cfg.volumes["nas"]
         assert isinstance(remote, RemoteVolume)
-        assert remote.rsync_server == "nas-server"
+        assert remote.ssh_endpoint == "nas-server"
         sync = cfg.syncs["photos-to-nas"]
         assert sync.source.volume == "local-data"
         assert sync.source.subdir == "photos"
@@ -141,9 +141,9 @@ class TestLoadConfig:
     def test_missing_remote_host(self, tmp_path: Path) -> None:
         p = tmp_path / "no_host.yaml"
         p.write_text(
-            "rsync-servers:\n  s:\n    port: 22\n"
+            "ssh-endpoints:\n  s:\n    port: 22\n"
             "volumes:\n  v:\n    type: remote\n"
-            "    rsync-server: s\n"
+            "    ssh-endpoint: s\n"
             "    path: /x\n"
             "syncs: {}\n"
         )
@@ -157,12 +157,12 @@ class TestLoadConfig:
             for err in errors
         )
 
-    def test_unknown_rsync_server_reference(self, tmp_path: Path) -> None:
+    def test_unknown_ssh_endpoint_reference(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_server_ref.yaml"
         p.write_text(
-            "rsync-servers: {}\n"
+            "ssh-endpoints: {}\n"
             "volumes:\n  v:\n    type: remote\n"
-            "    rsync-server: missing\n"
+            "    ssh-endpoint: missing\n"
             "    path: /x\n"
             "syncs: {}\n"
         )
@@ -170,7 +170,7 @@ class TestLoadConfig:
             load_config(str(p))
         cause = excinfo.value.__cause__
         assert cause is not None
-        assert "unknown rsync-server 'missing'" in str(cause)
+        assert "unknown ssh-endpoint 'missing'" in str(cause)
 
     def test_unknown_volume_reference(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_ref.yaml"
@@ -280,13 +280,13 @@ class TestLoadConfig:
             "--progress",
         ]
 
-    def test_ssh_options(self, tmp_path: Path) -> None:
+    def test_connection_options(self, tmp_path: Path) -> None:
         config = Config(
-            rsync_servers={
-                "slow": RsyncServer(
+            ssh_endpoints={
+                "slow": SshEndpoint(
                     slug="slow",
                     host="slow.example.com",
-                    ssh_options=SshOptions(
+                    connection_options=SshConnectionOptions(
                         connect_timeout=30,
                         strict_host_key_checking=False,
                         known_hosts_file="/dev/null",
@@ -297,18 +297,20 @@ class TestLoadConfig:
         p = tmp_path / "ssh_opts.yaml"
         p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
-        opts = cfg.rsync_servers["slow"].ssh_options
+        opts = cfg.ssh_endpoints["slow"].connection_options
         assert opts.connect_timeout == 30
         assert opts.strict_host_key_checking is False
         assert opts.known_hosts_file == "/dev/null"
 
-    def test_ssh_options_server_alive_interval(self, tmp_path: Path) -> None:
+    def test_connection_options_server_alive_interval(
+        self, tmp_path: Path
+    ) -> None:
         config = Config(
-            rsync_servers={
-                "keepalive": RsyncServer(
+            ssh_endpoints={
+                "keepalive": SshEndpoint(
                     slug="keepalive",
                     host="host.example.com",
-                    ssh_options=SshOptions(
+                    connection_options=SshConnectionOptions(
                         server_alive_interval=60,
                     ),
                 ),
@@ -317,16 +319,16 @@ class TestLoadConfig:
         p = tmp_path / "keepalive.yaml"
         p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
-        opts = cfg.rsync_servers["keepalive"].ssh_options
+        opts = cfg.ssh_endpoints["keepalive"].connection_options
         assert opts.server_alive_interval == 60
 
-    def test_ssh_options_channel_timeout(self, tmp_path: Path) -> None:
+    def test_connection_options_channel_timeout(self, tmp_path: Path) -> None:
         config = Config(
-            rsync_servers={
-                "ch-timeout": RsyncServer(
+            ssh_endpoints={
+                "ch-timeout": SshEndpoint(
                     slug="ch-timeout",
                     host="host.example.com",
-                    ssh_options=SshOptions(
+                    connection_options=SshConnectionOptions(
                         channel_timeout=30.0,
                     ),
                 ),
@@ -335,16 +337,18 @@ class TestLoadConfig:
         p = tmp_path / "ch_timeout.yaml"
         p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
-        opts = cfg.rsync_servers["ch-timeout"].ssh_options
+        opts = cfg.ssh_endpoints["ch-timeout"].connection_options
         assert opts.channel_timeout == 30.0
 
-    def test_ssh_options_disabled_algorithms(self, tmp_path: Path) -> None:
+    def test_connection_options_disabled_algorithms(
+        self, tmp_path: Path
+    ) -> None:
         config = Config(
-            rsync_servers={
-                "restricted": RsyncServer(
+            ssh_endpoints={
+                "restricted": SshEndpoint(
                     slug="restricted",
                     host="host.example.com",
-                    ssh_options=SshOptions(
+                    connection_options=SshConnectionOptions(
                         disabled_algorithms={
                             "ciphers": ["aes128-cbc"],
                         },
@@ -355,19 +359,19 @@ class TestLoadConfig:
         p = tmp_path / "disabled_algs.yaml"
         p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
-        opts = cfg.rsync_servers["restricted"].ssh_options
+        opts = cfg.ssh_endpoints["restricted"].connection_options
         assert opts.disabled_algorithms == {
             "ciphers": ["aes128-cbc"],
         }
 
     def test_proxy_jump_valid(self, tmp_path: Path) -> None:
         config = Config(
-            rsync_servers={
-                "bastion": RsyncServer(
+            ssh_endpoints={
+                "bastion": SshEndpoint(
                     slug="bastion",
                     host="bastion.example.com",
                 ),
-                "target": RsyncServer(
+                "target": SshEndpoint(
                     slug="target",
                     host="target.internal",
                     proxy_jump="bastion",
@@ -377,8 +381,8 @@ class TestLoadConfig:
         p = tmp_path / "proxy.yaml"
         p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
-        assert cfg.rsync_servers["target"].proxy_jump == "bastion"
-        proxy = cfg.resolve_proxy(cfg.rsync_servers["target"])
+        assert cfg.ssh_endpoints["target"].proxy_jump == "bastion"
+        proxy = cfg.resolve_proxy(cfg.ssh_endpoints["target"])
         assert proxy is not None
         assert proxy.host == "bastion.example.com"
 
@@ -387,7 +391,7 @@ class TestLoadConfig:
         p.write_text(
             yaml.safe_dump(
                 {
-                    "rsync-servers": {
+                    "ssh-endpoints": {
                         "target": {
                             "host": "target.internal",
                             "proxy-jump": "nonexistent",
@@ -407,7 +411,7 @@ class TestLoadConfig:
         p.write_text(
             yaml.safe_dump(
                 {
-                    "rsync-servers": {
+                    "ssh-endpoints": {
                         "a": {
                             "host": "a.example.com",
                             "proxy-jump": "b",

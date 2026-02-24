@@ -22,8 +22,8 @@ from .config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
-    RsyncServer,
-    SshOptions,
+    SshEndpoint,
+    SshConnectionOptions,
     SyncConfig,
     SyncEndpoint,
 )
@@ -189,11 +189,11 @@ def _show_config_errors() -> None:
     try:
         ConfigModel.model_validate(
             {
-                "rsync-servers": {},
+                "ssh-endpoints": {},
                 "volumes": {
                     "v": {
                         "type": "remote",
-                        "rsync-server": "missing",
+                        "ssh-endpoint": "missing",
                         "path": "/x",
                     },
                 },
@@ -253,27 +253,27 @@ def seed(
     dst = tmp / "dst-backup"
 
     # Docker container
-    docker_server: RsyncServer | None = None
+    docker_endpoint: SshEndpoint | None = None
     if docker:
         private_key, pub_key = generate_ssh_keypair(tmp)
         with _console.status("Starting Docker container..."):
             docker_port = start_docker_container(pub_key)
-        docker_server = RsyncServer(
+        docker_endpoint = SshEndpoint(
             slug="docker",
             host="127.0.0.1",
             port=docker_port,
             user="testuser",
-            ssh_key=str(private_key),
-            ssh_options=SshOptions(
+            key=str(private_key),
+            connection_options=SshConnectionOptions(
                 strict_host_key_checking=False,
                 known_hosts_file="/dev/null",
             ),
         )
         with _console.status("Waiting for SSH..."):
-            wait_for_ssh(docker_server)
+            wait_for_ssh(docker_endpoint)
 
     # Config
-    rsync_servers: dict[str, RsyncServer] = {}
+    ssh_endpoints: dict[str, SshEndpoint] = {}
     volumes: dict[str, LocalVolume | RemoteVolume] = {
         "src-data": LocalVolume(slug="src-data", path=str(src)),
         "dst-backup": LocalVolume(slug="dst-backup", path=str(dst)),
@@ -292,16 +292,16 @@ def seed(
     }
 
     if docker:
-        assert docker_server is not None
-        rsync_servers["docker"] = docker_server
+        assert docker_endpoint is not None
+        ssh_endpoints["docker"] = docker_endpoint
         volumes["remote-backup"] = RemoteVolume(
             slug="remote-backup",
-            rsync_server="docker",
+            ssh_endpoint="docker",
             path="/data",
         )
         volumes["remote-btrfs"] = RemoteVolume(
             slug="remote-btrfs",
-            rsync_server="docker",
+            ssh_endpoint="docker",
             path="/mnt/btrfs",
         )
         syncs["photos-to-remote"] = SyncConfig(
@@ -323,15 +323,15 @@ def seed(
         )
 
     config = Config(
-        rsync_servers=rsync_servers,
+        ssh_endpoints=ssh_endpoints,
         volumes=volumes,
         syncs=syncs,
     )
 
     # Create markers and seed data
     if docker:
-        assert docker_server is not None
-        _server = docker_server
+        assert docker_endpoint is not None
+        _server = docker_endpoint
 
         def _run_remote(cmd: str) -> None:
             ssh_exec(_server, cmd)
@@ -359,11 +359,11 @@ def seed(
         ("Config file", str(config_path)),
     ]
     if docker:
-        assert docker_server is not None
+        assert docker_endpoint is not None
         rows.append(
             (
                 "Docker",
-                f"{CONTAINER_NAME}" f" (port {docker_server.port})",
+                f"{CONTAINER_NAME}" f" (port {docker_endpoint.port})",
             )
         )
     label_w = max(len(r[0]) for r in rows)

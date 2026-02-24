@@ -15,7 +15,7 @@ from nbkp.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
-    RsyncServer,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
 )
@@ -38,7 +38,7 @@ def _strip_panel(text: str) -> str:
 
 def _sample_config() -> Config:
     src = LocalVolume(slug="local-data", path="/mnt/data")
-    nas_server = RsyncServer(
+    nas_server = SshEndpoint(
         slug="nas-server",
         host="nas.example.com",
         port=5022,
@@ -46,7 +46,7 @@ def _sample_config() -> Config:
     )
     dst = RemoteVolume(
         slug="nas",
-        rsync_server="nas-server",
+        ssh_endpoint="nas-server",
         path="/volume1/backups",
     )
     sync = SyncConfig(
@@ -57,7 +57,7 @@ def _sample_config() -> Config:
         ),
     )
     return Config(
-        rsync_servers={"nas-server": nas_server},
+        ssh_endpoints={"nas-server": nas_server},
         volumes={"local-data": src, "nas": dst},
         syncs={"photos-to-nas": sync},
     )
@@ -170,7 +170,7 @@ class TestConfigShowCommand:
             app, ["config", "show", "--config", "/fake.yaml"]
         )
         assert result.exit_code == 0
-        assert "Rsync Servers:" in result.output
+        assert "SSH Endpoints:" in result.output
         assert "nas-server" in result.output
         assert "nas.example.com" in result.output
 
@@ -194,7 +194,7 @@ class TestConfigShowCommand:
         data = json.loads(result.output)
         assert "volumes" in data
         assert "syncs" in data
-        assert "rsync-servers" in data
+        assert "ssh-endpoints" in data
 
     @patch(
         "nbkp.cli.load_config",
@@ -904,11 +904,11 @@ class TestConfigError:
         try:
             Config.model_validate(
                 {
-                    "rsync-servers": {},
+                    "ssh-endpoints": {},
                     "volumes": {
                         "v": {
                             "type": "remote",
-                            "rsync-server": "missing",
+                            "ssh-endpoint": "missing",
                             "path": "/x",
                         },
                     },
@@ -923,7 +923,7 @@ class TestConfigError:
             result = runner.invoke(app, ["check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
         out = _strip_panel(result.output)
-        assert "unknown rsync-server 'missing'" in out
+        assert "unknown ssh-endpoint 'missing'" in out
 
 
 class TestShCommand:

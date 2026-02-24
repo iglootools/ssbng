@@ -19,9 +19,10 @@ from nbkp.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
-    RsyncServer,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
+    resolve_all_endpoints,
 )
 
 from .conftest import create_markers, ssh_exec
@@ -58,28 +59,30 @@ class TestLocalVolumeCheck:
 class TestRemoteVolumeCheck:
     def test_remote_volume_active(
         self,
-        rsync_server: RsyncServer,
+        ssh_endpoint: SshEndpoint,
         remote_volume: RemoteVolume,
     ) -> None:
-        create_markers(rsync_server, "/data", [".nbkp-vol"])
+        create_markers(ssh_endpoint, "/data", [".nbkp-vol"])
         config = Config(
-            rsync_servers={"test-server": rsync_server},
+            ssh_endpoints={"test-server": ssh_endpoint},
             volumes={"test-remote": remote_volume},
         )
-        status = check_volume(remote_volume, config)
+        resolved = resolve_all_endpoints(config)
+        status = check_volume(remote_volume, resolved)
         assert status.active is True
 
     def test_remote_volume_inactive(
         self,
-        rsync_server: RsyncServer,
+        ssh_endpoint: SshEndpoint,
         remote_volume: RemoteVolume,
     ) -> None:
         # No marker created
         config = Config(
-            rsync_servers={"test-server": rsync_server},
+            ssh_endpoints={"test-server": ssh_endpoint},
             volumes={"test-remote": remote_volume},
         )
-        status = check_volume(remote_volume, config)
+        resolved = resolve_all_endpoints(config)
+        status = check_volume(remote_volume, resolved)
         assert status.active is False
 
 
@@ -87,7 +90,7 @@ class TestSyncCheck:
     def test_sync_status_active(
         self,
         tmp_path: Path,
-        rsync_server: RsyncServer,
+        ssh_endpoint: SshEndpoint,
         remote_volume: RemoteVolume,
     ) -> None:
         # Set up local source volume
@@ -98,7 +101,7 @@ class TestSyncCheck:
 
         # Set up remote destination markers
         create_markers(
-            rsync_server,
+            ssh_endpoint,
             "/data",
             [".nbkp-vol", ".nbkp-dst"],
         )
@@ -110,19 +113,25 @@ class TestSyncCheck:
             destination=DestinationSyncEndpoint(volume="dst"),
         )
         config = Config(
-            rsync_servers={"test-server": rsync_server},
+            ssh_endpoints={"test-server": ssh_endpoint},
             volumes={"src": src_vol, "dst": remote_volume},
             syncs={"test-sync": sync},
         )
 
-        src_status = check_volume(src_vol, config)
-        dst_status = check_volume(remote_volume, config)
+        resolved = resolve_all_endpoints(config)
+        src_status = check_volume(src_vol, resolved)
+        dst_status = check_volume(remote_volume, resolved)
         volume_statuses = {
             "src": src_status,
             "dst": dst_status,
         }
 
-        status = check_sync(sync, config, volume_statuses)
+        status = check_sync(
+            sync,
+            config,
+            volume_statuses,
+            resolved_endpoints=resolved,
+        )
         assert status.active is True
         assert status.reasons == []
 
@@ -130,73 +139,85 @@ class TestSyncCheck:
 class TestBtrfsFilesystemCheck:
     def test_btrfs_path_detected(
         self,
-        rsync_server: RsyncServer,
+        ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         config = Config(
-            rsync_servers={"test-server": rsync_server},
+            ssh_endpoints={"test-server": ssh_endpoint},
             volumes={"btrfs": remote_btrfs_volume},
         )
-        assert _check_btrfs_filesystem(remote_btrfs_volume, config) is True
+        resolved = resolve_all_endpoints(config)
+        assert _check_btrfs_filesystem(remote_btrfs_volume, resolved) is True
 
     def test_non_btrfs_path_detected(
         self,
-        rsync_server: RsyncServer,
+        ssh_endpoint: SshEndpoint,
         remote_volume: RemoteVolume,
     ) -> None:
         config = Config(
-            rsync_servers={"test-server": rsync_server},
+            ssh_endpoints={"test-server": ssh_endpoint},
             volumes={"data": remote_volume},
         )
-        assert _check_btrfs_filesystem(remote_volume, config) is False
+        resolved = resolve_all_endpoints(config)
+        assert _check_btrfs_filesystem(remote_volume, resolved) is False
 
 
 class TestBtrfsSubvolumeCheck:
     def test_subvolume_detected(
         self,
-        rsync_server: RsyncServer,
+        ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         ssh_exec(
-            rsync_server,
+            ssh_endpoint,
             "btrfs subvolume create /mnt/btrfs/test-subvol",
         )
         config = Config(
-            rsync_servers={"test-server": rsync_server},
+            ssh_endpoints={"test-server": ssh_endpoint},
             volumes={"btrfs": remote_btrfs_volume},
         )
+        resolved = resolve_all_endpoints(config)
         assert (
-            _check_btrfs_subvolume(remote_btrfs_volume, "test-subvol", config)
+            _check_btrfs_subvolume(
+                remote_btrfs_volume,
+                "test-subvol",
+                resolved,
+            )
             is True
         )
 
         # Cleanup
         ssh_exec(
-            rsync_server,
+            ssh_endpoint,
             "btrfs subvolume delete /mnt/btrfs/test-subvol",
         )
 
     def test_regular_dir_not_subvolume(
         self,
-        rsync_server: RsyncServer,
+        ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         ssh_exec(
-            rsync_server,
+            ssh_endpoint,
             "mkdir -p /mnt/btrfs/regular-dir",
         )
         config = Config(
-            rsync_servers={"test-server": rsync_server},
+            ssh_endpoints={"test-server": ssh_endpoint},
             volumes={"btrfs": remote_btrfs_volume},
         )
+        resolved = resolve_all_endpoints(config)
         assert (
-            _check_btrfs_subvolume(remote_btrfs_volume, "regular-dir", config)
+            _check_btrfs_subvolume(
+                remote_btrfs_volume,
+                "regular-dir",
+                resolved,
+            )
             is False
         )
 
         # Cleanup
         ssh_exec(
-            rsync_server,
+            ssh_endpoint,
             "rm -rf /mnt/btrfs/regular-dir",
         )
 
@@ -205,21 +226,21 @@ class TestSyncCheckBtrfs:
     def test_sync_inactive_when_not_subvolume(
         self,
         tmp_path: Path,
-        rsync_server: RsyncServer,
+        ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         # Create a regular directory (not a subvolume)
         ssh_exec(
-            rsync_server,
+            ssh_endpoint,
             "mkdir -p /mnt/btrfs/not-a-subvol",
         )
         create_markers(
-            rsync_server,
+            ssh_endpoint,
             "/mnt/btrfs",
             [".nbkp-vol"],
         )
         create_markers(
-            rsync_server,
+            ssh_endpoint,
             "/mnt/btrfs/not-a-subvol",
             [".nbkp-dst"],
         )
@@ -240,7 +261,7 @@ class TestSyncCheckBtrfs:
             ),
         )
         config = Config(
-            rsync_servers={"test-server": rsync_server},
+            ssh_endpoints={"test-server": ssh_endpoint},
             volumes={
                 "src": src_vol,
                 "dst": remote_btrfs_volume,
@@ -248,19 +269,25 @@ class TestSyncCheckBtrfs:
             syncs={"test-sync": sync},
         )
 
-        src_status = check_volume(src_vol, config)
-        dst_status = check_volume(remote_btrfs_volume, config)
+        resolved = resolve_all_endpoints(config)
+        src_status = check_volume(src_vol, resolved)
+        dst_status = check_volume(remote_btrfs_volume, resolved)
         volume_statuses = {
             "src": src_status,
             "dst": dst_status,
         }
 
-        status = check_sync(sync, config, volume_statuses)
+        status = check_sync(
+            sync,
+            config,
+            volume_statuses,
+            resolved_endpoints=resolved,
+        )
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME in status.reasons
 
         # Cleanup
         ssh_exec(
-            rsync_server,
+            ssh_endpoint,
             "rm -rf /mnt/btrfs/not-a-subvol",
         )

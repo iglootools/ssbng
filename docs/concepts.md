@@ -42,15 +42,19 @@ A reusable configuration for a local source or destination that can be shared be
 
 To be considered active, a local volume must have a `.nbkp-vol` file in the root of the volume.
 
-### Rsync Server
+### SSH Endpoint
 
 A reusable configuration for an SSH server that can be shared between multiple remote volumes.
-Provides the host, port, user, ssh key, structured SSH options, and optional proxy-jump.
+Provides the host, port, user, key, structured connection options, and optional proxy-jump.
 
-The `proxy-jump` field references another rsync-server by slug, enabling connections through a bastion/jump host. This maps to SSH's `-J` flag and Fabric's `gateway` parameter. Circular proxy-jump chains are detected and rejected at config load time.
+The `proxy-jump` field references another ssh-endpoint by slug, enabling connections through a bastion/jump host. This maps to SSH's `-J` flag and Fabric's `gateway` parameter. Circular proxy-jump chains are detected and rejected at config load time.
+
+The `location` field declares which network location this endpoint is accessible from (e.g. `home`, `office`, `travel`). Used with the `--location` CLI option for endpoint selection (see [Endpoint Filtering](#endpoint-filtering)).
+
+The `extends` field references another ssh-endpoint by slug, inheriting all its fields. The child endpoint can override any inherited field. Circular extends chains are detected and rejected at config load time.
 
 ```yaml
-rsync-servers:
+ssh-endpoints:
   bastion:
     host: bastion.example.com
     user: admin
@@ -59,9 +63,16 @@ rsync-servers:
     host: nas.internal
     user: backup
     proxy-jump: bastion
+    location: home
+
+  # Inherits user, key, port from nas; overrides host and location
+  nas-public:
+    extends: nas
+    host: nas.public.example.com
+    location: travel
 ```
 
-The `ssh-options` field is an optional dictionary of typed SSH connection settings. These map to parameters across SSH (`ssh(1) -o`), Paramiko (`SSHClient.connect()`), and Fabric (`Connection()`). Available options:
+The `connection-options` field is an optional dictionary of typed SSH connection settings. These map to parameters across SSH (`ssh(1) -o`), Paramiko (`SSHClient.connect()`), and Fabric (`Connection()`). Available options:
 
 | Field | Default | Description |
 |---|---|---|
@@ -80,12 +91,43 @@ The `ssh-options` field is an optional dictionary of typed SSH connection settin
 
 Note: `channel-timeout` and `disabled-algorithms` are only used by the Fabric/Paramiko connection path (status checks, btrfs operations). They have no SSH CLI equivalent and do not affect rsync's `-e` option.
 
+#### Disabling host key verification
+
+Setting `known-hosts-file: /dev/null` translates to the SSH option `-o UserKnownHostsFile=/dev/null`. SSH normally records and verifies host keys in `~/.ssh/known_hosts`; pointing it to `/dev/null` means every connection starts with an empty known-hosts database.
+
+Combined with `strict-host-key-checking: false`, SSH will never reject a host based on its key and never persist any host key it sees. This is commonly used for ephemeral or internal hosts (e.g. a NAS behind a bastion) whose keys may change after reprovisioning, where TOFU (trust-on-first-use) verification isn't practical.
+
+Without `known-hosts-file: /dev/null`, setting only `strict-host-key-checking: false` would still write new host keys to `~/.ssh/known_hosts`, which could later cause "host key changed" warnings if the key rotates and strict checking is re-enabled.
+
+```yaml
+ssh-endpoints:
+  nas:
+    host: nas.internal
+    proxy-jump: bastion
+    connection-options:
+      strict-host-key-checking: false
+      known-hosts-file: /dev/null
+```
+
 ### Rsync Remote Volume
 
 A reusable configuration for a remote source or destination that can be shared between multiple syncs.
-References an rsync server by name and provides the path to the remote volume.
+References an SSH endpoint by name and provides the path to the remote volume.
 
-To be considered active, a remote volume must have a `.nbkp-vol` file in the root of the volume, and the server must be reachable.
+A remote volume must declare a primary endpoint via `ssh-endpoint`. It can optionally declare additional endpoints via `ssh-endpoints` (a list of endpoint slugs). When multiple endpoints are declared, the tool selects the best one based on endpoint filtering options (see [Endpoint Filtering](#endpoint-filtering)).
+
+```yaml
+volumes:
+  nas-backup:
+    type: remote
+    ssh-endpoint: nas           # primary (required)
+    ssh-endpoints:              # optional, additional candidates
+      - nas
+      - nas-public
+    path: /volume1/backups
+```
+
+To be considered active, a remote volume must have a `.nbkp-vol` file in the root of the volume, and the selected endpoint must be reachable.
 
 ### Rsync Options
 
@@ -143,15 +185,32 @@ filter-file: ~/.config/nbkp/filters/photos.rules
 
 When both inline `filters` and `filter-file` are present, inline filters are applied first, followed by the filter file.
 
+### Endpoint Filtering
+
+When a remote volume declares multiple endpoints, the tool selects the best one at runtime. The following CLI options control endpoint selection (available on `check`, `run`, `sh`, `troubleshoot`, and `prune`):
+
+| Option | Description |
+|---|---|
+| `--location SLUG` / `-l SLUG` | Prefer endpoints whose `location` field matches the given slug |
+| `--private` | Prefer endpoints whose host resolves to private (LAN) IP addresses |
+| `--public` | Prefer endpoints whose host resolves to public (WAN) IP addresses |
+
+Selection logic:
+1. Gather candidate endpoints from the volume's `ssh-endpoints` list (or the primary `ssh-endpoint` if no list is declared)
+2. Exclude endpoints whose host cannot be DNS-resolved (unreachable)
+3. If `--location` is set, prefer endpoints with matching `location` field
+4. If `--private` or `--public` is set, prefer endpoints with matching network type
+5. If no candidates remain after filtering, fall back to the primary endpoint
+
 ### Example Config
 
 ```yaml
-rsync-servers:
+ssh-endpoints:
   # Bastion/jump host for reaching internal servers
   bastion:
     host: bastion.example.com
     user: admin
-    ssh-options:
+    connection-options:
       server-alive-interval: 60  # keepalive every 60s
 
   # SSH connection details for the NAS (via bastion)
@@ -159,25 +218,23 @@ rsync-servers:
     host: nas.internal
     port: 5022                  # optional, defaults to 22
     user: backup                # optional
-    ssh-key: ~/.ssh/nas_ed25519 # optional
+    key: ~/.ssh/nas_ed25519     # optional
     proxy-jump: bastion         # connect through bastion
-    ssh-options:                # optional, all fields have defaults
+    location: home              # accessible from home network
+    connection-options:         # optional, all fields have defaults
       connect-timeout: 30
-      # Setting known-hosts-file: /dev/null translates to the SSH option -o UserKnownHostsFile=/dev/null. Its effect:
-      # - SSH normally records and verifies host keys in ~/.ssh/known_hosts. 
-      #.  By pointing it to /dev/null, every connection starts with an empty known-hosts database.
-      # - Combined with strict-host-key-checking: false (line 166), this means SSH will never reject a host 
-      #.  based on its key and never persist any host key it sees.
-      # - This is commonly used for ephemeral or internal hosts (like nas.internal behind a bastion) whose keys may change frequently 
-      #.  (e.g. after reprovisioning), where TOFU (trust-on-first-use) verification isn't practical.
-      #
-      # Without known-hosts-file: /dev/null, setting only strict-host-key-checking: false would still write new host keys to ~/.ssh/known_hosts, which could later cause "host key changed" warnings if the key rotates and strict checking is re-enabled.
       strict-host-key-checking: false
       known-hosts-file: /dev/null
       compress: true
       disabled-algorithms:      # Paramiko/Fabric only
         ciphers:
           - aes128-cbc
+
+  # Public endpoint for the same NAS (inherits from nas)
+  nas-public:
+    extends: nas                # inherits user, key, port, connection-options
+    host: nas.public.example.com
+    location: travel            # accessible when traveling
 
 volumes:
   # Local volume on a removable drive
@@ -190,15 +247,21 @@ volumes:
     type: local
     path: /mnt/usb-backup
 
-  # Remote volumes on the NAS — reference the server by name
+  # Remote volume with multiple endpoints for location-awareness
   nas-backups:
     type: remote
-    rsync-server: nas
+    ssh-endpoint: nas           # primary endpoint (required)
+    ssh-endpoints:              # candidate endpoints for auto-selection
+      - nas
+      - nas-public
     path: /volume1/backups
 
   nas-photos:
     type: remote
-    rsync-server: nas
+    ssh-endpoint: nas
+    ssh-endpoints:
+      - nas
+      - nas-public
     path: /volume2/photos
 
 syncs:
@@ -240,6 +303,18 @@ syncs:
     extra-rsync-options:        # optional, appended to defaults
       - "--compress"
       - "--progress"
+```
+
+**Location-aware usage:**
+
+```bash
+# At home — prefer private LAN endpoints
+nbkp run --config backup.yaml --location home
+nbkp run --config backup.yaml --private
+
+# Traveling — prefer public endpoints
+nbkp run --config backup.yaml --location travel
+nbkp run --config backup.yaml --public
 ```
 
 ## Shell Script Generation (`sh` command)

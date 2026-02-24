@@ -10,7 +10,8 @@ from ..config import (
     Config,
     LocalVolume,
     RemoteVolume,
-    RsyncServer,
+    ResolvedEndpoints,
+    SshEndpoint,
     SyncConfig,
 )
 from ..remote import (
@@ -75,12 +76,14 @@ def build_rsync_command(
     dry_run: bool = False,
     link_dest: str | None = None,
     verbose: int = 0,
+    resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> list[str]:
     """Build the rsync command for a sync operation.
 
     Returns the full command as a list of args, potentially
     wrapped in SSH for remote-to-remote syncs.
     """
+    re = resolved_endpoints or {}
     src_vol = config.volumes[sync.source.volume]
     dst_vol = config.volumes[sync.destination.volume]
 
@@ -89,46 +92,48 @@ def build_rsync_command(
 
     match (src_vol, dst_vol):
         case (RemoteVolume() as sv, RemoteVolume() as dv):
-            src_server = config.rsync_servers[sv.rsync_server]
-            dst_server = config.rsync_servers[dv.rsync_server]
+            src_ep = re[sv.slug]
+            dst_ep = re[dv.slug]
             return _build_remote_to_remote(
                 sync,
-                src_server,
-                dst_server,
+                src_ep.server,
+                dst_ep.server,
                 src_path,
                 dst_path,
                 dry_run,
                 link_dest,
                 verbose,
-                src_proxy=config.resolve_proxy(src_server),
-                dst_proxy=config.resolve_proxy(dst_server),
+                src_proxy=src_ep.proxy,
+                dst_proxy=dst_ep.proxy,
             )
         case (RemoteVolume() as sv, LocalVolume()):
-            src_server = config.rsync_servers[sv.rsync_server]
+            src_ep = re[sv.slug]
             rsync_args = _base_rsync_args(sync, dry_run, link_dest, verbose)
             rsync_args.extend(_filter_args(sync))
             rsync_args.extend(
                 build_ssh_e_option(
-                    src_server,
-                    config.resolve_proxy(src_server),
+                    src_ep.server,
+                    src_ep.proxy,
                 )
             )
-            rsync_args.append(format_remote_path(src_server, src_path) + "/")
+            rsync_args.append(
+                format_remote_path(src_ep.server, src_path) + "/"
+            )
             rsync_args.append(f"{dst_path}/latest/")
             return rsync_args
         case (LocalVolume(), RemoteVolume() as dv):
-            dst_server = config.rsync_servers[dv.rsync_server]
+            dst_ep = re[dv.slug]
             rsync_args = _base_rsync_args(sync, dry_run, link_dest, verbose)
             rsync_args.extend(_filter_args(sync))
             rsync_args.extend(
                 build_ssh_e_option(
-                    dst_server,
-                    config.resolve_proxy(dst_server),
+                    dst_ep.server,
+                    dst_ep.proxy,
                 )
             )
             rsync_args.append(f"{src_path}/")
             rsync_args.append(
-                format_remote_path(dst_server, dst_path) + "/latest/"
+                format_remote_path(dst_ep.server, dst_path) + "/latest/"
             )
             return rsync_args
         case _:
@@ -141,15 +146,15 @@ def build_rsync_command(
 
 def _build_remote_to_remote(
     sync: SyncConfig,
-    src_server: RsyncServer,
-    dst_server: RsyncServer,
+    src_server: SshEndpoint,
+    dst_server: SshEndpoint,
     src_path: str,
     dst_path: str,
     dry_run: bool,
     link_dest: str | None,
     verbose: int = 0,
-    src_proxy: RsyncServer | None = None,
-    dst_proxy: RsyncServer | None = None,
+    src_proxy: SshEndpoint | None = None,
+    dst_proxy: SshEndpoint | None = None,
 ) -> list[str]:
     """Build remote-to-remote rsync command (SSH into dest, rsync from src)."""
     options = (
@@ -186,9 +191,17 @@ def run_rsync(
     link_dest: str | None = None,
     verbose: int = 0,
     on_output: Callable[[str], None] | None = None,
+    resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Build and execute the rsync command for a sync."""
-    cmd = build_rsync_command(sync, config, dry_run, link_dest, verbose)
+    cmd = build_rsync_command(
+        sync,
+        config,
+        dry_run,
+        link_dest,
+        verbose,
+        resolved_endpoints,
+    )
     if on_output is None:
         return subprocess.run(
             cmd,

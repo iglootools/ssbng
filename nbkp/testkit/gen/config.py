@@ -8,28 +8,40 @@ from ...config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
-    RsyncServer,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
 )
 
 
-def bastion_server() -> RsyncServer:
-    return RsyncServer(
+def bastion_server() -> SshEndpoint:
+    return SshEndpoint(
         slug="bastion",
         host="bastion.example.com",
         user="admin",
     )
 
 
-def nas_server() -> RsyncServer:
-    return RsyncServer(
+def nas_server() -> SshEndpoint:
+    return SshEndpoint(
         slug="nas",
         host="nas.example.com",
         port=5022,
         user="backup",
-        ssh_key="~/.ssh/nas_ed25519",
+        key="~/.ssh/nas_ed25519",
         proxy_jump="bastion",
+        location="home",
+    )
+
+
+def nas_public_server() -> SshEndpoint:
+    return SshEndpoint(
+        slug="nas-public",
+        host="nas.public.example.com",
+        port=5022,
+        user="backup",
+        key="~/.ssh/nas_ed25519",
+        location="travel",
     )
 
 
@@ -39,7 +51,8 @@ def base_volumes() -> dict[str, LocalVolume | RemoteVolume]:
         "usb-drive": LocalVolume(slug="usb-drive", path="/mnt/usb-backup"),
         "nas-backup": RemoteVolume(
             slug="nas-backup",
-            rsync_server="nas",
+            ssh_endpoint="nas",
+            ssh_endpoints=["nas", "nas-public"],
             path="/volume1/backups",
         ),
     }
@@ -48,9 +61,10 @@ def base_volumes() -> dict[str, LocalVolume | RemoteVolume]:
 def config_show_config() -> Config:
     """Config exercising all display paths for config show."""
     return Config(
-        rsync_servers={
+        ssh_endpoints={
             "bastion": bastion_server(),
             "nas": nas_server(),
+            "nas-public": nas_public_server(),
         },
         volumes=base_volumes(),
         syncs={

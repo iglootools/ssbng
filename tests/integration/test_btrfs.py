@@ -19,9 +19,11 @@ from nbkp.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
-    RsyncServer,
+    ResolvedEndpoints,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
+    resolve_all_endpoints,
 )
 from nbkp.sync.rsync import run_rsync
 
@@ -30,20 +32,20 @@ from .conftest import ssh_exec
 pytestmark = pytest.mark.integration
 
 
-def _setup_btrfs_latest(rsync_server: RsyncServer) -> None:
+def _setup_btrfs_latest(ssh_endpoint: SshEndpoint) -> None:
     """Create the 'latest' btrfs subvolume and snapshots dir."""
     ssh_exec(
-        rsync_server,
+        ssh_endpoint,
         "btrfs subvolume create /mnt/btrfs/latest",
     )
-    ssh_exec(rsync_server, "mkdir -p /mnt/btrfs/snapshots")
+    ssh_exec(ssh_endpoint, "mkdir -p /mnt/btrfs/snapshots")
 
 
 def _make_btrfs_config(
     src_path: str,
     remote_btrfs_volume: RemoteVolume,
-    rsync_server: RsyncServer,
-) -> tuple[SyncConfig, Config]:
+    ssh_endpoint: SshEndpoint,
+) -> tuple[SyncConfig, Config, ResolvedEndpoints]:
     src_vol = LocalVolume(slug="src", path=src_path)
     sync = SyncConfig(
         slug="test-sync",
@@ -54,65 +56,70 @@ def _make_btrfs_config(
         ),
     )
     config = Config(
-        rsync_servers={"test-server": rsync_server},
+        ssh_endpoints={"test-server": ssh_endpoint},
         volumes={
             "src": src_vol,
             "dst": remote_btrfs_volume,
         },
         syncs={"test-sync": sync},
     )
-    return sync, config
+    resolved = resolve_all_endpoints(config)
+    return sync, config, resolved
 
 
 class TestBtrfsSnapshots:
     def test_snapshot_created(
         self,
         tmp_path: Path,
-        rsync_server: RsyncServer,
+        ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(rsync_server)
+        _setup_btrfs_latest(ssh_endpoint)
 
         src = tmp_path / "src"
         src.mkdir()
         (src / "data.txt").write_text("snapshot me")
 
-        sync, config = _make_btrfs_config(
-            str(src), remote_btrfs_volume, rsync_server
+        sync, config, resolved = _make_btrfs_config(
+            str(src), remote_btrfs_volume, ssh_endpoint
         )
 
         # Rsync into latest
-        result = run_rsync(sync, config)
+        result = run_rsync(sync, config, resolved_endpoints=resolved)
         assert result.returncode == 0
 
         # Create snapshot
-        snapshot_path = create_snapshot(sync, config)
+        snapshot_path = create_snapshot(
+            sync, config, resolved_endpoints=resolved
+        )
 
         # Verify snapshot exists
-        check = ssh_exec(rsync_server, f"test -d {snapshot_path}")
+        check = ssh_exec(ssh_endpoint, f"test -d {snapshot_path}")
         assert check.returncode == 0
 
     def test_snapshot_readonly(
         self,
         tmp_path: Path,
-        rsync_server: RsyncServer,
+        ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(rsync_server)
+        _setup_btrfs_latest(ssh_endpoint)
 
         src = tmp_path / "src"
         src.mkdir()
         (src / "data.txt").write_text("readonly test")
 
-        sync, config = _make_btrfs_config(
-            str(src), remote_btrfs_volume, rsync_server
+        sync, config, resolved = _make_btrfs_config(
+            str(src), remote_btrfs_volume, ssh_endpoint
         )
-        run_rsync(sync, config)
-        snapshot_path = create_snapshot(sync, config)
+        run_rsync(sync, config, resolved_endpoints=resolved)
+        snapshot_path = create_snapshot(
+            sync, config, resolved_endpoints=resolved
+        )
 
         # Check readonly property
         check = ssh_exec(
-            rsync_server,
+            ssh_endpoint,
             f"btrfs property get {snapshot_path} ro",
         )
         assert check.returncode == 0
@@ -121,50 +128,61 @@ class TestBtrfsSnapshots:
     def test_second_sync_link_dest(
         self,
         tmp_path: Path,
-        rsync_server: RsyncServer,
+        ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(rsync_server)
+        _setup_btrfs_latest(ssh_endpoint)
 
         src = tmp_path / "src"
         src.mkdir()
         (src / "file.txt").write_text("v1")
 
-        sync, config = _make_btrfs_config(
-            str(src), remote_btrfs_volume, rsync_server
+        sync, config, resolved = _make_btrfs_config(
+            str(src), remote_btrfs_volume, ssh_endpoint
         )
 
         # First sync + snapshot
-        run_rsync(sync, config)
-        create_snapshot(sync, config)
+        run_rsync(sync, config, resolved_endpoints=resolved)
+        create_snapshot(sync, config, resolved_endpoints=resolved)
 
         # Small delay to ensure distinct timestamp
         time.sleep(0.1)
 
         # Second sync should use link-dest from first snapshot
-        latest_snap = get_latest_snapshot(sync, config)
+        latest_snap = get_latest_snapshot(
+            sync,
+            config,
+            resolved_endpoints=resolved,
+        )
         assert latest_snap is not None
 
         link_dest = f"../../snapshots/{latest_snap.rsplit('/', 1)[-1]}"
-        result = run_rsync(sync, config, link_dest=link_dest)
+        result = run_rsync(
+            sync,
+            config,
+            link_dest=link_dest,
+            resolved_endpoints=resolved,
+        )
         assert result.returncode == 0
 
         # Create second snapshot
-        snapshot_path = create_snapshot(sync, config)
-        check = ssh_exec(rsync_server, f"test -d {snapshot_path}")
+        snapshot_path = create_snapshot(
+            sync, config, resolved_endpoints=resolved
+        )
+        check = ssh_exec(ssh_endpoint, f"test -d {snapshot_path}")
         assert check.returncode == 0
 
     def test_dry_run_no_snapshot(
         self,
         tmp_path: Path,
-        rsync_server: RsyncServer,
+        ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(rsync_server)
+        _setup_btrfs_latest(ssh_endpoint)
 
         # Count existing snapshots before dry run
         before = ssh_exec(
-            rsync_server,
+            ssh_endpoint,
             "ls /mnt/btrfs/snapshots 2>/dev/null || true",
         )
         count_before = len(
@@ -175,17 +193,22 @@ class TestBtrfsSnapshots:
         src.mkdir()
         (src / "data.txt").write_text("dry run")
 
-        sync, config = _make_btrfs_config(
-            str(src), remote_btrfs_volume, rsync_server
+        sync, config, resolved = _make_btrfs_config(
+            str(src), remote_btrfs_volume, ssh_endpoint
         )
 
         # Dry-run rsync
-        result = run_rsync(sync, config, dry_run=True)
+        result = run_rsync(
+            sync,
+            config,
+            dry_run=True,
+            resolved_endpoints=resolved,
+        )
         assert result.returncode == 0
 
         # Verify no new snapshot was created
         after = ssh_exec(
-            rsync_server,
+            ssh_endpoint,
             "ls /mnt/btrfs/snapshots 2>/dev/null || true",
         )
         count_after = len(
@@ -199,12 +222,17 @@ class TestPruneSnapshots:
         self,
         sync: SyncConfig,
         config: Config,
+        resolved: ResolvedEndpoints,
         count: int,
     ) -> list[str]:
         """Create multiple snapshots with distinct timestamps."""
         paths: list[str] = []
         for _ in range(count):
-            path = create_snapshot(sync, config)
+            path = create_snapshot(
+                sync,
+                config,
+                resolved_endpoints=resolved,
+            )
             paths.append(path)
             time.sleep(0.1)  # distinct timestamps
         return paths
@@ -212,80 +240,108 @@ class TestPruneSnapshots:
     def test_prune_deletes_oldest_snapshots(
         self,
         tmp_path: Path,
-        rsync_server: RsyncServer,
+        ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(rsync_server)
+        _setup_btrfs_latest(ssh_endpoint)
 
         src = tmp_path / "src"
         src.mkdir()
         (src / "data.txt").write_text("prune test")
 
-        sync, config = _make_btrfs_config(
-            str(src), remote_btrfs_volume, rsync_server
+        sync, config, resolved = _make_btrfs_config(
+            str(src), remote_btrfs_volume, ssh_endpoint
         )
-        run_rsync(sync, config)
+        run_rsync(sync, config, resolved_endpoints=resolved)
 
-        self._create_snapshots(sync, config, 3)
+        self._create_snapshots(sync, config, resolved, 3)
 
         # Prune to keep only 1
-        deleted = prune_snapshots(sync, config, max_snapshots=1)
+        deleted = prune_snapshots(
+            sync,
+            config,
+            max_snapshots=1,
+            resolved_endpoints=resolved,
+        )
         assert len(deleted) == 2
 
         # Verify only 1 snapshot remains
-        remaining = list_snapshots(sync, config)
+        remaining = list_snapshots(
+            sync,
+            config,
+            resolved_endpoints=resolved,
+        )
         assert len(remaining) == 1
 
     def test_prune_dry_run_keeps_all(
         self,
         tmp_path: Path,
-        rsync_server: RsyncServer,
+        ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(rsync_server)
+        _setup_btrfs_latest(ssh_endpoint)
 
         src = tmp_path / "src"
         src.mkdir()
         (src / "data.txt").write_text("dry run prune")
 
-        sync, config = _make_btrfs_config(
-            str(src), remote_btrfs_volume, rsync_server
+        sync, config, resolved = _make_btrfs_config(
+            str(src), remote_btrfs_volume, ssh_endpoint
         )
-        run_rsync(sync, config)
+        run_rsync(sync, config, resolved_endpoints=resolved)
 
-        self._create_snapshots(sync, config, 3)
+        self._create_snapshots(sync, config, resolved, 3)
 
         # Dry-run prune
-        deleted = prune_snapshots(sync, config, max_snapshots=1, dry_run=True)
+        deleted = prune_snapshots(
+            sync,
+            config,
+            max_snapshots=1,
+            dry_run=True,
+            resolved_endpoints=resolved,
+        )
         assert len(deleted) == 2
 
         # All 3 snapshots still exist
-        remaining = list_snapshots(sync, config)
+        remaining = list_snapshots(
+            sync,
+            config,
+            resolved_endpoints=resolved,
+        )
         assert len(remaining) == 3
 
     def test_prune_noop_when_under_limit(
         self,
         tmp_path: Path,
-        rsync_server: RsyncServer,
+        ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(rsync_server)
+        _setup_btrfs_latest(ssh_endpoint)
 
         src = tmp_path / "src"
         src.mkdir()
         (src / "data.txt").write_text("noop prune")
 
-        sync, config = _make_btrfs_config(
-            str(src), remote_btrfs_volume, rsync_server
+        sync, config, resolved = _make_btrfs_config(
+            str(src), remote_btrfs_volume, ssh_endpoint
         )
-        run_rsync(sync, config)
+        run_rsync(sync, config, resolved_endpoints=resolved)
 
-        self._create_snapshots(sync, config, 2)
+        self._create_snapshots(sync, config, resolved, 2)
 
         # Prune with limit higher than count
-        deleted = prune_snapshots(sync, config, max_snapshots=5)
+        deleted = prune_snapshots(
+            sync,
+            config,
+            max_snapshots=5,
+            resolved_endpoints=resolved,
+        )
         assert deleted == []
 
         # All 2 snapshots still exist
-        remaining = list_snapshots(sync, config)
+        remaining = list_snapshots(
+            sync,
+            config,
+            resolved_endpoints=resolved,
+        )
         assert len(remaining) == 2

@@ -10,7 +10,7 @@ from typing import Generator
 import docker as dockerlib
 import pytest
 
-from nbkp.config import RemoteVolume, RsyncServer, SshOptions
+from nbkp.config import RemoteVolume, SshEndpoint, SshConnectionOptions
 from nbkp.testkit.docker import (
     generate_ssh_keypair,
     ssh_exec,
@@ -54,8 +54,8 @@ def ssh_key_pair() -> Generator[tuple[Path, Path], None, None]:
 @pytest.fixture(scope="session")
 def docker_container(
     ssh_key_pair: tuple[Path, Path],
-) -> Generator[RsyncServer, None, None]:
-    """Start Docker container and yield RsyncServer."""
+) -> Generator[SshEndpoint, None, None]:
+    """Start Docker container and yield SshEndpoint."""
     from testcontainers.core.container import DockerContainer
     from testcontainers.core.image import DockerImage
     from testcontainers.core.wait_strategies import (
@@ -87,13 +87,13 @@ def docker_container(
     )
     container.start()
 
-    server = RsyncServer(
+    server = SshEndpoint(
         slug="test-server",
         host=container.get_container_host_ip(),
         port=int(container.get_exposed_port(22)),
         user="testuser",
-        ssh_key=str(private_key),
-        ssh_options=SshOptions(
+        key=str(private_key),
+        connection_options=SshConnectionOptions(
             strict_host_key_checking=False,
             known_hosts_file="/dev/null",
         ),
@@ -106,10 +106,10 @@ def docker_container(
 
 
 @pytest.fixture(scope="session")
-def rsync_server(
-    docker_container: RsyncServer,
-) -> RsyncServer:
-    """RsyncServer pointing at the Docker container."""
+def ssh_endpoint(
+    docker_container: SshEndpoint,
+) -> SshEndpoint:
+    """SshEndpoint pointing at the Docker container."""
     return docker_container
 
 
@@ -118,7 +118,7 @@ def remote_volume() -> RemoteVolume:
     """RemoteVolume pointing at /data on the container."""
     return RemoteVolume(
         slug="test-remote",
-        rsync_server="test-server",
+        ssh_endpoint="test-server",
         path="/data",
     )
 
@@ -128,13 +128,13 @@ def remote_btrfs_volume() -> RemoteVolume:
     """RemoteVolume pointing at /mnt/btrfs on the container."""
     return RemoteVolume(
         slug="test-btrfs",
-        rsync_server="test-server",
+        ssh_endpoint="test-server",
         path="/mnt/btrfs",
     )
 
 
 def create_markers(
-    server: RsyncServer,
+    server: SshEndpoint,
     path: str,
     markers: list[str],
 ) -> None:
@@ -153,11 +153,11 @@ def _cleanup_remote(
     """Clean up /data and /mnt/btrfs paths between tests."""
     yield
 
-    # Only clean up if rsync_server was used by this test
-    if "rsync_server" not in request.fixturenames:
+    # Only clean up if ssh_endpoint was used by this test
+    if "ssh_endpoint" not in request.fixturenames:
         return
 
-    server: RsyncServer = request.getfixturevalue("rsync_server")
+    server: SshEndpoint = request.getfixturevalue("ssh_endpoint")
 
     def run(cmd: str) -> None:
         ssh_exec(server, cmd, check=False)

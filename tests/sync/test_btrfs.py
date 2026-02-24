@@ -19,9 +19,10 @@ from nbkp.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
-    RsyncServer,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
+    resolve_all_endpoints,
 )
 
 
@@ -46,14 +47,14 @@ def _local_config() -> tuple[Config, SyncConfig]:
 
 def _remote_config() -> tuple[Config, SyncConfig]:
     src = LocalVolume(slug="src", path="/mnt/src")
-    dst_server = RsyncServer(
+    dst_server = SshEndpoint(
         slug="nas-server",
         host="nas.local",
         user="admin",
     )
     dst = RemoteVolume(
         slug="dst",
-        rsync_server="nas-server",
+        ssh_endpoint="nas-server",
         path="/backup",
     )
     sync = SyncConfig(
@@ -66,7 +67,7 @@ def _remote_config() -> tuple[Config, SyncConfig]:
         ),
     )
     config = Config(
-        rsync_servers={"nas-server": dst_server},
+        ssh_endpoints={"nas-server": dst_server},
         volumes={"src": src, "dst": dst},
         syncs={"s1": sync},
     )
@@ -112,14 +113,17 @@ class TestCreateSnapshotRemote:
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _remote_config()
+        resolved = resolve_all_endpoints(config)
         from datetime import datetime, timezone
 
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
-        path = create_snapshot(sync, config, now=fixed_now)
+        path = create_snapshot(
+            sync, config, now=fixed_now, resolved_endpoints=resolved
+        )
         assert path == ("/backup/data/snapshots/2024-01-15T12:00:00.000Z")
         mock_run.assert_called_once()
         call_args = mock_run.call_args
-        assert call_args[0][0] == config.rsync_servers["nas-server"]
+        assert call_args[0][0] == config.ssh_endpoints["nas-server"]
         assert call_args[0][1] == [
             "btrfs",
             "subvolume",
@@ -167,11 +171,12 @@ class TestGetLatestSnapshotRemote:
             stdout="20240101T000000Z\n20240115T120000Z\n",
         )
         config, sync = _remote_config()
+        resolved = resolve_all_endpoints(config)
 
-        result = get_latest_snapshot(sync, config)
+        result = get_latest_snapshot(sync, config, resolved)
         assert result == ("/backup/data/snapshots/20240115T120000Z")
         mock_run.assert_called_once_with(
-            config.rsync_servers["nas-server"],
+            config.ssh_endpoints["nas-server"],
             ["ls", "/backup/data/snapshots"],
             None,
         )
@@ -198,14 +203,14 @@ def _local_config_spaces() -> tuple[Config, SyncConfig]:
 
 def _remote_config_spaces() -> tuple[Config, SyncConfig]:
     src = LocalVolume(slug="src", path="/mnt/my src")
-    dst_server = RsyncServer(
+    dst_server = SshEndpoint(
         slug="nas-server",
         host="nas.local",
         user="admin",
     )
     dst = RemoteVolume(
         slug="dst",
-        rsync_server="nas-server",
+        ssh_endpoint="nas-server",
         path="/my backup",
     )
     sync = SyncConfig(
@@ -218,7 +223,7 @@ def _remote_config_spaces() -> tuple[Config, SyncConfig]:
         ),
     )
     config = Config(
-        rsync_servers={"nas-server": dst_server},
+        ssh_endpoints={"nas-server": dst_server},
         volumes={"src": src, "dst": dst},
         syncs={"s1": sync},
     )
@@ -253,10 +258,13 @@ class TestCreateSnapshotRemoteSpaces:
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _remote_config_spaces()
+        resolved = resolve_all_endpoints(config)
         from datetime import datetime, timezone
 
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
-        path = create_snapshot(sync, config, now=fixed_now)
+        path = create_snapshot(
+            sync, config, now=fixed_now, resolved_endpoints=resolved
+        )
         assert path == (
             "/my backup/my data/snapshots/" "2024-01-15T12:00:00.000Z"
         )
@@ -279,11 +287,12 @@ class TestGetLatestSnapshotRemoteSpaces:
             stdout="20240101T000000Z\n20240115T120000Z\n",
         )
         config, sync = _remote_config_spaces()
+        resolved = resolve_all_endpoints(config)
 
-        result = get_latest_snapshot(sync, config)
+        result = get_latest_snapshot(sync, config, resolved)
         assert result == ("/my backup/my data/snapshots/20240115T120000Z")
         mock_run.assert_called_once_with(
-            config.rsync_servers["nas-server"],
+            config.ssh_endpoints["nas-server"],
             ["ls", "/my backup/my data/snapshots"],
             None,
         )
@@ -329,8 +338,9 @@ class TestListSnapshotsRemote:
             stdout="20240101T000000Z\n20240115T120000Z\n",
         )
         config, sync = _remote_config()
+        resolved = resolve_all_endpoints(config)
 
-        result = list_snapshots(sync, config)
+        result = list_snapshots(sync, config, resolved)
         assert result == [
             "/backup/data/snapshots/20240101T000000Z",
             "/backup/data/snapshots/20240115T120000Z",
@@ -345,7 +355,7 @@ class TestDeleteSnapshotLocal:
         dst_vol = config.volumes["dst"]
         path = "/mnt/dst/backup/snapshots/20240101T000000Z"
 
-        delete_snapshot(path, dst_vol, config)
+        delete_snapshot(path, dst_vol, {})
         assert mock_run.call_count == 2
         mock_run.assert_has_calls(
             [
@@ -374,7 +384,7 @@ class TestDeleteSnapshotLocal:
             delete_snapshot(
                 "/mnt/dst/backup/snapshots/20240101T000000Z",
                 dst_vol,
-                config,
+                {},
             )
 
     @patch("nbkp.sync.btrfs.subprocess.run")
@@ -390,7 +400,7 @@ class TestDeleteSnapshotLocal:
             delete_snapshot(
                 "/mnt/dst/backup/snapshots/20240101T000000Z",
                 dst_vol,
-                config,
+                {},
             )
 
 
@@ -399,11 +409,12 @@ class TestDeleteSnapshotRemote:
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, _ = _remote_config()
+        resolved = resolve_all_endpoints(config)
         dst_vol = config.volumes["dst"]
         path = "/backup/data/snapshots/20240101T000000Z"
-        server = config.rsync_servers["nas-server"]
+        server = config.ssh_endpoints["nas-server"]
 
-        delete_snapshot(path, dst_vol, config)
+        delete_snapshot(path, dst_vol, resolved)
         assert mock_run.call_count == 2
         mock_run.assert_has_calls(
             [
@@ -480,8 +491,11 @@ class TestPruneSnapshotsRemote:
             stderr="",
         )
         config, sync = _remote_config()
+        resolved = resolve_all_endpoints(config)
 
-        deleted = prune_snapshots(sync, config, max_snapshots=2)
+        deleted = prune_snapshots(
+            sync, config, max_snapshots=2, resolved_endpoints=resolved
+        )
         assert deleted == [
             "/backup/data/snapshots/20240101T000000Z",
         ]

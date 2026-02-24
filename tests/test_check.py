@@ -11,8 +11,10 @@ from nbkp.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
-    RsyncServer,
-    SshOptions,
+    ResolvedEndpoint,
+    ResolvedEndpoints,
+    SshEndpoint,
+    SshConnectionOptions,
     SyncConfig,
     SyncEndpoint,
 )
@@ -50,33 +52,33 @@ class TestLocalVolume:
             pass
 
 
-class TestRsyncServer:
+class TestSshEndpoint:
     def test_construction_defaults(self) -> None:
-        server = RsyncServer(slug="nas-server", host="nas.local")
+        server = SshEndpoint(slug="nas-server", host="nas.local")
         assert server.slug == "nas-server"
         assert server.host == "nas.local"
         assert server.port == 22
         assert server.user is None
-        assert server.ssh_key is None
-        assert server.ssh_options == SshOptions()
-        assert server.ssh_options.connect_timeout == 10
+        assert server.key is None
+        assert server.connection_options == SshConnectionOptions()
+        assert server.connection_options.connect_timeout == 10
 
     def test_construction_full(self) -> None:
-        server = RsyncServer(
+        server = SshEndpoint(
             slug="nas-server",
             host="nas.local",
             port=2222,
             user="backup",
-            ssh_key="~/.ssh/id_rsa",
-            ssh_options=SshOptions(connect_timeout=30),
+            key="~/.ssh/id_rsa",
+            connection_options=SshConnectionOptions(connect_timeout=30),
         )
         assert server.port == 2222
         assert server.user == "backup"
-        assert server.ssh_key == "~/.ssh/id_rsa"
-        assert server.ssh_options.connect_timeout == 30
+        assert server.key == "~/.ssh/id_rsa"
+        assert server.connection_options.connect_timeout == 30
 
     def test_construction_with_proxy_jump(self) -> None:
-        server = RsyncServer(
+        server = SshEndpoint(
             slug="target",
             host="target.internal",
             proxy_jump="bastion",
@@ -84,7 +86,7 @@ class TestRsyncServer:
         assert server.proxy_jump == "bastion"
 
     def test_proxy_jump_defaults_to_none(self) -> None:
-        server = RsyncServer(slug="nas-server", host="nas.local")
+        server = SshEndpoint(slug="nas-server", host="nas.local")
         assert server.proxy_jump is None
 
 
@@ -92,11 +94,11 @@ class TestRemoteVolume:
     def test_construction(self) -> None:
         vol = RemoteVolume(
             slug="nas",
-            rsync_server="nas-server",
+            ssh_endpoint="nas-server",
             path="/backup",
         )
         assert vol.slug == "nas"
-        assert vol.rsync_server == "nas-server"
+        assert vol.ssh_endpoint == "nas-server"
         assert vol.path == "/backup"
 
     def test_frozen(self) -> None:
@@ -104,7 +106,7 @@ class TestRemoteVolume:
 
         vol = RemoteVolume(
             slug="nas",
-            rsync_server="nas-server",
+            ssh_endpoint="nas-server",
             path="/backup",
         )
         try:
@@ -349,32 +351,43 @@ def _remote_config(
     host: str = "nas.local",
     path: str = "/backup",
 ) -> tuple[RemoteVolume, Config]:
-    server = RsyncServer(slug=server_name, host=host)
+    server = SshEndpoint(slug=server_name, host=host)
     vol = RemoteVolume(
         slug=vol_name,
-        rsync_server=server_name,
+        ssh_endpoint=server_name,
         path=path,
     )
     config = Config(
-        rsync_servers={server_name: server},
+        ssh_endpoints={server_name: server},
         volumes={vol_name: vol},
     )
     return vol, config
+
+
+def _make_resolved(config: Config) -> ResolvedEndpoints:
+    """Build resolved endpoints from config for testing."""
+    result: ResolvedEndpoints = {}
+    for slug, vol in config.volumes.items():
+        if isinstance(vol, RemoteVolume):
+            server = config.ssh_endpoints[vol.ssh_endpoint]
+            proxy = None
+            if server.proxy_jump:
+                proxy = config.ssh_endpoints[server.proxy_jump]
+            result[slug] = ResolvedEndpoint(server=server, proxy=proxy)
+    return result
 
 
 class TestCheckLocalVolume:
     def test_active(self, tmp_path: Path) -> None:
         vol = LocalVolume(slug="data", path=str(tmp_path))
         (tmp_path / ".nbkp-vol").touch()
-        config = Config(volumes={"data": vol})
-        status = check_volume(vol, config)
+        status = check_volume(vol)
         assert status.active is True
         assert status.reasons == []
 
     def test_inactive(self, tmp_path: Path) -> None:
         vol = LocalVolume(slug="data", path=str(tmp_path))
-        config = Config(volumes={"data": vol})
-        status = check_volume(vol, config)
+        status = check_volume(vol)
         assert status.active is False
         assert status.reasons == [VolumeReason.MARKER_NOT_FOUND]
 
@@ -384,10 +397,11 @@ class TestCheckRemoteVolume:
     def test_active(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0)
         vol, config = _remote_config()
-        status = check_volume(vol, config)
+        resolved = _make_resolved(config)
+        status = check_volume(vol, resolved)
         assert status.active is True
         assert status.reasons == []
-        server = config.rsync_servers["nas-server"]
+        server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(
             server, ["test", "-f", "/backup/.nbkp-vol"], None
         )
@@ -396,7 +410,8 @@ class TestCheckRemoteVolume:
     def test_inactive(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1)
         vol, config = _remote_config()
-        status = check_volume(vol, config)
+        resolved = _make_resolved(config)
+        status = check_volume(vol, resolved)
         assert status.active is False
         assert status.reasons == [VolumeReason.UNREACHABLE]
 
@@ -406,16 +421,14 @@ class TestCheckCommandAvailableLocal:
     def test_command_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = "/usr/bin/rsync"
         vol = LocalVolume(slug="data", path="/mnt/data")
-        config = Config(volumes={"data": vol})
-        assert _check_command_available(vol, "rsync", config) is True
+        assert _check_command_available(vol, "rsync", {}) is True
         mock_which.assert_called_once_with("rsync")
 
     @patch("nbkp.check.shutil.which")
     def test_command_not_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = None
         vol = LocalVolume(slug="data", path="/mnt/data")
-        config = Config(volumes={"data": vol})
-        assert _check_command_available(vol, "rsync", config) is False
+        assert _check_command_available(vol, "rsync", {}) is False
         mock_which.assert_called_once_with("rsync")
 
 
@@ -424,16 +437,18 @@ class TestCheckCommandAvailableRemote:
     def test_command_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0)
         vol, config = _remote_config()
-        assert _check_command_available(vol, "rsync", config) is True
-        server = config.rsync_servers["nas-server"]
+        resolved = _make_resolved(config)
+        assert _check_command_available(vol, "rsync", resolved) is True
+        server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(server, ["which", "rsync"], None)
 
     @patch("nbkp.check.run_remote_command")
     def test_command_not_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1)
         vol, config = _remote_config()
-        assert _check_command_available(vol, "btrfs", config) is False
-        server = config.rsync_servers["nas-server"]
+        resolved = _make_resolved(config)
+        assert _check_command_available(vol, "btrfs", resolved) is False
+        server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(server, ["which", "btrfs"], None)
 
 
@@ -442,8 +457,7 @@ class TestCheckBtrfsFilesystemLocal:
     def test_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        config = Config(volumes={"data": vol})
-        assert _check_btrfs_filesystem(vol, config) is True
+        assert _check_btrfs_filesystem(vol, {}) is True
         mock_run.assert_called_once_with(
             ["stat", "-f", "-c", "%T", "/mnt/data"],
             capture_output=True,
@@ -454,15 +468,13 @@ class TestCheckBtrfsFilesystemLocal:
     def test_not_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        config = Config(volumes={"data": vol})
-        assert _check_btrfs_filesystem(vol, config) is False
+        assert _check_btrfs_filesystem(vol, {}) is False
 
     @patch("nbkp.check.subprocess.run")
     def test_stat_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        config = Config(volumes={"data": vol})
-        assert _check_btrfs_filesystem(vol, config) is False
+        assert _check_btrfs_filesystem(vol, {}) is False
 
 
 class TestCheckBtrfsFilesystemRemote:
@@ -470,8 +482,9 @@ class TestCheckBtrfsFilesystemRemote:
     def test_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
         vol, config = _remote_config()
-        assert _check_btrfs_filesystem(vol, config) is True
-        server = config.rsync_servers["nas-server"]
+        resolved = _make_resolved(config)
+        assert _check_btrfs_filesystem(vol, resolved) is True
+        server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(
             server,
             ["stat", "-f", "-c", "%T", "/backup"],
@@ -482,7 +495,8 @@ class TestCheckBtrfsFilesystemRemote:
     def test_not_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
         vol, config = _remote_config()
-        assert _check_btrfs_filesystem(vol, config) is False
+        resolved = _make_resolved(config)
+        assert _check_btrfs_filesystem(vol, resolved) is False
 
 
 class TestCheckBtrfsSubvolumeLocal:
@@ -490,8 +504,7 @@ class TestCheckBtrfsSubvolumeLocal:
     def test_is_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        config = Config(volumes={"data": vol})
-        assert _check_btrfs_subvolume(vol, None, config) is True
+        assert _check_btrfs_subvolume(vol, None, {}) is True
         mock_run.assert_called_once_with(
             ["stat", "-c", "%i", "/mnt/data"],
             capture_output=True,
@@ -502,8 +515,7 @@ class TestCheckBtrfsSubvolumeLocal:
     def test_is_subvolume_with_subdir(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        config = Config(volumes={"data": vol})
-        assert _check_btrfs_subvolume(vol, "backup", config) is True
+        assert _check_btrfs_subvolume(vol, "backup", {}) is True
         mock_run.assert_called_once_with(
             ["stat", "-c", "%i", "/mnt/data/backup"],
             capture_output=True,
@@ -514,15 +526,13 @@ class TestCheckBtrfsSubvolumeLocal:
     def test_not_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="1234\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        config = Config(volumes={"data": vol})
-        assert _check_btrfs_subvolume(vol, None, config) is False
+        assert _check_btrfs_subvolume(vol, None, {}) is False
 
     @patch("nbkp.check.subprocess.run")
     def test_stat_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        config = Config(volumes={"data": vol})
-        assert _check_btrfs_subvolume(vol, None, config) is False
+        assert _check_btrfs_subvolume(vol, None, {}) is False
 
 
 class TestCheckBtrfsSubvolumeRemote:
@@ -530,8 +540,9 @@ class TestCheckBtrfsSubvolumeRemote:
     def test_is_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol, config = _remote_config()
-        assert _check_btrfs_subvolume(vol, None, config) is True
-        server = config.rsync_servers["nas-server"]
+        resolved = _make_resolved(config)
+        assert _check_btrfs_subvolume(vol, None, resolved) is True
+        server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(
             server,
             ["stat", "-c", "%i", "/backup"],
@@ -542,8 +553,9 @@ class TestCheckBtrfsSubvolumeRemote:
     def test_is_subvolume_with_subdir(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol, config = _remote_config()
-        assert _check_btrfs_subvolume(vol, "data", config) is True
-        server = config.rsync_servers["nas-server"]
+        resolved = _make_resolved(config)
+        assert _check_btrfs_subvolume(vol, "data", resolved) is True
+        server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(
             server,
             ["stat", "-c", "%i", "/backup/data"],
@@ -554,7 +566,8 @@ class TestCheckBtrfsSubvolumeRemote:
     def test_not_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="1234\n")
         vol, config = _remote_config()
-        assert _check_btrfs_subvolume(vol, None, config) is False
+        resolved = _make_resolved(config)
+        assert _check_btrfs_subvolume(vol, None, resolved) is False
 
 
 class TestCheckBtrfsMountOptionLocal:
@@ -565,9 +578,8 @@ class TestCheckBtrfsMountOptionLocal:
             stdout="rw,relatime,user_subvol_rm_allowed\n",
         )
         vol = LocalVolume(slug="data", path="/mnt/data")
-        config = Config(volumes={"data": vol})
         assert (
-            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", config)
+            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {})
             is True
         )
         mock_run.assert_called_once_with(
@@ -580,9 +592,8 @@ class TestCheckBtrfsMountOptionLocal:
     def test_option_missing(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="rw,relatime\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        config = Config(volumes={"data": vol})
         assert (
-            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", config)
+            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {})
             is False
         )
 
@@ -590,9 +601,8 @@ class TestCheckBtrfsMountOptionLocal:
     def test_findmnt_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        config = Config(volumes={"data": vol})
         assert (
-            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", config)
+            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {})
             is False
         )
 
@@ -605,11 +615,12 @@ class TestCheckBtrfsMountOptionRemote:
             stdout="rw,relatime,user_subvol_rm_allowed\n",
         )
         vol, config = _remote_config()
+        resolved = _make_resolved(config)
         assert (
-            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", config)
+            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved)
             is True
         )
-        server = config.rsync_servers["nas-server"]
+        server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(
             server,
             ["findmnt", "-n", "-o", "OPTIONS", "/backup"],
@@ -620,8 +631,9 @@ class TestCheckBtrfsMountOptionRemote:
     def test_option_missing(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="rw,relatime\n")
         vol, config = _remote_config()
+        resolved = _make_resolved(config)
         assert (
-            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", config)
+            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved)
             is False
         )
 
@@ -1369,10 +1381,10 @@ class TestCheckSyncRemoteCommands:
         (dst / "backup").mkdir()
         (dst / "backup" / ".nbkp-dst").touch()
 
-        src_server = RsyncServer(slug="src-server", host="src.local")
+        src_server = SshEndpoint(slug="src-server", host="src.local")
         src_vol = RemoteVolume(
             slug="src",
-            rsync_server="src-server",
+            ssh_endpoint="src-server",
             path="/data",
         )
         dst_vol = LocalVolume(slug="dst", path=str(dst))
@@ -1382,7 +1394,7 @@ class TestCheckSyncRemoteCommands:
             destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
         )
         config = Config(
-            rsync_servers={"src-server": src_server},
+            ssh_endpoints={"src-server": src_server},
             volumes={"src": src_vol, "dst": dst_vol},
             syncs={"s1": sync},
         )
@@ -1400,9 +1412,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer,
+            server: SshEndpoint,
             cmd: list[str],
-            proxy: RsyncServer | None = None,
+            proxy: SshEndpoint | None = None,
         ) -> MagicMock:
             if cmd == ["test", "-f", "/data/data/.nbkp-src"]:
                 return MagicMock(returncode=0)
@@ -1412,7 +1424,7 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
         assert SyncReason.RSYNC_NOT_FOUND_ON_SOURCE in status.reasons
 
@@ -1433,11 +1445,11 @@ class TestCheckSyncRemoteCommands:
         (src / "data").mkdir()
         (src / "data" / ".nbkp-src").touch()
 
-        dst_server = RsyncServer(slug="dst-server", host="dst.local")
+        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
         src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = RemoteVolume(
             slug="dst",
-            rsync_server="dst-server",
+            ssh_endpoint="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
@@ -1446,7 +1458,7 @@ class TestCheckSyncRemoteCommands:
             destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
         )
         config = Config(
-            rsync_servers={"dst-server": dst_server},
+            ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
             syncs={"s1": sync},
         )
@@ -1464,9 +1476,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer,
+            server: SshEndpoint,
             cmd: list[str],
-            proxy: RsyncServer | None = None,
+            proxy: SshEndpoint | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1480,7 +1492,7 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
         assert SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION in status.reasons
 
@@ -1501,11 +1513,11 @@ class TestCheckSyncRemoteCommands:
         (src / "data").mkdir()
         (src / "data" / ".nbkp-src").touch()
 
-        dst_server = RsyncServer(slug="dst-server", host="dst.local")
+        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
         src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = RemoteVolume(
             slug="dst",
-            rsync_server="dst-server",
+            ssh_endpoint="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
@@ -1518,7 +1530,7 @@ class TestCheckSyncRemoteCommands:
             ),
         )
         config = Config(
-            rsync_servers={"dst-server": dst_server},
+            ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
             syncs={"s1": sync},
         )
@@ -1536,9 +1548,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer,
+            server: SshEndpoint,
             cmd: list[str],
-            proxy: RsyncServer | None = None,
+            proxy: SshEndpoint | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1554,7 +1566,7 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
         assert SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION in status.reasons
 
@@ -1575,11 +1587,11 @@ class TestCheckSyncRemoteCommands:
         (src / "data").mkdir()
         (src / "data" / ".nbkp-src").touch()
 
-        dst_server = RsyncServer(slug="dst-server", host="dst.local")
+        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
         src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = RemoteVolume(
             slug="dst",
-            rsync_server="dst-server",
+            ssh_endpoint="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
@@ -1592,7 +1604,7 @@ class TestCheckSyncRemoteCommands:
             ),
         )
         config = Config(
-            rsync_servers={"dst-server": dst_server},
+            ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
             syncs={"s1": sync},
         )
@@ -1610,9 +1622,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer,
+            server: SshEndpoint,
             cmd: list[str],
-            proxy: RsyncServer | None = None,
+            proxy: SshEndpoint | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1636,7 +1648,7 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS in status.reasons
 
@@ -1657,11 +1669,11 @@ class TestCheckSyncRemoteCommands:
         (src / "data").mkdir()
         (src / "data" / ".nbkp-src").touch()
 
-        dst_server = RsyncServer(slug="dst-server", host="dst.local")
+        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
         src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = RemoteVolume(
             slug="dst",
-            rsync_server="dst-server",
+            ssh_endpoint="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
@@ -1674,7 +1686,7 @@ class TestCheckSyncRemoteCommands:
             ),
         )
         config = Config(
-            rsync_servers={"dst-server": dst_server},
+            ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
             syncs={"s1": sync},
         )
@@ -1692,9 +1704,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer,
+            server: SshEndpoint,
             cmd: list[str],
-            proxy: RsyncServer | None = None,
+            proxy: SshEndpoint | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1725,7 +1737,7 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME in status.reasons
 
@@ -1746,11 +1758,11 @@ class TestCheckSyncRemoteCommands:
         (src / "data").mkdir()
         (src / "data" / ".nbkp-src").touch()
 
-        dst_server = RsyncServer(slug="dst-server", host="dst.local")
+        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
         src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = RemoteVolume(
             slug="dst",
-            rsync_server="dst-server",
+            ssh_endpoint="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
@@ -1763,7 +1775,7 @@ class TestCheckSyncRemoteCommands:
             ),
         )
         config = Config(
-            rsync_servers={"dst-server": dst_server},
+            ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
             syncs={"s1": sync},
         )
@@ -1781,9 +1793,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer,
+            server: SshEndpoint,
             cmd: list[str],
-            proxy: RsyncServer | None = None,
+            proxy: SshEndpoint | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1822,7 +1834,7 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
         assert (
             SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.reasons
@@ -1845,11 +1857,11 @@ class TestCheckSyncRemoteCommands:
         (src / "data").mkdir()
         (src / "data" / ".nbkp-src").touch()
 
-        dst_server = RsyncServer(slug="dst-server", host="dst.local")
+        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
         src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = RemoteVolume(
             slug="dst",
-            rsync_server="dst-server",
+            ssh_endpoint="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
@@ -1862,7 +1874,7 @@ class TestCheckSyncRemoteCommands:
             ),
         )
         config = Config(
-            rsync_servers={"dst-server": dst_server},
+            ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
             syncs={"s1": sync},
         )
@@ -1880,9 +1892,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer,
+            server: SshEndpoint,
             cmd: list[str],
-            proxy: RsyncServer | None = None,
+            proxy: SshEndpoint | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1900,7 +1912,7 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
         assert SyncReason.STAT_NOT_FOUND_ON_DESTINATION in status.reasons
         assert SyncReason.DESTINATION_NOT_BTRFS not in status.reasons
@@ -1922,11 +1934,11 @@ class TestCheckSyncRemoteCommands:
         (src / "data").mkdir()
         (src / "data" / ".nbkp-src").touch()
 
-        dst_server = RsyncServer(slug="dst-server", host="dst.local")
+        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
         src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = RemoteVolume(
             slug="dst",
-            rsync_server="dst-server",
+            ssh_endpoint="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
@@ -1939,7 +1951,7 @@ class TestCheckSyncRemoteCommands:
             ),
         )
         config = Config(
-            rsync_servers={"dst-server": dst_server},
+            ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
             syncs={"s1": sync},
         )
@@ -1957,9 +1969,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer,
+            server: SshEndpoint,
             cmd: list[str],
-            proxy: RsyncServer | None = None,
+            proxy: SshEndpoint | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1996,7 +2008,7 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
         assert SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION in status.reasons
         assert (
@@ -2021,11 +2033,11 @@ class TestCheckSyncRemoteCommands:
         (src / "data").mkdir()
         (src / "data" / ".nbkp-src").touch()
 
-        dst_server = RsyncServer(slug="dst-server", host="dst.local")
+        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
         src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = RemoteVolume(
             slug="dst",
-            rsync_server="dst-server",
+            ssh_endpoint="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
@@ -2038,7 +2050,7 @@ class TestCheckSyncRemoteCommands:
             ),
         )
         config = Config(
-            rsync_servers={"dst-server": dst_server},
+            ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
             syncs={"s1": sync},
         )
@@ -2056,9 +2068,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer,
+            server: SshEndpoint,
             cmd: list[str],
-            proxy: RsyncServer | None = None,
+            proxy: SshEndpoint | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2112,7 +2124,7 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
         assert SyncReason.DESTINATION_LATEST_NOT_FOUND in status.reasons
         assert (
@@ -2137,11 +2149,11 @@ class TestCheckSyncRemoteCommands:
         (src / "data").mkdir()
         (src / "data" / ".nbkp-src").touch()
 
-        dst_server = RsyncServer(slug="dst-server", host="dst.local")
+        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
         src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = RemoteVolume(
             slug="dst",
-            rsync_server="dst-server",
+            ssh_endpoint="dst-server",
             path="/backup",
         )
         sync = SyncConfig(
@@ -2154,7 +2166,7 @@ class TestCheckSyncRemoteCommands:
             ),
         )
         config = Config(
-            rsync_servers={"dst-server": dst_server},
+            ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
             syncs={"s1": sync},
         )
@@ -2172,9 +2184,9 @@ class TestCheckSyncRemoteCommands:
         }
 
         def remote_side_effect(
-            server: RsyncServer,
+            server: SshEndpoint,
             cmd: list[str],
-            proxy: RsyncServer | None = None,
+            proxy: SshEndpoint | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2228,7 +2240,7 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
         assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
         assert SyncReason.DESTINATION_LATEST_NOT_FOUND not in status.reasons
@@ -2321,9 +2333,10 @@ class TestCheckRemoteVolumeSpaces:
     def test_active(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0)
         vol, config = _remote_config(path="/my backup")
-        status = check_volume(vol, config)
+        resolved = _make_resolved(config)
+        status = check_volume(vol, resolved)
         assert status.active is True
-        server = config.rsync_servers["nas-server"]
+        server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(
             server,
             ["test", "-f", "/my backup/.nbkp-vol"],

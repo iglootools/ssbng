@@ -7,7 +7,7 @@ from typing import Callable, Optional
 from pydantic import BaseModel
 
 from .btrfs import create_snapshot, get_latest_snapshot, prune_snapshots
-from ..config import Config
+from ..config import Config, ResolvedEndpoints
 from ..check import SyncStatus
 from .rsync import run_rsync
 
@@ -45,6 +45,7 @@ def run_all_syncs(
     on_rsync_output: Callable[[str], None] | None = None,
     on_sync_start: Callable[[str], None] | None = None,
     on_sync_end: Callable[[str, SyncResult], None] | None = None,
+    resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> list[SyncResult]:
     """Run all (or selected) syncs.
 
@@ -84,6 +85,7 @@ def run_all_syncs(
                 verbose,
                 prune,
                 on_rsync_output,
+                resolved_endpoints,
             )
 
         results.append(result)
@@ -101,6 +103,7 @@ def _run_single_sync(
     verbose: int = 0,
     prune: bool = True,
     on_rsync_output: Callable[[str], None] | None = None,
+    resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> SyncResult:
     """Run a single sync operation."""
     sync = status.config
@@ -108,7 +111,7 @@ def _run_single_sync(
     # Check for link-dest if btrfs snapshots are configured
     link_dest: str | None = None
     if sync.destination.btrfs_snapshots.enabled:
-        latest = get_latest_snapshot(sync, config)
+        latest = get_latest_snapshot(sync, config, resolved_endpoints)
         if latest:
             link_dest = f"../../snapshots/{latest.rsplit('/', 1)[-1]}"
 
@@ -120,6 +123,7 @@ def _run_single_sync(
             link_dest=link_dest,
             verbose=verbose,
             on_output=on_rsync_output,
+            resolved_endpoints=resolved_endpoints,
         )
     except Exception as e:
         return SyncResult(
@@ -147,7 +151,11 @@ def _run_single_sync(
         btrfs_cfg = sync.destination.btrfs_snapshots
         if btrfs_cfg.enabled and not dry_run:
             try:
-                snapshot_path = create_snapshot(sync, config)
+                snapshot_path = create_snapshot(
+                    sync,
+                    config,
+                    resolved_endpoints=resolved_endpoints,
+                )
             except RuntimeError as e:
                 return SyncResult(
                     sync_slug=slug,
@@ -159,7 +167,10 @@ def _run_single_sync(
                 )
             if prune and btrfs_cfg.max_snapshots is not None:
                 pruned_paths = prune_snapshots(
-                    sync, config, btrfs_cfg.max_snapshots
+                    sync,
+                    config,
+                    btrfs_cfg.max_snapshots,
+                    resolved_endpoints=resolved_endpoints,
                 )
 
         return SyncResult(

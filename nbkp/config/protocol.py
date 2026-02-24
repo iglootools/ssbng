@@ -41,7 +41,7 @@ class LocalVolume(_BaseModel):
     path: str = Field(..., min_length=1)
 
 
-class SshOptions(_BaseModel):
+class SshConnectionOptions(_BaseModel):
     """SSH connection options.
 
     These fields map to parameters across three layers:
@@ -94,15 +94,19 @@ class SshOptions(_BaseModel):
     disabled_algorithms: Optional[Dict[str, List[str]]] = None
 
 
-class RsyncServer(_BaseModel):
+class SshEndpoint(_BaseModel):
     model_config = ConfigDict(frozen=True)
     slug: Slug
     host: str = Field(..., min_length=1)
     port: int = Field(default=22, ge=1, le=65535)
     user: Optional[str] = None
-    ssh_key: Optional[str] = None
-    ssh_options: SshOptions = Field(default_factory=lambda: SshOptions())
+    key: Optional[str] = None
+    connection_options: SshConnectionOptions = Field(
+        default_factory=lambda: SshConnectionOptions()
+    )
     proxy_jump: Optional[str] = None
+    location: Optional[str] = None
+    extends: Optional[str] = None
 
 
 class RemoteVolume(_BaseModel):
@@ -110,7 +114,8 @@ class RemoteVolume(_BaseModel):
     type: Literal["remote"] = "remote"
     """A remote volume accessible via SSH."""
     slug: Slug
-    rsync_server: str = Field(..., min_length=1)
+    ssh_endpoint: str = Field(..., min_length=1)
+    ssh_endpoints: Optional[List[str]] = None
     path: str = Field(..., min_length=1)
 
 
@@ -175,14 +180,77 @@ class SyncConfig(_BaseModel):
         return result
 
 
+class EndpointFilter(_BaseModel):
+    """Endpoint selection filter (not serialized)."""
+
+    model_config = ConfigDict(frozen=True)
+    location: Optional[str] = None
+    network: Optional[Literal["private", "public"]] = None
+
+
 class Config(_BaseModel):
     """Top-level NBKP configuration."""
 
-    rsync_servers: Dict[str, RsyncServer] = Field(default_factory=dict)
+    location: Optional[str] = None
+    ssh_endpoints: Dict[str, SshEndpoint] = Field(default_factory=dict)
 
-    @field_validator("rsync_servers", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def inject_rsync_server_slugs(cls, v: Any, info: ValidationInfo) -> Any:
+    def resolve_ssh_endpoint_extends(cls, data: Any) -> Any:
+        """Resolve `extends` inheritance on ssh-endpoints."""
+        if not isinstance(data, dict):
+            return data
+        endpoints = (
+            data.get("ssh-endpoints") or data.get("ssh_endpoints") or {}
+        )
+        if not isinstance(endpoints, dict):
+            return data
+
+        resolved: dict[str, Any] = {}
+
+        def _resolve(slug: str, chain: list[str]) -> Any:
+            if slug in resolved:
+                return resolved[slug]
+            ep = endpoints[slug]
+            if not isinstance(ep, dict):
+                resolved[slug] = ep
+                return ep
+            parent_slug = ep.get("extends")
+            if parent_slug is None:
+                resolved[slug] = ep
+                return ep
+            if parent_slug in chain:
+                chain_str = " -> ".join(chain + [parent_slug])
+                raise ValueError(f"Circular extends chain: {chain_str}")
+            if parent_slug not in endpoints:
+                raise ValueError(
+                    f"Endpoint '{slug}' extends "
+                    f"unknown endpoint '{parent_slug}'"
+                )
+            parent = _resolve(parent_slug, chain + [slug])
+            if not isinstance(parent, dict):
+                resolved[slug] = ep
+                return ep
+            merged = {
+                **parent,
+                **{k: v for k, v in ep.items() if k != "extends"},
+            }
+            resolved[slug] = merged
+            return merged
+
+        for slug in endpoints:
+            _resolve(slug, [])
+
+        data = {**data}
+        if "ssh-endpoints" in data:
+            data["ssh-endpoints"] = resolved
+        else:
+            data["ssh_endpoints"] = resolved
+        return data
+
+    @field_validator("ssh_endpoints", mode="before")
+    @classmethod
+    def inject_ssh_endpoint_slugs(cls, v: Any, info: ValidationInfo) -> Any:
         return {
             slug: (
                 {**data, "slug": slug}
@@ -224,17 +292,75 @@ class Config(_BaseModel):
             for slug, data in v.items()
         }
 
-    def resolve_proxy(self, server: RsyncServer) -> RsyncServer | None:
+    def resolve_endpoint_for_volume(
+        self,
+        vol: RemoteVolume,
+        endpoint_filter: EndpointFilter | None = None,
+    ) -> SshEndpoint:
+        """Select the best SSH endpoint for a remote volume.
+
+        Uses ``endpoint_filter`` (location, network) to narrow
+        candidates.  Falls back to the primary ``ssh_endpoint``.
+        """
+        from ..net import is_private_host
+
+        candidates = (
+            list(vol.ssh_endpoints)
+            if vol.ssh_endpoints
+            else [vol.ssh_endpoint]
+        )
+
+        ef = endpoint_filter
+        if ef is None:
+            return self.ssh_endpoints[candidates[0]]
+
+        # DNS reachability: drop endpoints whose host
+        # cannot be resolved
+        reachable = [
+            slug
+            for slug in candidates
+            if is_private_host(self.ssh_endpoints[slug].host) is not None
+        ]
+        if not reachable:
+            return self.ssh_endpoints[vol.ssh_endpoint]
+
+        # Location filter
+        if ef.location is not None:
+            by_loc = [
+                slug
+                for slug in reachable
+                if self.ssh_endpoints[slug].location == ef.location
+            ]
+            if by_loc:
+                reachable = by_loc
+
+        # Network filter (private / public)
+        if ef.network is not None:
+            want_private = ef.network == "private"
+            by_net = [
+                slug
+                for slug in reachable
+                if is_private_host(self.ssh_endpoints[slug].host)
+                == want_private
+            ]
+            if by_net:
+                reachable = by_net
+
+        # Deterministic pick: first candidate in original order
+        return self.ssh_endpoints[reachable[0]]
+
+    def resolve_proxy(self, server: SshEndpoint) -> SshEndpoint | None:
         """Resolve the proxy-jump server, if any."""
         if server.proxy_jump is not None:
-            return self.rsync_servers[server.proxy_jump]
-        return None
+            return self.ssh_endpoints[server.proxy_jump]
+        else:
+            return None
 
     @model_validator(mode="after")
     def validate_cross_references(self) -> Config:
-        for slug, server in self.rsync_servers.items():
+        for slug, server in self.ssh_endpoints.items():
             if server.proxy_jump is not None:
-                if server.proxy_jump not in self.rsync_servers:
+                if server.proxy_jump not in self.ssh_endpoints:
                     raise ValueError(
                         f"Server '{slug}' references "
                         f"unknown proxy-jump server "
@@ -250,17 +376,26 @@ class Config(_BaseModel):
                             f"server '{slug}'"
                         )
                     visited.add(current)
-                    current = self.rsync_servers[current].proxy_jump
+                    current = self.ssh_endpoints[current].proxy_jump
 
         for vol_slug, vol in self.volumes.items():
             match vol:
                 case RemoteVolume():
-                    if vol.rsync_server not in self.rsync_servers:
-                        ref = vol.rsync_server
+                    if vol.ssh_endpoint not in self.ssh_endpoints:
+                        ref = vol.ssh_endpoint
                         raise ValueError(
                             f"Volume '{vol_slug}' references "
-                            f"unknown rsync-server '{ref}'"
+                            f"unknown ssh-endpoint '{ref}'"
                         )
+                    if vol.ssh_endpoints is not None:
+                        for ep_ref in vol.ssh_endpoints:
+                            if ep_ref not in self.ssh_endpoints:
+                                raise ValueError(
+                                    f"Volume '{vol_slug}'"
+                                    f" references unknown"
+                                    f" ssh-endpoint"
+                                    f" '{ep_ref}'"
+                                )
         for sync_slug, sync in self.syncs.items():
             if sync.source.volume not in self.volumes:
                 src = sync.source.volume
