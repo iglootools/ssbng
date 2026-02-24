@@ -26,7 +26,7 @@ from .output import (
 from .scriptgen import ScriptOptions, generate_script
 from .sync import PruneResult, SyncResult, run_all_syncs
 
-_REMOVABLE_DEVICE_REASONS = {
+_MARKER_ONLY_REASONS = {
     SyncReason.SOURCE_MARKER_NOT_FOUND,
     SyncReason.DESTINATION_MARKER_NOT_FOUND,
 }
@@ -48,22 +48,22 @@ def status(
         OutputFormat,
         typer.Option("--output", "-o", help="Output format"),
     ] = OutputFormat.HUMAN,
-    allow_removable_devices: Annotated[
+    strict: Annotated[
         bool,
         typer.Option(
-            "--allow-removable-devices/--no-allow-removable-devices",
+            "--strict/--no-strict",
             help=(
-                "Treat missing .nbkp-src/.nbkp-dst markers"
-                " as non-fatal for exit code"
+                "Exit non-zero on any inactive sync,"
+                " including missing markers"
             ),
         ),
-    ] = True,
+    ] = False,
 ) -> None:
     """Show status of volumes and syncs."""
     cfg = _load_config_or_exit(config)
     output_format = output
     vol_statuses, sync_statuses, has_errors = _check_and_display_status(
-        cfg, output_format, allow_removable_devices
+        cfg, output_format, strict
     )
 
     if output_format is OutputFormat.JSON:
@@ -111,22 +111,22 @@ def run(
             help="Prune old snapshots after sync",
         ),
     ] = True,
-    allow_removable_devices: Annotated[
+    strict: Annotated[
         bool,
         typer.Option(
-            "--allow-removable-devices/--no-allow-removable-devices",
+            "--strict/--no-strict",
             help=(
-                "Treat missing .nbkp-src/.nbkp-dst markers"
-                " as non-fatal for exit code"
+                "Exit non-zero on any inactive sync,"
+                " including missing markers"
             ),
         ),
-    ] = True,
+    ] = False,
 ) -> None:
     """Run backup syncs."""
     cfg = _load_config_or_exit(config)
     output_format = output
     vol_statuses, sync_statuses, has_errors = _check_and_display_status(
-        cfg, output_format, allow_removable_devices, only_syncs=sync
+        cfg, output_format, strict, only_syncs=sync
     )
 
     if has_errors:
@@ -396,7 +396,7 @@ def _check_all_with_progress(
 def _check_and_display_status(
     cfg: Config,
     output_format: OutputFormat,
-    allow_removable_devices: bool,
+    strict: bool,
     only_syncs: list[str] | None = None,
 ) -> tuple[
     dict[str, VolumeStatus],
@@ -418,13 +418,13 @@ def _check_and_display_status(
     if output_format is OutputFormat.HUMAN:
         print_human_status(vol_statuses, sync_statuses, cfg)
 
-    if allow_removable_devices:
+    if strict:
+        has_errors = any(not s.active for s in sync_statuses.values())
+    else:
         has_errors = any(
-            set(s.reasons) - _REMOVABLE_DEVICE_REASONS
+            set(s.reasons) - _MARKER_ONLY_REASONS
             for s in sync_statuses.values()
         )
-    else:
-        has_errors = any(not s.active for s in sync_statuses.values())
 
     return vol_statuses, sync_statuses, has_errors
 

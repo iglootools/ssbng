@@ -247,7 +247,7 @@ class TestStatusCommand:
 
     @patch("nbkp.cli.check_all_syncs")
     @patch("nbkp.cli.load_config")
-    def test_marker_only_exit_1_when_no_allow_removable(
+    def test_marker_only_exit_1_when_strict(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
         config = _sample_config()
@@ -262,7 +262,7 @@ class TestStatusCommand:
                 "status",
                 "--config",
                 "/fake.yaml",
-                "--no-allow-removable-devices",
+                "--strict",
             ],
         )
         assert result.exit_code == 1
@@ -560,7 +560,7 @@ class TestRunCommand:
     @patch("nbkp.cli.run_all_syncs")
     @patch("nbkp.cli.check_all_syncs")
     @patch("nbkp.cli.load_config")
-    def test_marker_only_exits_when_no_allow_removable(
+    def test_marker_only_exits_when_strict(
         self,
         mock_load: MagicMock,
         mock_checks: MagicMock,
@@ -578,7 +578,7 @@ class TestRunCommand:
                 "run",
                 "--config",
                 "/fake.yaml",
-                "--no-allow-removable-devices",
+                "--strict",
             ],
         )
         assert result.exit_code == 1
