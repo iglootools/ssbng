@@ -46,8 +46,11 @@ def find_config_file(config_path: str | None = None) -> Path:
 def load_config(config_path: str | None = None) -> Config:
     """Load and validate configuration from a YAML file."""
     path = find_config_file(config_path)
-    with open(path) as f:
-        raw = yaml.safe_load(f)
+    try:
+        with open(path) as f:
+            raw = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        raise ConfigError(f"Invalid YAML in {path}: {e}") from e
 
     if not isinstance(raw, dict):
         raise ConfigError("Config file must be a YAML mapping")
@@ -55,5 +58,5 @@ def load_config(config_path: str | None = None) -> Config:
         try:
             config = Config.model_validate(raw)
         except Exception as e:
-            raise ConfigError("Config validation error") from e
+            raise ConfigError(str(e)) from e
         return config

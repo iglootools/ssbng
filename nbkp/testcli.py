@@ -17,6 +17,7 @@ from .config import (
     SyncEndpoint,
 )
 from .output import (
+    print_config_error,
     print_human_prune_results,
     print_human_results,
     print_human_status,
@@ -52,6 +53,7 @@ def output() -> None:
     _show_results()
     _show_prune()
     _show_troubleshoot()
+    _show_config_errors()
 
 
 def _show_status() -> None:
@@ -82,6 +84,65 @@ def _show_troubleshoot() -> None:
     config = troubleshoot_config()
     vol_statuses, sync_statuses = troubleshoot_data(config)
     print_human_troubleshoot(vol_statuses, sync_statuses, config)
+
+
+def _show_config_errors() -> None:
+    from pydantic import ValidationError
+    from .config import ConfigError
+    from .config.protocol import Config as ConfigModel
+
+    typer.echo("\n=== print_config_error (file not found) ===\n")
+    print_config_error(
+        ConfigError("Config file not found: /etc/nbkp/config.yaml")
+    )
+
+    typer.echo("\n=== print_config_error (invalid YAML) ===\n")
+    try:
+        yaml.safe_load("not_a_list:\n  - [invalid")
+    except yaml.YAMLError as ye:
+        err = ConfigError(f"Invalid YAML in /etc/nbkp/config.yaml: {ye}")
+        err.__cause__ = ye
+        print_config_error(err)
+
+    typer.echo("\n=== print_config_error (invalid volume type) ===\n")
+    try:
+        ConfigModel.model_validate(
+            {"volumes": {"v": {"type": "ftp", "path": "/x"}}}
+        )
+    except ValidationError as ve:
+        err = ConfigError(str(ve))
+        err.__cause__ = ve
+        print_config_error(err)
+
+    typer.echo("\n=== print_config_error (unknown server reference) ===\n")
+    try:
+        ConfigModel.model_validate(
+            {
+                "rsync-servers": {},
+                "volumes": {
+                    "v": {
+                        "type": "remote",
+                        "rsync-server": "missing",
+                        "path": "/x",
+                    },
+                },
+                "syncs": {},
+            }
+        )
+    except ValidationError as ve:
+        err = ConfigError(str(ve))
+        err.__cause__ = ve
+        print_config_error(err)
+
+    typer.echo("\n=== print_config_error (missing required field) ===\n")
+    try:
+        ConfigModel.model_validate(
+            {"volumes": {"v": {"type": "local"}}, "syncs": {}}
+        )
+    except ValidationError as ve:
+        err = ConfigError(str(ve))
+        err.__cause__ = ve
+        print_config_error(err)
 
 
 _CHUNK_SIZE = 1024 * 1024  # 1 MB

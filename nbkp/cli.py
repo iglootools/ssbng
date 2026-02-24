@@ -17,6 +17,7 @@ from .status import SyncReason, SyncStatus, VolumeStatus, check_all_syncs
 from .sync.btrfs import list_snapshots, prune_snapshots
 from .output import (
     OutputFormat,
+    print_config_error,
     print_human_prune_results,
     print_human_results,
     print_human_status,
@@ -360,7 +361,7 @@ def _load_config_or_exit(config_path: str | None) -> Config:
     try:
         return load_config(config_path)
     except ConfigError as e:
-        typer.echo(f"Config error: {e}", err=True)
+        print_config_error(e)
         raise typer.Exit(2)
 
 

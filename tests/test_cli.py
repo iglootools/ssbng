@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
@@ -27,6 +28,12 @@ from nbkp.status import (
 )
 
 runner = CliRunner()
+
+
+def _strip_panel(text: str) -> str:
+    """Strip Rich panel border characters and normalize whitespace."""
+    text = re.sub(r"[╭╮╰╯│─]", "", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def _sample_config() -> Config:
@@ -777,6 +784,81 @@ class TestConfigError:
     def test_run_config_error(self, mock_load: MagicMock) -> None:
         result = runner.invoke(app, ["run", "--config", "/bad.yaml"])
         assert result.exit_code == 2
+
+    def test_plain_error_message(self) -> None:
+        from nbkp.config import ConfigError
+
+        err = ConfigError("Config file not found: /bad.yaml")
+        with patch("nbkp.cli.load_config", side_effect=err):
+            result = runner.invoke(app, ["status", "--config", "/bad.yaml"])
+        assert result.exit_code == 2
+        out = _strip_panel(result.output)
+        assert "Config file not found: /bad.yaml" in out
+
+    def test_validation_error_message(self) -> None:
+        from nbkp.config import ConfigError
+        from pydantic import ValidationError
+        from nbkp.config.protocol import Config
+
+        try:
+            Config.model_validate(
+                {"volumes": {"v": {"type": "ftp", "path": "/x"}}}
+            )
+        except ValidationError as ve:
+            err = ConfigError(str(ve))
+            err.__cause__ = ve
+
+        with patch("nbkp.cli.load_config", side_effect=err):
+            result = runner.invoke(app, ["status", "--config", "/bad.yaml"])
+        assert result.exit_code == 2
+        out = _strip_panel(result.output)
+        assert "volumes → v" in out
+        assert "does not match any of the expected tags" in out
+
+    def test_yaml_error_message(self) -> None:
+        import yaml
+        from nbkp.config import ConfigError
+
+        try:
+            yaml.safe_load("not_a_list:\n  - [invalid")
+        except yaml.YAMLError as ye:
+            err = ConfigError(f"Invalid YAML in /bad.yaml: {ye}")
+            err.__cause__ = ye
+
+        with patch("nbkp.cli.load_config", side_effect=err):
+            result = runner.invoke(app, ["status", "--config", "/bad.yaml"])
+        assert result.exit_code == 2
+        out = _strip_panel(result.output)
+        assert "Invalid YAML" in out
+
+    def test_cross_reference_error_message(self) -> None:
+        from nbkp.config import ConfigError
+        from pydantic import ValidationError
+        from nbkp.config.protocol import Config
+
+        try:
+            Config.model_validate(
+                {
+                    "rsync-servers": {},
+                    "volumes": {
+                        "v": {
+                            "type": "remote",
+                            "rsync-server": "missing",
+                            "path": "/x",
+                        },
+                    },
+                    "syncs": {},
+                }
+            )
+        except ValidationError as ve:
+            err = ConfigError(str(ve))
+            err.__cause__ = ve
+
+        with patch("nbkp.cli.load_config", side_effect=err):
+            result = runner.invoke(app, ["status", "--config", "/bad.yaml"])
+        assert result.exit_code == 2
+        out = _strip_panel(result.output)
+        assert "unknown rsync-server 'missing'" in out
 
 
 class TestShCommand:

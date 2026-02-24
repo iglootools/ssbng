@@ -5,12 +5,15 @@ from __future__ import annotations
 import enum
 import textwrap
 
+from pydantic import ValidationError
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
 from .config import (
     Config,
+    ConfigError,
     LocalVolume,
     RemoteVolume,
     RsyncServer,
@@ -481,3 +484,25 @@ def print_human_troubleshoot(
 
     if not has_issues:
         console.print("No issues found." " All volumes and syncs are active.")
+
+
+def print_config_error(e: ConfigError) -> None:
+    """Print a ConfigError as a Rich panel to stderr."""
+    console = Console(stderr=True)
+    cause = e.__cause__
+    match cause:
+        case ValidationError():
+            lines: list[str] = []
+            for err in cause.errors():
+                loc = " → ".join(str(p) for p in err["loc"])
+                msg = err["msg"]
+                if msg.startswith("Value error, "):
+                    msg = msg[len("Value error, "):]
+                if loc:
+                    lines.append(f"{loc}: {msg}")
+                else:
+                    lines.append(msg)
+            body = "\n".join(lines)
+        case _:
+            body = str(e)
+    console.print(Panel(body, title="Config error", style="red"))

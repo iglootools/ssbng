@@ -104,7 +104,7 @@ class TestLoadConfig:
     def test_invalid_yaml(self, tmp_path: Path) -> None:
         p = tmp_path / "bad.yaml"
         p.write_text("not_a_list:\n  - [invalid")
-        with pytest.raises(Exception):
+        with pytest.raises(ConfigError, match="Invalid YAML"):
             load_config(str(p))
 
     def test_not_a_mapping(self, tmp_path: Path) -> None:
