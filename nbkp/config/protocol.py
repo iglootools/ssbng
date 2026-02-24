@@ -358,7 +358,7 @@ class Config(_BaseModel):
         Uses ``endpoint_filter`` (location, network) to narrow
         candidates.  Falls back to the primary ``ssh_endpoint``.
         """
-        from ..net import is_private_host
+        from ..remote.resolution import is_private_host
 
         candidates = (
             list(vol.ssh_endpoints)
