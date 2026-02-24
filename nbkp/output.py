@@ -104,7 +104,7 @@ def print_human_check(
     )
     vol_table.add_column("Name", style="bold")
     vol_table.add_column("Type")
-    vol_table.add_column("Location")
+    vol_table.add_column("URI")
     vol_table.add_column("Status")
 
     for vs in vol_statuses.values():
@@ -656,7 +656,7 @@ def print_human_config(
     vol_table = Table(title="Volumes:")
     vol_table.add_column("Name", style="bold")
     vol_table.add_column("Type")
-    vol_table.add_column("Location")
+    vol_table.add_column("URI")
 
     for vol in config.volumes.values():
         match vol:
