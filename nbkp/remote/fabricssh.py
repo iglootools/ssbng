@@ -14,11 +14,11 @@ from .ssh import build_ssh_e_option as build_ssh_e_option  # noqa: F401
 from .ssh import format_remote_path as format_remote_path  # noqa: F401
 
 
-def _build_connection(
+def _build_single_connection(
     server: SshEndpoint,
-    proxy_server: SshEndpoint | None = None,
+    gateway: Connection | None = None,
 ) -> Connection:
-    """Build a Fabric Connection from server config."""
+    """Build a single Fabric Connection with optional gateway."""
     opts = server.connection_options
     connect_kwargs: dict[str, object] = {
         "allow_agent": opts.allow_agent,
@@ -36,10 +36,6 @@ def _build_connection(
     if server.key:
         connect_kwargs["key_filename"] = server.key
 
-    gateway: Connection | None = None
-    if proxy_server is not None:
-        gateway = _build_connection(proxy_server)
-
     conn = Connection(
         host=server.host,
         port=server.port,
@@ -56,14 +52,25 @@ def _build_connection(
     return conn
 
 
+def _build_connection(
+    server: SshEndpoint,
+    proxy_chain: list[SshEndpoint] | None = None,
+) -> Connection:
+    """Build a Fabric Connection with optional proxy chain."""
+    gateway: Connection | None = None
+    for proxy in proxy_chain or []:
+        gateway = _build_single_connection(proxy, gateway)
+    return _build_single_connection(server, gateway)
+
+
 def run_remote_command(
     server: SshEndpoint,
     command: list[str],
-    proxy_server: SshEndpoint | None = None,
+    proxy_chain: list[SshEndpoint] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run a command on a remote host via Fabric."""
     cmd_string = " ".join(shlex.quote(arg) for arg in command)
-    with _build_connection(server, proxy_server) as conn:
+    with _build_connection(server, proxy_chain) as conn:
         if server.connection_options.server_alive_interval is not None:
             conn.transport.set_keepalive(
                 server.connection_options.server_alive_interval

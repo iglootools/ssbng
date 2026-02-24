@@ -70,7 +70,7 @@ To be considered active, a local volume must have a `.nbkp-vol` file in the root
 A reusable configuration for an SSH server that can be shared between multiple remote volumes.
 Provides the host, port, user, key, structured connection options, and optional proxy-jump.
 
-The `proxy-jump` field references another ssh-endpoint by slug, enabling connections through a bastion/jump host. This maps to SSH's `-J` flag and Fabric's `gateway` parameter. Circular proxy-jump chains are detected and rejected at config load time.
+The `proxy-jump` field references another ssh-endpoint by slug, enabling connections through a bastion/jump host. For multi-hop chains, use `proxy-jumps` (a list of endpoint slugs); the two fields are mutually exclusive. Both map to SSH's `-J` flag (comma-separated) and Fabric's nested `gateway` parameter. Circular proxy-jump chains are detected and rejected at config load time.
 
 The `location` field declares which network location this endpoint is accessible from (e.g. `home`, `office`, `travel`). Used with the `--location` CLI option for endpoint selection (see [Endpoint Filtering](#endpoint-filtering)).
 

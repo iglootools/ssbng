@@ -104,8 +104,8 @@ def build_rsync_command(
                 dry_run,
                 link_dest,
                 verbose,
-                src_proxy=src_ep.proxy,
-                dst_proxy=dst_ep.proxy,
+                src_proxy=src_ep.proxy_chain,
+                dst_proxy=dst_ep.proxy_chain,
                 dest_suffix=dest_suffix,
             )
         case (RemoteVolume() as sv, LocalVolume()):
@@ -115,7 +115,7 @@ def build_rsync_command(
             rsync_args.extend(
                 build_ssh_e_option(
                     src_ep.server,
-                    src_ep.proxy,
+                    src_ep.proxy_chain,
                 )
             )
             rsync_args.append(
@@ -130,7 +130,7 @@ def build_rsync_command(
             rsync_args.extend(
                 build_ssh_e_option(
                     dst_ep.server,
-                    dst_ep.proxy,
+                    dst_ep.proxy_chain,
                 )
             )
             rsync_args.append(f"{src_path}/")
@@ -156,8 +156,8 @@ def _build_remote_to_remote(
     dry_run: bool,
     link_dest: str | None,
     verbose: int = 0,
-    src_proxy: SshEndpoint | None = None,
-    dst_proxy: SshEndpoint | None = None,
+    src_proxy: list[SshEndpoint] | None = None,
+    dst_proxy: list[SshEndpoint] | None = None,
     dest_suffix: str = "latest",
 ) -> list[str]:
     """Build remote-to-remote rsync command (SSH into dest, rsync from src)."""

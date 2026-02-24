@@ -371,10 +371,10 @@ def _make_resolved(config: Config) -> ResolvedEndpoints:
     for slug, vol in config.volumes.items():
         if isinstance(vol, RemoteVolume):
             server = config.ssh_endpoints[vol.ssh_endpoint]
-            proxy = None
-            if server.proxy_jump:
-                proxy = config.ssh_endpoints[server.proxy_jump]
-            result[slug] = ResolvedEndpoint(server=server, proxy=proxy)
+            proxy_chain = config.resolve_proxy_chain(server)
+            result[slug] = ResolvedEndpoint(
+                server=server, proxy_chain=proxy_chain
+            )
     return result
 
 
@@ -404,7 +404,7 @@ class TestCheckRemoteVolume:
         assert status.reasons == []
         server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(
-            server, ["test", "-f", "/backup/.nbkp-vol"], None
+            server, ["test", "-f", "/backup/.nbkp-vol"], []
         )
 
     @patch("nbkp.check.run_remote_command")
@@ -441,7 +441,7 @@ class TestCheckCommandAvailableRemote:
         resolved = _make_resolved(config)
         assert _check_command_available(vol, "rsync", resolved) is True
         server = config.ssh_endpoints["nas-server"]
-        mock_run.assert_called_once_with(server, ["which", "rsync"], None)
+        mock_run.assert_called_once_with(server, ["which", "rsync"], [])
 
     @patch("nbkp.check.run_remote_command")
     def test_command_not_found(self, mock_run: MagicMock) -> None:
@@ -450,7 +450,7 @@ class TestCheckCommandAvailableRemote:
         resolved = _make_resolved(config)
         assert _check_command_available(vol, "btrfs", resolved) is False
         server = config.ssh_endpoints["nas-server"]
-        mock_run.assert_called_once_with(server, ["which", "btrfs"], None)
+        mock_run.assert_called_once_with(server, ["which", "btrfs"], [])
 
 
 class TestCheckBtrfsFilesystemLocal:
@@ -489,7 +489,7 @@ class TestCheckBtrfsFilesystemRemote:
         mock_run.assert_called_once_with(
             server,
             ["stat", "-f", "-c", "%T", "/backup"],
-            None,
+            [],
         )
 
     @patch("nbkp.check.run_remote_command")
@@ -547,7 +547,7 @@ class TestCheckBtrfsSubvolumeRemote:
         mock_run.assert_called_once_with(
             server,
             ["stat", "-c", "%i", "/backup"],
-            None,
+            [],
         )
 
     @patch("nbkp.check.run_remote_command")
@@ -560,7 +560,7 @@ class TestCheckBtrfsSubvolumeRemote:
         mock_run.assert_called_once_with(
             server,
             ["stat", "-c", "%i", "/backup/data"],
-            None,
+            [],
         )
 
     @patch("nbkp.check.run_remote_command")
@@ -625,7 +625,7 @@ class TestCheckBtrfsMountOptionRemote:
         mock_run.assert_called_once_with(
             server,
             ["findmnt", "-n", "-o", "OPTIONS", "/backup"],
-            None,
+            [],
         )
 
     @patch("nbkp.check.run_remote_command")
@@ -1415,7 +1415,7 @@ class TestCheckSyncRemoteCommands:
         def remote_side_effect(
             server: SshEndpoint,
             cmd: list[str],
-            proxy: SshEndpoint | None = None,
+            proxy_chain: list[SshEndpoint] | None = None,
         ) -> MagicMock:
             if cmd == ["test", "-f", "/data/data/.nbkp-src"]:
                 return MagicMock(returncode=0)
@@ -1479,7 +1479,7 @@ class TestCheckSyncRemoteCommands:
         def remote_side_effect(
             server: SshEndpoint,
             cmd: list[str],
-            proxy: SshEndpoint | None = None,
+            proxy_chain: list[SshEndpoint] | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1551,7 +1551,7 @@ class TestCheckSyncRemoteCommands:
         def remote_side_effect(
             server: SshEndpoint,
             cmd: list[str],
-            proxy: SshEndpoint | None = None,
+            proxy_chain: list[SshEndpoint] | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1625,7 +1625,7 @@ class TestCheckSyncRemoteCommands:
         def remote_side_effect(
             server: SshEndpoint,
             cmd: list[str],
-            proxy: SshEndpoint | None = None,
+            proxy_chain: list[SshEndpoint] | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1707,7 +1707,7 @@ class TestCheckSyncRemoteCommands:
         def remote_side_effect(
             server: SshEndpoint,
             cmd: list[str],
-            proxy: SshEndpoint | None = None,
+            proxy_chain: list[SshEndpoint] | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1796,7 +1796,7 @@ class TestCheckSyncRemoteCommands:
         def remote_side_effect(
             server: SshEndpoint,
             cmd: list[str],
-            proxy: SshEndpoint | None = None,
+            proxy_chain: list[SshEndpoint] | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1895,7 +1895,7 @@ class TestCheckSyncRemoteCommands:
         def remote_side_effect(
             server: SshEndpoint,
             cmd: list[str],
-            proxy: SshEndpoint | None = None,
+            proxy_chain: list[SshEndpoint] | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -1972,7 +1972,7 @@ class TestCheckSyncRemoteCommands:
         def remote_side_effect(
             server: SshEndpoint,
             cmd: list[str],
-            proxy: SshEndpoint | None = None,
+            proxy_chain: list[SshEndpoint] | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2071,7 +2071,7 @@ class TestCheckSyncRemoteCommands:
         def remote_side_effect(
             server: SshEndpoint,
             cmd: list[str],
-            proxy: SshEndpoint | None = None,
+            proxy_chain: list[SshEndpoint] | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2187,7 +2187,7 @@ class TestCheckSyncRemoteCommands:
         def remote_side_effect(
             server: SshEndpoint,
             cmd: list[str],
-            proxy: SshEndpoint | None = None,
+            proxy_chain: list[SshEndpoint] | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2569,7 +2569,7 @@ class TestCheckHardLinkDest:
         def remote_side_effect(
             server: SshEndpoint,
             cmd: list[str],
-            proxy: SshEndpoint | None = None,
+            proxy_chain: list[SshEndpoint] | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2616,5 +2616,5 @@ class TestCheckRemoteVolumeSpaces:
         mock_run.assert_called_once_with(
             server,
             ["test", "-f", "/my backup/.nbkp-vol"],
-            None,
+            [],
         )

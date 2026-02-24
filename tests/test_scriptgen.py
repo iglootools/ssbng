@@ -223,6 +223,46 @@ def _proxy_jump_config() -> Config:
     )
 
 
+def _proxy_jumps_config() -> Config:
+    bastion1 = SshEndpoint(
+        slug="bastion1",
+        host="bastion1.example.com",
+        user="admin",
+    )
+    bastion2 = SshEndpoint(
+        slug="bastion2",
+        host="bastion2.example.com",
+        port=2222,
+    )
+    nas = SshEndpoint(
+        slug="nas",
+        host="nas.internal",
+        port=5022,
+        user="backup",
+        proxy_jumps=["bastion1", "bastion2"],
+    )
+    src = LocalVolume(slug="src", path="/mnt/data")
+    dst = RemoteVolume(
+        slug="nas-vol",
+        ssh_endpoint="nas",
+        path="/volume1",
+    )
+    sync = SyncConfig(
+        slug="proxy-jumps-sync",
+        source=SyncEndpoint(volume="src"),
+        destination=DestinationSyncEndpoint(volume="nas-vol"),
+    )
+    return Config(
+        ssh_endpoints={
+            "bastion1": bastion1,
+            "bastion2": bastion2,
+            "nas": nas,
+        },
+        volumes={"src": src, "nas-vol": dst},
+        syncs={"proxy-jumps-sync": sync},
+    )
+
+
 class TestHeader:
     def test_shebang(self) -> None:
         config = _local_to_local_config()
@@ -485,6 +525,37 @@ class TestProxyJump:
         )
         assert "-J" in script
         assert "admin@bastion.example.com" in script
+
+    def test_proxy_jumps_in_ssh(self) -> None:
+        config = _proxy_jumps_config()
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config,
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints=resolved,
+        )
+        assert "-J" in script
+        assert (
+            "admin@bastion1.example.com" ",bastion2.example.com:2222" in script
+        )
+
+    def test_proxy_jumps_valid_syntax(self) -> None:
+        config = _proxy_jumps_config()
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config,
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints=resolved,
+        )
+        result = subprocess.run(
+            ["bash", "-n"],
+            input=script,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
 
 class TestSshConnectionOptions:

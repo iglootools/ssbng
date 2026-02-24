@@ -71,7 +71,7 @@ def _remote_config() -> tuple[SyncConfig, Config, dict[str, ResolvedEndpoint]]:
         volumes={"src": src, "dst": dst},
         syncs={"s1": sync},
     )
-    re = {"dst": ResolvedEndpoint(server=server, proxy=None)}
+    re = {"dst": ResolvedEndpoint(server=server)}
     return sync, config, re
 
 
@@ -310,7 +310,7 @@ class TestDeleteSnapshot:
         mock_remote.return_value = MagicMock(returncode=0, stderr="")
         server = SshEndpoint(slug="nas", host="nas.local", user="backup")
         vol = RemoteVolume(slug="dst", ssh_endpoint="nas", path="/backup")
-        re = {"dst": ResolvedEndpoint(server=server, proxy=None)}
+        re = {"dst": ResolvedEndpoint(server=server)}
 
         delete_snapshot("/backup/snapshots/T1", vol, re)
         mock_remote.assert_called_once()

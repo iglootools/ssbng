@@ -135,7 +135,7 @@ class TestBuildSshBaseArgs:
             port=2222,
             user="admin",
         )
-        args = build_ssh_base_args(server, proxy)
+        args = build_ssh_base_args(server, [proxy])
         assert args == [
             "ssh",
             *_DEFAULT_O_OPTIONS,
@@ -154,7 +154,7 @@ class TestBuildSshBaseArgs:
             host="bastion.example.com",
             user="admin",
         )
-        args = build_ssh_base_args(server, proxy)
+        args = build_ssh_base_args(server, [proxy])
         assert args == [
             "ssh",
             *_DEFAULT_O_OPTIONS,
@@ -173,12 +173,48 @@ class TestBuildSshBaseArgs:
             host="bastion.example.com",
             port=2222,
         )
-        args = build_ssh_base_args(server, proxy)
+        args = build_ssh_base_args(server, [proxy])
         assert args == [
             "ssh",
             *_DEFAULT_O_OPTIONS,
             "-J",
             "bastion.example.com:2222",
+            "target.example.com",
+        ]
+
+    def test_proxy_chain_multi_hop(self) -> None:
+        server = SshEndpoint(
+            slug="target",
+            host="target.example.com",
+        )
+        proxy1 = SshEndpoint(
+            slug="bastion1",
+            host="bastion1.example.com",
+            user="user1",
+        )
+        proxy2 = SshEndpoint(
+            slug="bastion2",
+            host="bastion2.example.com",
+            port=2222,
+        )
+        args = build_ssh_base_args(server, [proxy1, proxy2])
+        assert args == [
+            "ssh",
+            *_DEFAULT_O_OPTIONS,
+            "-J",
+            "user1@bastion1.example.com,bastion2.example.com:2222",
+            "target.example.com",
+        ]
+
+    def test_proxy_chain_empty(self) -> None:
+        server = SshEndpoint(
+            slug="target",
+            host="target.example.com",
+        )
+        args = build_ssh_base_args(server, [])
+        assert args == [
+            "ssh",
+            *_DEFAULT_O_OPTIONS,
             "target.example.com",
         ]
 
@@ -223,10 +259,33 @@ class TestBuildSshEOption:
             port=2222,
             user="admin",
         )
-        result = build_ssh_e_option(server, proxy)
+        result = build_ssh_e_option(server, [proxy])
         assert result == [
             "-e",
             f"{_DEFAULT_E_PREFIX}" " -J admin@bastion.example.com:2222",
+        ]
+
+    def test_proxy_chain_multi_hop(self) -> None:
+        server = SshEndpoint(
+            slug="target",
+            host="target.example.com",
+        )
+        proxy1 = SshEndpoint(
+            slug="bastion1",
+            host="bastion1.example.com",
+            user="user1",
+        )
+        proxy2 = SshEndpoint(
+            slug="bastion2",
+            host="bastion2.example.com",
+            port=2222,
+        )
+        result = build_ssh_e_option(server, [proxy1, proxy2])
+        assert result == [
+            "-e",
+            f"{_DEFAULT_E_PREFIX}"
+            " -J user1@bastion1.example.com"
+            ",bastion2.example.com:2222",
         ]
 
 
@@ -362,7 +421,7 @@ class TestRunRemoteCommand:
         mock_result = MagicMock(exited=0, stdout="ok\n", stderr="")
         mock_conn.run.return_value = mock_result
 
-        run_remote_command(server, ["echo", "ok"], proxy)
+        run_remote_command(server, ["echo", "ok"], [proxy])
 
         # Connection is called twice: once for proxy, once
         # for target

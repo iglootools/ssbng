@@ -115,7 +115,7 @@ def _check_remote_volume(
     ep = resolved_endpoints[volume.slug]
     marker_path = f"{volume.path}/.nbkp-vol"
     result = run_remote_command(
-        ep.server, ["test", "-f", marker_path], ep.proxy
+        ep.server, ["test", "-f", marker_path], ep.proxy_chain
     )
     reasons: list[VolumeReason] = (
         [] if result.returncode == 0 else [VolumeReason.UNREACHABLE]
@@ -145,7 +145,7 @@ def _check_endpoint_marker(
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
             result = run_remote_command(
-                ep.server, ["test", "-f", rel_path], ep.proxy
+                ep.server, ["test", "-f", rel_path], ep.proxy_chain
             )
             return result.returncode == 0
 
@@ -162,7 +162,7 @@ def _check_command_available(
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
             result = run_remote_command(
-                ep.server, ["which", command], ep.proxy
+                ep.server, ["which", command], ep.proxy_chain
             )
             return result.returncode == 0
 
@@ -182,7 +182,7 @@ def _check_btrfs_filesystem(
             )
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(ep.server, cmd, ep.proxy)
+            result = run_remote_command(ep.server, cmd, ep.proxy_chain)
     return result.returncode == 0 and result.stdout.strip() == "btrfs"
 
 
@@ -207,7 +207,7 @@ def _check_hardlink_support(
             )
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(ep.server, cmd, ep.proxy)
+            result = run_remote_command(ep.server, cmd, ep.proxy_chain)
     if result.returncode != 0:
         return True  # Cannot determine; assume supported
     fs_type = result.stdout.strip()
@@ -234,7 +234,7 @@ def _check_directory_exists(
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
             result = run_remote_command(
-                ep.server, ["test", "-d", path], ep.proxy
+                ep.server, ["test", "-d", path], ep.proxy_chain
             )
             return result.returncode == 0
 
@@ -259,7 +259,7 @@ def _check_btrfs_subvolume(
             )
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(ep.server, cmd, ep.proxy)
+            result = run_remote_command(ep.server, cmd, ep.proxy_chain)
     return result.returncode == 0 and result.stdout.strip() == "256"
 
 
@@ -279,7 +279,7 @@ def _check_btrfs_mount_option(
             )
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(ep.server, cmd, ep.proxy)
+            result = run_remote_command(ep.server, cmd, ep.proxy_chain)
     if result.returncode != 0:
         return False
     options = result.stdout.strip().split(",")

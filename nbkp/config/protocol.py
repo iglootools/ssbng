@@ -105,8 +105,27 @@ class SshEndpoint(_BaseModel):
         default_factory=lambda: SshConnectionOptions()
     )
     proxy_jump: Optional[str] = None
+    proxy_jumps: Optional[List[str]] = None
     location: Optional[str] = None
     extends: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_proxy_exclusivity(self) -> SshEndpoint:
+        if self.proxy_jump is not None and self.proxy_jumps is not None:
+            raise ValueError(
+                "proxy-jump and proxy-jumps are mutually exclusive"
+            )
+        return self
+
+    @property
+    def proxy_jump_chain(self) -> list[str]:
+        """Return the proxy-jump chain as a list of slugs."""
+        if self.proxy_jumps is not None:
+            return list(self.proxy_jumps)
+        elif self.proxy_jump is not None:
+            return [self.proxy_jump]
+        else:
+            return []
 
 
 class RemoteVolume(_BaseModel):
@@ -265,6 +284,13 @@ class Config(_BaseModel):
                 **parent,
                 **{k: v for k, v in ep.items() if k != "extends"},
             }
+            # If child sets proxy-jump or proxy-jumps, remove
+            # the other to avoid exclusivity clash with parent
+            proxy_keys = {"proxy-jump", "proxy-jumps"}
+            child_proxy_keys = proxy_keys & set(ep.keys())
+            if child_proxy_keys:
+                for k in proxy_keys - child_proxy_keys:
+                    merged.pop(k, None)
             resolved[slug] = merged
             return merged
 
@@ -379,34 +405,35 @@ class Config(_BaseModel):
         # Deterministic pick: first candidate in original order
         return self.ssh_endpoints[reachable[0]]
 
-    def resolve_proxy(self, server: SshEndpoint) -> SshEndpoint | None:
-        """Resolve the proxy-jump server, if any."""
-        if server.proxy_jump is not None:
-            return self.ssh_endpoints[server.proxy_jump]
-        else:
-            return None
+    def resolve_proxy_chain(self, server: SshEndpoint) -> list[SshEndpoint]:
+        """Resolve the proxy-jump chain as a list of SshEndpoints."""
+        return [self.ssh_endpoints[slug] for slug in server.proxy_jump_chain]
 
     @model_validator(mode="after")
     def validate_cross_references(self) -> Config:
         for slug, server in self.ssh_endpoints.items():
-            if server.proxy_jump is not None:
-                if server.proxy_jump not in self.ssh_endpoints:
+            chain = server.proxy_jump_chain
+            for hop in chain:
+                if hop not in self.ssh_endpoints:
                     raise ValueError(
                         f"Server '{slug}' references "
                         f"unknown proxy-jump server "
-                        f"'{server.proxy_jump}'"
+                        f"'{hop}'"
                     )
-                visited: set[str] = {slug}
-                current: str | None = server.proxy_jump
-                while current is not None:
-                    if current in visited:
-                        raise ValueError(
-                            f"Circular proxy-jump chain "
-                            f"detected starting from "
-                            f"server '{slug}'"
-                        )
-                    visited.add(current)
-                    current = self.ssh_endpoints[current].proxy_jump
+            # Circular detection via BFS through transitive
+            # proxy chains
+            visited: set[str] = {slug}
+            queue = list(chain)
+            while queue:
+                current = queue.pop(0)
+                if current in visited:
+                    raise ValueError(
+                        f"Circular proxy-jump chain "
+                        f"detected starting from "
+                        f"server '{slug}'"
+                    )
+                visited.add(current)
+                queue.extend(self.ssh_endpoints[current].proxy_jump_chain)
 
         for vol_slug, vol in self.volumes.items():
             match vol:

@@ -37,6 +37,7 @@ from .testkit.docker import (
     wait_for_ssh,
 )
 from .config.protocol import Config as ConfigModel
+from .config.resolution import resolve_all_endpoints
 from .output import (
     print_config_error,
     print_human_check,
@@ -113,15 +114,23 @@ def output() -> None:
 def _show_config_show() -> None:
     console, buf = _capture_console()
     config = config_show_config()
-    print_human_config(config, console=console)
+    re = resolve_all_endpoints(config)
+    print_human_config(config, console=console, resolved_endpoints=re)
     _print_panel("print_human_config", buf)
 
 
 def _show_check() -> None:
     console, buf = _capture_console()
     config = check_config()
+    re = resolve_all_endpoints(config)
     vol_statuses, sync_statuses = check_data(config)
-    print_human_check(vol_statuses, sync_statuses, config, console=console)
+    print_human_check(
+        vol_statuses,
+        sync_statuses,
+        config,
+        console=console,
+        resolved_endpoints=re,
+    )
     _print_panel("print_human_check", buf)
 
 
@@ -150,9 +159,14 @@ def _show_prune() -> None:
 def _show_troubleshoot() -> None:
     console, buf = _capture_console()
     config = troubleshoot_config()
+    re = resolve_all_endpoints(config)
     vol_statuses, sync_statuses = troubleshoot_data(config)
     print_human_troubleshoot(
-        vol_statuses, sync_statuses, config, console=console
+        vol_statuses,
+        sync_statuses,
+        config,
+        console=console,
+        resolved_endpoints=re,
     )
     _print_panel("print_human_troubleshoot", buf)
 

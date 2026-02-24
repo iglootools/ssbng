@@ -433,7 +433,7 @@ def _cleanup_snapshot_dir(
                 run_remote_command(
                     ep.server,
                     ["rm", "-rf", snapshot_path],
-                    ep.proxy,
+                    ep.proxy_chain,
                 )
     except Exception:
         pass  # Best-effort cleanup

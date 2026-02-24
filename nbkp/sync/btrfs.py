@@ -58,7 +58,7 @@ def create_snapshot(
     match dst_vol:
         case RemoteVolume():
             ep = re[dst_vol.slug]
-            result = run_remote_command(ep.server, cmd, ep.proxy)
+            result = run_remote_command(ep.server, cmd, ep.proxy_chain)
         case LocalVolume():
             result = subprocess.run(
                 cmd,
@@ -87,7 +87,7 @@ def list_snapshots(
         case RemoteVolume():
             ep = re[dst_vol.slug]
             result = run_remote_command(
-                ep.server, ["ls", snapshots_dir], ep.proxy
+                ep.server, ["ls", snapshots_dir], ep.proxy_chain
             )
         case LocalVolume():
             result = subprocess.run(
@@ -126,7 +126,7 @@ def _make_snapshot_writable(
     match volume:
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(ep.server, cmd, ep.proxy)
+            result = run_remote_command(ep.server, cmd, ep.proxy_chain)
         case LocalVolume():
             result = subprocess.run(
                 cmd,
@@ -157,7 +157,7 @@ def delete_snapshot(
     match volume:
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(ep.server, cmd, ep.proxy)
+            result = run_remote_command(ep.server, cmd, ep.proxy_chain)
         case LocalVolume():
             result = subprocess.run(
                 cmd,

@@ -178,7 +178,7 @@ class TestGetLatestSnapshotRemote:
         mock_run.assert_called_once_with(
             config.ssh_endpoints["nas-server"],
             ["ls", "/backup/data/snapshots"],
-            None,
+            [],
         )
 
 
@@ -294,7 +294,7 @@ class TestGetLatestSnapshotRemoteSpaces:
         mock_run.assert_called_once_with(
             config.ssh_endpoints["nas-server"],
             ["ls", "/my backup/my data/snapshots"],
-            None,
+            [],
         )
 
 
@@ -421,12 +421,12 @@ class TestDeleteSnapshotRemote:
                 call(
                     server,
                     ["btrfs", "property", "set", path, "ro", "false"],
-                    None,
+                    [],
                 ),
                 call(
                     server,
                     ["btrfs", "subvolume", "delete", path],
-                    None,
+                    [],
                 ),
             ]
         )

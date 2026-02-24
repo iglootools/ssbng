@@ -25,6 +25,7 @@ from .config import (
 )
 from .sync import PruneResult, SyncResult
 from .check import SyncReason, SyncStatus, VolumeReason, VolumeStatus
+from .remote.ssh import format_proxy_jump_chain
 
 
 class OutputFormat(str, enum.Enum):
@@ -223,13 +224,18 @@ def print_human_prune_results(
     console.print(table)
 
 
-def _ssh_prefix(server: SshEndpoint) -> str:
+def _ssh_prefix(
+    server: SshEndpoint,
+    proxy_chain: list[SshEndpoint] | None = None,
+) -> str:
     """Build human-friendly SSH command prefix."""
     parts = ["ssh"]
     if server.port != 22:
         parts.extend(["-p", str(server.port)])
     if server.key:
         parts.extend(["-i", server.key])
+    if proxy_chain:
+        parts.extend(["-J", format_proxy_jump_chain(proxy_chain)])
     host = f"{server.user}@{server.host}" if server.user else server.host
     parts.append(host)
     return " ".join(parts)
@@ -246,7 +252,8 @@ def _wrap_cmd(
             return cmd
         case RemoteVolume():
             ep = resolved_endpoints[vol.slug]
-            return f"{_ssh_prefix(ep.server)} '{cmd}'"
+            prefix = _ssh_prefix(ep.server, ep.proxy_chain)
+            return f"{prefix} '{cmd}'"
 
 
 def _endpoint_path(
@@ -343,12 +350,17 @@ def _print_marker_fix(
 def _print_ssh_troubleshoot(
     console: Console,
     server: SshEndpoint,
+    proxy_chain: list[SshEndpoint] | None = None,
 ) -> None:
     """Print SSH connectivity troubleshooting instructions."""
     p2 = _INDENT * 2
     p3 = _INDENT * 3
-    ssh_cmd = _ssh_prefix(server)
+    ssh_cmd = _ssh_prefix(server, proxy_chain)
     port_flag = f"-p {server.port} " if server.port != 22 else ""
+    proxy_opt = ""
+    if proxy_chain:
+        jump_str = format_proxy_jump_chain(proxy_chain)
+        proxy_opt = f"-o ProxyJump={jump_str} "
     user_host = f"{server.user}@{server.host}" if server.user else server.host
     console.print(f"{p2}Server {server.host} is unreachable.")
     console.print(f"{p2}Verify connectivity:")
@@ -360,7 +372,8 @@ def _print_ssh_troubleshoot(
         console.print(f"{p3}2. Copy it to the server:")
         _print_cmd(
             console,
-            f"ssh-copy-id {port_flag}" f"-i {server.key} {user_host}",
+            f"ssh-copy-id {proxy_opt}{port_flag}"
+            f"-i {server.key} {user_host}",
             indent=4,
         )
     else:
@@ -369,7 +382,7 @@ def _print_ssh_troubleshoot(
         console.print(f"{p3}2. Copy it to the server:")
         _print_cmd(
             console,
-            f"ssh-copy-id {port_flag}{user_host}",
+            f"ssh-copy-id {proxy_opt}{port_flag}" f"{user_host}",
             indent=4,
         )
     console.print(f"{p3}3. Verify passwordless login:")
@@ -393,7 +406,11 @@ def _print_sync_reason_fix(
             match src:
                 case RemoteVolume():
                     ep = resolved_endpoints[src.slug]
-                    _print_ssh_troubleshoot(console, ep.server)
+                    _print_ssh_troubleshoot(
+                        console,
+                        ep.server,
+                        ep.proxy_chain,
+                    )
                 case LocalVolume():
                     console.print(
                         f"{p2}Source volume"
@@ -405,7 +422,11 @@ def _print_sync_reason_fix(
             match dst:
                 case RemoteVolume():
                     ep = resolved_endpoints[dst.slug]
-                    _print_ssh_troubleshoot(console, ep.server)
+                    _print_ssh_troubleshoot(
+                        console,
+                        ep.server,
+                        ep.proxy_chain,
+                    )
                 case LocalVolume():
                     console.print(
                         f"{p2}Destination volume"
@@ -566,7 +587,11 @@ def print_human_troubleshoot(
                     match vol:
                         case RemoteVolume():
                             ep = re[vol.slug]
-                            _print_ssh_troubleshoot(console, ep.server)
+                            _print_ssh_troubleshoot(
+                                console,
+                                ep.server,
+                                ep.proxy_chain,
+                            )
 
     for ss in failed_syncs:
         console.print(f"\n[bold]Sync {ss.slug!r}:[/bold]")
@@ -621,7 +646,7 @@ def print_human_config(
                 str(server.port),
                 server.user or "",
                 server.key or "",
-                server.proxy_jump or "",
+                ", ".join(server.proxy_jump_chain) or "",
                 server.location or "",
             )
 

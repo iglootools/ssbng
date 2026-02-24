@@ -690,6 +690,135 @@ class TestBuildRsyncCommandProxyJump:
         assert "-J admin@bastion.example.com" in inner
 
 
+class TestBuildRsyncCommandMultiHopProxy:
+    def test_local_to_remote_with_multi_hop_proxy(self) -> None:
+        bastion1 = SshEndpoint(
+            slug="bastion1",
+            host="bastion1.example.com",
+            user="admin",
+        )
+        bastion2 = SshEndpoint(
+            slug="bastion2",
+            host="bastion2.example.com",
+            port=2222,
+        )
+        nas_server = SshEndpoint(
+            slug="nas-server",
+            host="nas.local",
+            port=5022,
+            user="backup",
+            key="~/.ssh/key",
+            proxy_jumps=["bastion1", "bastion2"],
+        )
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = RemoteVolume(
+            slug="dst",
+            ssh_endpoint="nas-server",
+            path="/backup",
+        )
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            ssh_endpoints={
+                "bastion1": bastion1,
+                "bastion2": bastion2,
+                "nas-server": nas_server,
+            },
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+        resolved = resolve_all_endpoints(config)
+
+        cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
+        assert cmd == [
+            "rsync",
+            "-a",
+            "--delete",
+            "--delete-excluded",
+            "--safe-links",
+            "-e",
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+            " -p 5022 -i ~/.ssh/key"
+            " -J admin@bastion1.example.com"
+            ",bastion2.example.com:2222",
+            "/mnt/src/",
+            "backup@nas.local:/backup/latest/",
+        ]
+
+    def test_remote_to_remote_with_multi_hop_proxy(
+        self,
+    ) -> None:
+        bastion1 = SshEndpoint(
+            slug="bastion1",
+            host="bastion1.example.com",
+            user="admin",
+        )
+        bastion2 = SshEndpoint(
+            slug="bastion2",
+            host="bastion2.example.com",
+            port=2222,
+        )
+        src_server = SshEndpoint(
+            slug="src-server",
+            host="src.internal",
+            user="srcuser",
+            proxy_jumps=["bastion1", "bastion2"],
+        )
+        dst_server = SshEndpoint(
+            slug="dst-server",
+            host="dst.internal",
+            user="dstuser",
+            proxy_jumps=["bastion1", "bastion2"],
+        )
+        src = RemoteVolume(
+            slug="src",
+            ssh_endpoint="src-server",
+            path="/data",
+        )
+        dst = RemoteVolume(
+            slug="dst",
+            ssh_endpoint="dst-server",
+            path="/backup",
+        )
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            ssh_endpoints={
+                "bastion1": bastion1,
+                "bastion2": bastion2,
+                "src-server": src_server,
+                "dst-server": dst_server,
+            },
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+        resolved = resolve_all_endpoints(config)
+
+        cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
+
+        # Outer SSH into destination host with proxy chain
+        assert cmd[0] == "ssh"
+        assert "-J" in cmd
+        proxy_idx = cmd.index("-J")
+        assert cmd[proxy_idx + 1] == (
+            "admin@bastion1.example.com" ",bastion2.example.com:2222"
+        )
+        assert "dstuser@dst.internal" in cmd
+
+        # Inner rsync should also have proxy chain for source
+        inner = cmd[-1]
+        assert (
+            "-J admin@bastion1.example.com"
+            ",bastion2.example.com:2222" in inner
+        )
+
+
 class TestBuildRsyncCommandSpacesInPaths:
     def test_local_to_local_spaces(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/my src")

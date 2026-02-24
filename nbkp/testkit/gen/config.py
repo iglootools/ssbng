@@ -23,6 +23,14 @@ def bastion_server() -> SshEndpoint:
     )
 
 
+def bastion2_server() -> SshEndpoint:
+    return SshEndpoint(
+        slug="bastion2",
+        host="bastion2.internal",
+        user="admin",
+    )
+
+
 def nas_server() -> SshEndpoint:
     return SshEndpoint(
         slug="nas",
@@ -30,7 +38,7 @@ def nas_server() -> SshEndpoint:
         port=5022,
         user="backup",
         key="~/.ssh/nas_ed25519",
-        proxy_jump="bastion",
+        proxy_jumps=["bastion", "bastion2"],
         location="home",
     )
 
@@ -64,6 +72,7 @@ def config_show_config() -> Config:
     return Config(
         ssh_endpoints={
             "bastion": bastion_server(),
+            "bastion2": bastion2_server(),
             "nas": nas_server(),
             "nas-public": nas_public_server(),
         },

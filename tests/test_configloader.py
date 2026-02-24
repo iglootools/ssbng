@@ -384,9 +384,9 @@ class TestLoadConfig:
         p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
         assert cfg.ssh_endpoints["target"].proxy_jump == "bastion"
-        proxy = cfg.resolve_proxy(cfg.ssh_endpoints["target"])
-        assert proxy is not None
-        assert proxy.host == "bastion.example.com"
+        chain = cfg.resolve_proxy_chain(cfg.ssh_endpoints["target"])
+        assert len(chain) == 1
+        assert chain[0].host == "bastion.example.com"
 
     def test_proxy_jump_unknown_server(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_proxy.yaml"
@@ -431,6 +431,227 @@ class TestLoadConfig:
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "Circular proxy-jump chain" in str(cause)
+
+    def test_proxy_jumps_valid(self, tmp_path: Path) -> None:
+        config = Config(
+            ssh_endpoints={
+                "bastion1": SshEndpoint(
+                    slug="bastion1",
+                    host="bastion1.example.com",
+                ),
+                "bastion2": SshEndpoint(
+                    slug="bastion2",
+                    host="bastion2.example.com",
+                ),
+                "target": SshEndpoint(
+                    slug="target",
+                    host="target.internal",
+                    proxy_jumps=["bastion1", "bastion2"],
+                ),
+            },
+        )
+        p = tmp_path / "proxy_jumps.yaml"
+        p.write_text(_config_to_yaml(config))
+        cfg = load_config(str(p))
+        chain = cfg.resolve_proxy_chain(cfg.ssh_endpoints["target"])
+        assert len(chain) == 2
+        assert chain[0].host == "bastion1.example.com"
+        assert chain[1].host == "bastion2.example.com"
+
+    def test_proxy_jumps_single_element(self, tmp_path: Path) -> None:
+        config = Config(
+            ssh_endpoints={
+                "bastion": SshEndpoint(
+                    slug="bastion",
+                    host="bastion.example.com",
+                ),
+                "target": SshEndpoint(
+                    slug="target",
+                    host="target.internal",
+                    proxy_jumps=["bastion"],
+                ),
+            },
+        )
+        p = tmp_path / "proxy_jumps_single.yaml"
+        p.write_text(_config_to_yaml(config))
+        cfg = load_config(str(p))
+        chain = cfg.resolve_proxy_chain(cfg.ssh_endpoints["target"])
+        assert len(chain) == 1
+        assert chain[0].host == "bastion.example.com"
+
+    def test_proxy_jump_and_proxy_jumps_mutual_exclusivity(
+        self, tmp_path: Path
+    ) -> None:
+        p = tmp_path / "exclusive.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "ssh-endpoints": {
+                        "bastion": {
+                            "host": "bastion.example.com",
+                        },
+                        "target": {
+                            "host": "target.internal",
+                            "proxy-jump": "bastion",
+                            "proxy-jumps": ["bastion"],
+                        },
+                    },
+                }
+            )
+        )
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        cause = excinfo.value.__cause__
+        assert cause is not None
+        assert "mutually exclusive" in str(cause)
+
+    def test_proxy_jumps_unknown_server(self, tmp_path: Path) -> None:
+        p = tmp_path / "bad_proxy_jumps.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "ssh-endpoints": {
+                        "target": {
+                            "host": "target.internal",
+                            "proxy-jumps": ["nonexistent"],
+                        },
+                    },
+                }
+            )
+        )
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        cause = excinfo.value.__cause__
+        assert cause is not None
+        assert "unknown proxy-jump server" in str(cause)
+
+    def test_proxy_jumps_circular(self, tmp_path: Path) -> None:
+        p = tmp_path / "circular_jumps.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "ssh-endpoints": {
+                        "a": {
+                            "host": "a.example.com",
+                            "proxy-jumps": ["b"],
+                        },
+                        "b": {
+                            "host": "b.example.com",
+                            "proxy-jumps": ["a"],
+                        },
+                    },
+                }
+            )
+        )
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        cause = excinfo.value.__cause__
+        assert cause is not None
+        assert "Circular proxy-jump chain" in str(cause)
+
+    def test_extends_proxy_jumps_overrides_parent_proxy_jump(
+        self, tmp_path: Path
+    ) -> None:
+        p = tmp_path / "extends_jumps.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "ssh-endpoints": {
+                        "bastion1": {
+                            "host": "bastion1.example.com",
+                        },
+                        "bastion2": {
+                            "host": "bastion2.example.com",
+                        },
+                        "bastion3": {
+                            "host": "bastion3.example.com",
+                        },
+                        "parent": {
+                            "host": "parent.internal",
+                            "proxy-jump": "bastion1",
+                        },
+                        "child": {
+                            "host": "child.internal",
+                            "extends": "parent",
+                            "proxy-jumps": [
+                                "bastion2",
+                                "bastion3",
+                            ],
+                        },
+                    },
+                }
+            )
+        )
+        cfg = load_config(str(p))
+        chain = cfg.resolve_proxy_chain(cfg.ssh_endpoints["child"])
+        assert len(chain) == 2
+        assert chain[0].host == "bastion2.example.com"
+        assert chain[1].host == "bastion3.example.com"
+
+    def test_extends_proxy_jump_overrides_parent_proxy_jumps(
+        self, tmp_path: Path
+    ) -> None:
+        p = tmp_path / "extends_jump.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "ssh-endpoints": {
+                        "bastion1": {
+                            "host": "bastion1.example.com",
+                        },
+                        "bastion2": {
+                            "host": "bastion2.example.com",
+                        },
+                        "bastion3": {
+                            "host": "bastion3.example.com",
+                        },
+                        "parent": {
+                            "host": "parent.internal",
+                            "proxy-jumps": [
+                                "bastion1",
+                                "bastion2",
+                            ],
+                        },
+                        "child": {
+                            "host": "child.internal",
+                            "extends": "parent",
+                            "proxy-jump": "bastion3",
+                        },
+                    },
+                }
+            )
+        )
+        cfg = load_config(str(p))
+        chain = cfg.resolve_proxy_chain(cfg.ssh_endpoints["child"])
+        assert len(chain) == 1
+        assert chain[0].host == "bastion3.example.com"
+
+    def test_proxy_jump_chain_property(self) -> None:
+        # Single proxy-jump
+        ep_single = SshEndpoint(
+            slug="single",
+            host="host.example.com",
+            proxy_jump="bastion",
+        )
+        assert ep_single.proxy_jump_chain == ["bastion"]
+
+        # List proxy-jumps
+        ep_list = SshEndpoint(
+            slug="multi",
+            host="host.example.com",
+            proxy_jumps=["bastion1", "bastion2"],
+        )
+        assert ep_list.proxy_jump_chain == [
+            "bastion1",
+            "bastion2",
+        ]
+
+        # No proxy
+        ep_none = SshEndpoint(
+            slug="no-proxy",
+            host="host.example.com",
+        )
+        assert ep_none.proxy_jump_chain == []
 
     def test_invalid_filter_entry(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_filter.yaml"

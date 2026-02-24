@@ -42,7 +42,7 @@ def create_snapshot_dir(
         case RemoteVolume():
             ep = re[dst_vol.slug]
             result = run_remote_command(
-                ep.server, ["mkdir", "-p", snapshot_path], ep.proxy
+                ep.server, ["mkdir", "-p", snapshot_path], ep.proxy_chain
             )
         case LocalVolume():
             result = subprocess.run(
@@ -82,7 +82,7 @@ def read_latest_symlink(
             result = run_remote_command(
                 ep.server,
                 ["readlink", latest_path],
-                ep.proxy,
+                ep.proxy_chain,
             )
             if result.returncode != 0:
                 return None
@@ -119,7 +119,7 @@ def update_latest_symlink(
             result = run_remote_command(
                 ep.server,
                 ["ln", "-sfn", target, latest_path],
-                ep.proxy,
+                ep.proxy_chain,
             )
             if result.returncode != 0:
                 raise RuntimeError(f"symlink update failed: {result.stderr}")
@@ -164,7 +164,7 @@ def delete_snapshot(
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
             result = run_remote_command(
-                ep.server, ["rm", "-rf", path], ep.proxy
+                ep.server, ["rm", "-rf", path], ep.proxy_chain
             )
             if result.returncode != 0:
                 raise RuntimeError(f"rm -rf snapshot failed: {result.stderr}")

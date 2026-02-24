@@ -27,17 +27,20 @@ def _ssh_o_options(opts: SshConnectionOptions) -> list[str]:
     return result
 
 
-def _format_proxy_jump(proxy: SshEndpoint) -> str:
-    """Format proxy server as [user@]host[:port] for SSH -J."""
-    host = f"{proxy.user}@{proxy.host}" if proxy.user else proxy.host
-    if proxy.port != 22:
-        host += f":{proxy.port}"
-    return host
+def format_proxy_jump_chain(proxies: list[SshEndpoint]) -> str:
+    """Format proxy chain as comma-separated [user@]host[:port] for -J."""
+    parts: list[str] = []
+    for proxy in proxies:
+        host = f"{proxy.user}@{proxy.host}" if proxy.user else proxy.host
+        if proxy.port != 22:
+            host += f":{proxy.port}"
+        parts.append(host)
+    return ",".join(parts)
 
 
 def build_ssh_base_args(
     server: SshEndpoint,
-    proxy_server: SshEndpoint | None = None,
+    proxy_chain: list[SshEndpoint] | None = None,
 ) -> list[str]:
     """Build base SSH command args for a remote volume.
 
@@ -51,8 +54,8 @@ def build_ssh_base_args(
         args.extend(["-p", str(server.port)])
     if server.key:
         args.extend(["-i", server.key])
-    if proxy_server is not None:
-        args.extend(["-J", _format_proxy_jump(proxy_server)])
+    if proxy_chain:
+        args.extend(["-J", format_proxy_jump_chain(proxy_chain)])
 
     host = f"{server.user}@{server.host}" if server.user else server.host
     args.append(host)
@@ -62,11 +65,11 @@ def build_ssh_base_args(
 def run_remote_command(
     server: SshEndpoint,
     command: list[str],
-    proxy_server: SshEndpoint | None = None,
+    proxy_chain: list[SshEndpoint] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run a command on a remote host via SSH."""
     cmd_string = " ".join(shlex.quote(arg) for arg in command)
-    args = build_ssh_base_args(server, proxy_server) + [cmd_string]
+    args = build_ssh_base_args(server, proxy_chain) + [cmd_string]
     return subprocess.run(
         args,
         capture_output=True,
@@ -76,7 +79,7 @@ def run_remote_command(
 
 def build_ssh_e_option(
     server: SshEndpoint,
-    proxy_server: SshEndpoint | None = None,
+    proxy_chain: list[SshEndpoint] | None = None,
 ) -> list[str]:
     """Build rsync's -e option for SSH with custom port/key.
 
@@ -90,8 +93,8 @@ def build_ssh_e_option(
         ssh_cmd_parts.extend(["-p", str(server.port)])
     if server.key:
         ssh_cmd_parts.extend(["-i", server.key])
-    if proxy_server is not None:
-        ssh_cmd_parts.extend(["-J", _format_proxy_jump(proxy_server)])
+    if proxy_chain:
+        ssh_cmd_parts.extend(["-J", format_proxy_jump_chain(proxy_chain)])
 
     return ["-e", " ".join(ssh_cmd_parts)]
 

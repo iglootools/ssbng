@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pydantic import ConfigDict
 
+from pydantic import Field
+
 from .protocol import (
     Config,
     EndpointFilter,
@@ -14,11 +16,11 @@ from .protocol import (
 
 
 class ResolvedEndpoint(_BaseModel):
-    """Pre-resolved SSH endpoint with optional proxy."""
+    """Pre-resolved SSH endpoint with proxy chain."""
 
     model_config = ConfigDict(frozen=True)
     server: SshEndpoint
-    proxy: SshEndpoint | None = None
+    proxy_chain: list[SshEndpoint] = Field(default_factory=list)
 
 
 ResolvedEndpoints = dict[str, ResolvedEndpoint]
@@ -40,9 +42,9 @@ def resolve_all_endpoints(
                 server = config.resolve_endpoint_for_volume(
                     vol, endpoint_filter
                 )
-                proxy = config.resolve_proxy(server)
+                proxy_chain = config.resolve_proxy_chain(server)
                 result[vol.slug] = ResolvedEndpoint(
                     server=server,
-                    proxy=proxy,
+                    proxy_chain=proxy_chain,
                 )
     return result

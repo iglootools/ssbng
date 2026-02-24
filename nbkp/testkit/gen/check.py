@@ -19,6 +19,7 @@ from ...config import (
 )
 from .config import (
     base_volumes,
+    bastion2_server,
     bastion_server,
     nas_public_server,
     nas_server,
@@ -34,6 +35,7 @@ def check_config() -> Config:
     return Config(
         ssh_endpoints={
             "bastion": bastion_server(),
+            "bastion2": bastion2_server(),
             "nas": nas_server(),
             "nas-public": nas_public_server(),
         },
@@ -154,6 +156,7 @@ def troubleshoot_config() -> Config:
     return Config(
         ssh_endpoints={
             "bastion": bastion_server(),
+            "bastion2": bastion2_server(),
             "nas": nas_server(),
             "nas-public": nas_public_server(),
         },

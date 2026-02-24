@@ -196,20 +196,20 @@ def _format_shell_command(
 
 def _format_remote_test(
     server: SshEndpoint,
-    proxy: SshEndpoint | None,
+    proxy_chain: list[SshEndpoint],
     test_args: list[str],
 ) -> str:
-    ssh_args = build_ssh_base_args(server, proxy)
+    ssh_args = build_ssh_base_args(server, proxy_chain)
     remote_cmd = "test " + " ".join(shlex.quote(a) for a in test_args)
     return " ".join(_sq(a) for a in ssh_args) + " " + _sq(remote_cmd)
 
 
 def _format_remote_check(
     server: SshEndpoint,
-    proxy: SshEndpoint | None,
+    proxy_chain: list[SshEndpoint],
     cmd: list[str],
 ) -> str:
-    ssh_args = build_ssh_base_args(server, proxy)
+    ssh_args = build_ssh_base_args(server, proxy_chain)
     remote_cmd = " ".join(shlex.quote(a) for a in cmd)
     return (
         " ".join(_sq(a) for a in ssh_args)
@@ -221,10 +221,10 @@ def _format_remote_check(
 
 def _format_remote_command_str(
     server: SshEndpoint,
-    proxy: SshEndpoint | None,
+    proxy_chain: list[SshEndpoint],
     cmd: list[str],
 ) -> str:
-    ssh_args = build_ssh_base_args(server, proxy)
+    ssh_args = build_ssh_base_args(server, proxy_chain)
     remote_cmd = " ".join(shlex.quote(a) for a in cmd)
     return " ".join(_sq(a) for a in ssh_args) + " " + _sq(remote_cmd)
 
@@ -243,7 +243,7 @@ def _test_cmd(
             return "test " + " ".join(_qp(a) for a in test_args)
         case RemoteVolume():
             ep = resolved_endpoints[vol.slug]
-            return _format_remote_test(ep.server, ep.proxy, test_args)
+            return _format_remote_test(ep.server, ep.proxy_chain, test_args)
 
 
 def _which_cmd(
@@ -258,7 +258,7 @@ def _which_cmd(
         case RemoteVolume():
             ep = resolved_endpoints[vol.slug]
             return _format_remote_check(
-                ep.server, ep.proxy, ["which", command]
+                ep.server, ep.proxy_chain, ["which", command]
             )
 
 
@@ -274,7 +274,7 @@ def _ls_snapshots_cmd(
         case RemoteVolume():
             ep = resolved_endpoints[dst_vol.slug]
             return _format_remote_command_str(
-                ep.server, ep.proxy, ["ls", snaps_dir]
+                ep.server, ep.proxy_chain, ["ls", snaps_dir]
             )
 
 
@@ -306,7 +306,9 @@ def _snapshot_cmd(
                 latest,
                 f"{snaps_dir}/\\$NBKP_TS",
             ]
-            return _format_remote_command_str(ep.server, ep.proxy, remote_args)
+            return _format_remote_command_str(
+                ep.server, ep.proxy_chain, remote_args
+            )
 
 
 def _btrfs_prop_cmd(
@@ -324,7 +326,7 @@ def _btrfs_prop_cmd(
             ep = resolved_endpoints[dst_vol.slug]
             return _format_remote_command_str(
                 ep.server,
-                ep.proxy,
+                ep.proxy_chain,
                 [
                     "btrfs",
                     "property",
@@ -349,7 +351,7 @@ def _btrfs_del_cmd(
             ep = resolved_endpoints[dst_vol.slug]
             return _format_remote_command_str(
                 ep.server,
-                ep.proxy,
+                ep.proxy_chain,
                 [
                     "btrfs",
                     "subvolume",
@@ -374,7 +376,7 @@ def _readlink_cmd(
         case RemoteVolume():
             ep = resolved_endpoints[dst_vol.slug]
             return _format_remote_command_str(
-                ep.server, ep.proxy, ["readlink", path]
+                ep.server, ep.proxy_chain, ["readlink", path]
             )
 
 
@@ -390,7 +392,7 @@ def _rm_rf_snap_cmd(
         case RemoteVolume():
             ep = resolved_endpoints[dst_vol.slug]
             ssh_pfx = " ".join(
-                _sq(a) for a in build_ssh_base_args(ep.server, ep.proxy)
+                _sq(a) for a in build_ssh_base_args(ep.server, ep.proxy_chain)
             )
             return f'{ssh_pfx} "rm -rf {snaps_dir}/$snap"'
 
@@ -407,7 +409,7 @@ def _mkdir_snap_cmd(
         case RemoteVolume():
             ep = resolved_endpoints[dst_vol.slug]
             ssh_pfx = " ".join(
-                _sq(a) for a in build_ssh_base_args(ep.server, ep.proxy)
+                _sq(a) for a in build_ssh_base_args(ep.server, ep.proxy_chain)
             )
             return f'{ssh_pfx} "mkdir -p {snaps_dir}/$NBKP_TS"'
 
@@ -424,7 +426,7 @@ def _ln_sfn_cmd(
         case RemoteVolume():
             ep = resolved_endpoints[dst_vol.slug]
             ssh_pfx = " ".join(
-                _sq(a) for a in build_ssh_base_args(ep.server, ep.proxy)
+                _sq(a) for a in build_ssh_base_args(ep.server, ep.proxy_chain)
             )
             return (
                 f"{ssh_pfx}"
@@ -844,7 +846,9 @@ def _build_volume_check(
             test_cmd = f"test -f {_qp(marker)}"
         case RemoteVolume():
             ep = resolved_endpoints[vol.slug]
-            test_cmd = _format_remote_test(ep.server, ep.proxy, ["-f", marker])
+            test_cmd = _format_remote_test(
+                ep.server, ep.proxy_chain, ["-f", marker]
+            )
     return (
         f"{test_cmd}"
         f" || {{ nbkp_log"
