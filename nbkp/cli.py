@@ -18,6 +18,7 @@ from .sync.btrfs import list_snapshots, prune_snapshots
 from .output import (
     OutputFormat,
     print_config_error,
+    print_human_config,
     print_human_prune_results,
     print_human_results,
     print_human_check,
@@ -36,6 +37,13 @@ app = typer.Typer(
     help="Nomad Backup",
     no_args_is_help=True,
 )
+
+config_app = typer.Typer(
+    name="config",
+    help="Configuration commands",
+    no_args_is_help=True,
+)
+app.add_typer(config_app)
 
 
 @app.command()
@@ -75,6 +83,27 @@ def check(
 
     if has_errors:
         raise typer.Exit(1)
+
+
+@config_app.command()
+def show(
+    config: Annotated[
+        Optional[str],
+        typer.Option("--config", "-c", help="Path to config file"),
+    ] = None,
+    output: Annotated[
+        OutputFormat,
+        typer.Option("--output", "-o", help="Output format"),
+    ] = OutputFormat.HUMAN,
+) -> None:
+    """Show parsed configuration."""
+    cfg = _load_config_or_exit(config)
+    output_format = output
+    match output_format:
+        case OutputFormat.JSON:
+            typer.echo(json.dumps(cfg.model_dump(by_alias=True), indent=2))
+        case OutputFormat.HUMAN:
+            print_human_config(cfg)
 
 
 @app.command()

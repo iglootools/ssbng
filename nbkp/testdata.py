@@ -54,6 +54,49 @@ def _base_volumes() -> dict[str, LocalVolume | RemoteVolume]:
     }
 
 
+# ── config show ─────────────────────────────────────────────────
+
+
+def config_show_config() -> Config:
+    """Config exercising all display paths for config show."""
+    return Config(
+        rsync_servers={
+            "bastion": _bastion_server(),
+            "nas": _nas_server(),
+        },
+        volumes=_base_volumes(),
+        syncs={
+            "photos-to-usb": SyncConfig(
+                slug="photos-to-usb",
+                source=SyncEndpoint(volume="laptop", subdir="photos"),
+                destination=DestinationSyncEndpoint(
+                    volume="usb-drive",
+                    btrfs_snapshots=BtrfsSnapshotConfig(
+                        enabled=True, max_snapshots=10
+                    ),
+                ),
+                filters=["+ *.jpg", "- *.tmp"],
+            ),
+            "docs-to-nas": SyncConfig(
+                slug="docs-to-nas",
+                source=SyncEndpoint(volume="laptop", subdir="documents"),
+                destination=DestinationSyncEndpoint(
+                    volume="nas-backup",
+                    subdir="docs",
+                ),
+            ),
+            "disabled-backup": SyncConfig(
+                slug="disabled-backup",
+                source=SyncEndpoint(volume="laptop"),
+                destination=DestinationSyncEndpoint(
+                    volume="usb-drive",
+                ),
+                enabled=False,
+            ),
+        },
+    )
+
+
 # ── status ──────────────────────────────────────────────────────
 
 

@@ -14,10 +14,12 @@ from rich.text import Text
 from .config import (
     Config,
     ConfigError,
+    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     RsyncServer,
     SyncConfig,
+    SyncEndpoint,
 )
 from .sync import PruneResult, SyncResult
 from .check import SyncReason, SyncStatus, VolumeReason, VolumeStatus
@@ -486,6 +488,85 @@ def print_human_troubleshoot(
         console.print("No issues found." " All volumes and syncs are active.")
 
 
+def _endpoint_display(
+    endpoint: SyncEndpoint | DestinationSyncEndpoint,
+) -> str:
+    """Format a sync endpoint as volume or volume/subdir."""
+    if endpoint.subdir:
+        return f"{endpoint.volume}/{endpoint.subdir}"
+    return endpoint.volume
+
+
+def print_human_config(config: Config) -> None:
+    """Print human-readable configuration."""
+    console = Console()
+
+    if config.rsync_servers:
+        server_table = Table(title="Rsync Servers:")
+        server_table.add_column("Name", style="bold")
+        server_table.add_column("Host")
+        server_table.add_column("Port")
+        server_table.add_column("User")
+        server_table.add_column("SSH Key")
+        server_table.add_column("Proxy Jump")
+
+        for server in config.rsync_servers.values():
+            server_table.add_row(
+                server.slug,
+                server.host,
+                str(server.port),
+                server.user or "",
+                server.ssh_key or "",
+                server.proxy_jump or "",
+            )
+
+        console.print(server_table)
+        console.print()
+
+    vol_table = Table(title="Volumes:")
+    vol_table.add_column("Name", style="bold")
+    vol_table.add_column("Type")
+    vol_table.add_column("Location")
+
+    for vol in config.volumes.values():
+        match vol:
+            case RemoteVolume():
+                vol_type = "remote"
+            case LocalVolume():
+                vol_type = "local"
+        vol_table.add_row(
+            vol.slug,
+            vol_type,
+            format_volume_display(vol, config),
+        )
+
+    console.print(vol_table)
+    console.print()
+
+    sync_table = Table(title="Syncs:")
+    sync_table.add_column("Name", style="bold")
+    sync_table.add_column("Source")
+    sync_table.add_column("Destination")
+    sync_table.add_column("Enabled")
+    sync_table.add_column("Options")
+
+    for sync in config.syncs.values():
+        enabled = (
+            Text("yes", style="green")
+            if sync.enabled
+            else Text("no", style="red")
+        )
+        sync_table.add_row(
+            sync.slug,
+            _endpoint_display(sync.source),
+            _endpoint_display(sync.destination),
+            enabled,
+            _sync_options(sync),
+        )
+
+    console.print(sync_table)
+
+
 def print_config_error(e: ConfigError) -> None:
     """Print a ConfigError as a Rich panel to stderr."""
     console = Console(stderr=True)
@@ -497,7 +578,7 @@ def print_config_error(e: ConfigError) -> None:
                 loc = " → ".join(str(p) for p in err["loc"])
                 msg = err["msg"]
                 if msg.startswith("Value error, "):
-                    msg = msg[len("Value error, "):]
+                    msg = msg[len("Value error, ") :]
                 if loc:
                     lines.append(f"{loc}: {msg}")
                 else:

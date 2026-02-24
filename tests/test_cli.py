@@ -145,6 +145,71 @@ def _sample_all_active_sync_statuses(
     }
 
 
+class TestConfigShowCommand:
+    @patch("nbkp.cli.load_config")
+    def test_human_output(self, mock_load: MagicMock) -> None:
+        config = _sample_config()
+        mock_load.return_value = config
+
+        result = runner.invoke(
+            app, ["config", "show", "--config", "/fake.yaml"]
+        )
+        assert result.exit_code == 0
+        assert "Volumes:" in result.output
+        assert "Syncs:" in result.output
+        assert "local-data" in result.output
+        assert "nas" in result.output
+        assert "photos-to-nas" in result.output
+
+    @patch("nbkp.cli.load_config")
+    def test_human_output_shows_servers(self, mock_load: MagicMock) -> None:
+        config = _sample_config()
+        mock_load.return_value = config
+
+        result = runner.invoke(
+            app, ["config", "show", "--config", "/fake.yaml"]
+        )
+        assert result.exit_code == 0
+        assert "Rsync Servers:" in result.output
+        assert "nas-server" in result.output
+        assert "nas.example.com" in result.output
+
+    @patch("nbkp.cli.load_config")
+    def test_json_output(self, mock_load: MagicMock) -> None:
+        config = _sample_config()
+        mock_load.return_value = config
+
+        result = runner.invoke(
+            app,
+            [
+                "config",
+                "show",
+                "--config",
+                "/fake.yaml",
+                "--output",
+                "json",
+            ],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert "volumes" in data
+        assert "syncs" in data
+        assert "rsync-servers" in data
+
+    @patch(
+        "nbkp.cli.load_config",
+        side_effect=__import__(
+            "nbkp.config", fromlist=["ConfigError"]
+        ).ConfigError("bad config"),
+    )
+    def test_config_error(self, mock_load: MagicMock) -> None:
+        result = runner.invoke(
+            app,
+            ["config", "show", "--config", "/bad.yaml"],
+        )
+        assert result.exit_code == 2
+
+
 class TestCheckCommand:
     @patch("nbkp.cli.check_all_syncs")
     @patch("nbkp.cli.load_config")

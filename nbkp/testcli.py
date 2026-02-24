@@ -23,6 +23,7 @@ from .config.protocol import Config as ConfigModel
 from .output import (
     print_config_error,
     print_human_check,
+    print_human_config,
     print_human_prune_results,
     print_human_results,
     print_human_troubleshoot,
@@ -30,6 +31,7 @@ from .output import (
 from .testdata import (
     check_config,
     check_data,
+    config_show_config,
     dry_run_result,
     prune_dry_run_results,
     prune_results,
@@ -54,11 +56,18 @@ app = typer.Typer(
 @app.command()
 def output() -> None:
     """Render all human output functions with fake data."""
+    _show_config_show()
     _show_check()
     _show_results()
     _show_prune()
     _show_troubleshoot()
     _show_config_errors()
+
+
+def _show_config_show() -> None:
+    _console.rule("print_human_config")
+    config = config_show_config()
+    print_human_config(config)
 
 
 def _show_check() -> None:
@@ -248,6 +257,15 @@ def seed(
     typer.echo()
     typer.echo("Try:")
     typer.echo("poetry install, then run:")
+    typer.echo()
+    typer.echo(f"{_INDENT}# Show parsed configuration")
+    typer.echo(f"{_INDENT}nbkp config show --config {config_path}")
+    typer.echo()
+    typer.echo(f"{_INDENT}# Show configuration as JSON")
+    typer.echo(
+        f"{_INDENT}nbkp config show --config {config_path}"
+        f" --output json"
+    )
     typer.echo()
     typer.echo(f"{_INDENT}# Volume and sync health checks")
     typer.echo(f"{_INDENT}nbkp check --config {config_path}")
