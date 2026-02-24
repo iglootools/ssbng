@@ -10,6 +10,9 @@ import typer
 import yaml
 from pydantic import ValidationError
 from rich.console import Console
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.text import Text
 
 from .config import (
     BtrfsSnapshotConfig,
@@ -59,7 +62,6 @@ from .testkit.gen.sync import (
     run_results,
 )
 
-_INDENT = "  "
 _console = Console()
 
 app = typer.Typer(
@@ -310,76 +312,89 @@ def seed(
     backup_sh = tmp / "backup.sh"
 
     # Print summary
-    seed_label = "Seed directory:"
-    cfg_label = "Config file:"
-    labels = [seed_label, cfg_label]
-    if docker:
-        docker_label = "Docker container:"
-        labels.append(docker_label)
-    w = max(len(label) for label in labels)
-    typer.echo(f"{seed_label:<{w}} {tmp}")
-    typer.echo(f"{cfg_label:<{w}} {config_path}")
+    rows: list[tuple[str, str]] = [
+        ("Seed directory", str(tmp)),
+        ("Config file", str(config_path)),
+    ]
     if docker:
         assert docker_server is not None
-        typer.echo(
-            f"{docker_label:<{w}} {CONTAINER_NAME}"
-            f" (port {docker_server.port})"
+        rows.append((
+            "Docker",
+            f"{CONTAINER_NAME}"
+            f" (port {docker_server.port})",
+        ))
+    label_w = max(len(r[0]) for r in rows)
+    summary = Text()
+    for i, (label, value) in enumerate(rows):
+        if i > 0:
+            summary.append("\n")
+        summary.append(
+            f"{label:<{label_w}}  ", style="bold"
         )
-    typer.echo()
-    typer.echo("Try:")
-    typer.echo("poetry install, then run:")
-    typer.echo()
-    typer.echo(f"{_INDENT}# Show parsed configuration")
-    typer.echo(f"{_INDENT}nbkp config show" f" --config {config_path}")
-    typer.echo()
-    typer.echo(f"{_INDENT}# Show configuration as JSON")
-    typer.echo(
-        f"{_INDENT}nbkp config show"
-        f" --config {config_path}"
-        f" --output json"
+        summary.append(value)
+    _console.print(
+        Panel(summary, border_style="blue", padding=(0, 1))
     )
-    typer.echo()
-    typer.echo(f"{_INDENT}# Volume and sync health checks")
-    typer.echo(f"{_INDENT}nbkp check --config {config_path}")
-    typer.echo()
-    typer.echo(f"{_INDENT}# Preview what rsync would do" f" without changes")
-    typer.echo(f"{_INDENT}nbkp run" f" --config {config_path} --dry-run")
-    typer.echo()
-    typer.echo(f"{_INDENT}# Execute backup syncs")
-    typer.echo(f"{_INDENT}nbkp run --config {config_path}")
-    typer.echo()
-    typer.echo(f"{_INDENT}# Prune old btrfs snapshots")
-    typer.echo(f"{_INDENT}nbkp prune --config {config_path}")
-    typer.echo()
-    typer.echo(f"{_INDENT}# Generate standalone bash script" f" to stdout")
-    typer.echo(f"{_INDENT}nbkp sh --config {config_path}")
-    typer.echo()
-    typer.echo(
-        f"{_INDENT}# Write script to file," f" validate syntax, and run"
-    )
-    typer.echo(
-        f"{_INDENT}nbkp sh --config {config_path}"
-        f"  -o {backup_sh} \\\n"
-        f"{_INDENT} && bash -n {backup_sh} \\\n"
-        f"{_INDENT} && {backup_sh} --dry-run \\\n"
-        f"{_INDENT} && {backup_sh}"
-    )
-    typer.echo()
-    typer.echo(f"{_INDENT}# With Relative paths (src and dst)")
-    typer.echo(
-        f"{_INDENT}nbkp sh --config {config_path}"
-        f"  -o {backup_sh}"
-        f" --relative-src --relative-dst \\\n"
-        f"{_INDENT} && bash -n {backup_sh} \\\n"
-        f"{_INDENT} && {backup_sh} --dry-run \\\n"
-        f"{_INDENT} && {backup_sh}"
-    )
-    typer.echo()
 
+    lines = [
+        f'CFG="{config_path}"',
+        f'SH="{backup_sh}"',
+        "",
+        "# Show parsed configuration",
+        "poetry run nbkp config show --config $CFG",
+        "",
+        "# Show configuration as JSON",
+        "poetry run nbkp config show --config $CFG --output json",
+        "",
+        "# Volume and sync health checks",
+        "poetry run nbkp check --config $CFG",
+        "",
+        "# Preview what rsync would do without changes",
+        "poetry run nbkp run --config $CFG --dry-run",
+        "",
+        "# Execute backup syncs",
+        "poetry run nbkp run --config $CFG",
+        "",
+        "# Prune old btrfs snapshots",
+        "poetry run nbkp prune --config $CFG",
+        "",
+        "# Generate standalone bash script to stdout",
+        "poetry run nbkp sh --config $CFG",
+        "",
+        "# Write script to file, validate, and run",
+        "poetry run nbkp sh --config $CFG -o $SH \\",
+        "  && bash -n $SH \\",
+        "  && $SH --dry-run \\",
+        "  && $SH",
+        "",
+        "# With relative paths (src and dst)",
+        "poetry run nbkp sh --config $CFG -o $SH"
+        " --relative-src --relative-dst \\",
+        "  && bash -n $SH \\",
+        "  && $SH --dry-run \\",
+        "  && $SH",
+    ]
     if docker:
-        typer.echo(f"{_INDENT}# Teardown Docker container")
-        typer.echo(f"{_INDENT}docker rm -f {CONTAINER_NAME}")
-        typer.echo()
+        lines += [
+            "",
+            "# Teardown Docker container",
+            f"docker rm -f {CONTAINER_NAME}",
+        ]
+    commands = "\n".join(lines)
+    _console.print(
+        Panel(
+            Syntax(
+                commands,
+                "bash",
+                theme="monokai",
+                background_color="default",
+                word_wrap=True,
+            ),
+            title="[bold]Try[/bold]",
+            border_style="green",
+            padding=(0, 1),
+        )
+    )
 
 
 def main() -> None:
