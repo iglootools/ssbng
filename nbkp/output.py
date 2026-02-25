@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 
 from pydantic import ValidationError
-from rich.console import Console
+from rich.console import Console, Group, RenderableType
 from rich.padding import Padding
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -86,24 +86,43 @@ def format_volume_display(
             return vol.path
 
 
-def print_human_check(
+def build_check_sections(
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
     config: Config,
-    *,
-    console: Console | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-) -> None:
-    """Print human-readable status output."""
-    re = resolved_endpoints or {}
-    if console is None:
-        console = Console()
+    resolved_endpoints: ResolvedEndpoints,
+) -> list[RenderableType]:
+    """Build renderable sections for check output."""
+    sections: list[RenderableType] = []
 
-    vol_table = Table(
-        title="Volumes:",
-    )
+    if config.ssh_endpoints:
+        ep_table = Table(title="SSH Endpoints:")
+        ep_table.add_column("Name", style="bold")
+        ep_table.add_column("Host")
+        ep_table.add_column("Port")
+        ep_table.add_column("User")
+        ep_table.add_column("Key")
+        ep_table.add_column("Proxy Jump")
+        ep_table.add_column("Location")
+
+        for server in config.ssh_endpoints.values():
+            ep_table.add_row(
+                server.slug,
+                server.host,
+                str(server.port),
+                server.user or "",
+                server.key or "",
+                ", ".join(server.proxy_jump_chain) or "",
+                server.location or "",
+            )
+
+        sections.append(ep_table)
+        sections.append(Text(""))
+
+    vol_table = Table(title="Volumes:")
     vol_table.add_column("Name", style="bold")
     vol_table.add_column("Type")
+    vol_table.add_column("SSH Endpoint")
     vol_table.add_column("URI")
     vol_table.add_column("Status")
 
@@ -112,21 +131,23 @@ def print_human_check(
         match vol:
             case RemoteVolume():
                 vol_type = "remote"
+                ep = resolved_endpoints.get(vol.slug)
+                ssh_ep = ep.server.slug if ep else vol.ssh_endpoint
             case LocalVolume():
                 vol_type = "local"
+                ssh_ep = ""
         vol_table.add_row(
             vs.slug,
             vol_type,
-            format_volume_display(vol, re),
+            ssh_ep,
+            format_volume_display(vol, resolved_endpoints),
             _status_text(vs.active, vs.reasons),
         )
 
-    console.print(vol_table)
-    console.print()
+    sections.append(vol_table)
+    sections.append(Text(""))
 
-    sync_table = Table(
-        title="Syncs:",
-    )
+    sync_table = Table(title="Syncs:")
     sync_table.add_column("Name", style="bold")
     sync_table.add_column("Source")
     sync_table.add_column("Destination")
@@ -136,13 +157,45 @@ def print_human_check(
     for ss in sync_statuses.values():
         sync_table.add_row(
             ss.slug,
-            ss.config.source.volume,
-            ss.config.destination.volume,
+            _sync_endpoint_display(ss.config.source),
+            _sync_endpoint_display(ss.config.destination),
             _sync_options(ss.config),
             _status_text(ss.active, ss.reasons),
         )
 
-    console.print(sync_table)
+    sections.append(sync_table)
+
+    return sections
+
+
+def print_human_check(
+    vol_statuses: dict[str, VolumeStatus],
+    sync_statuses: dict[str, SyncStatus],
+    config: Config,
+    *,
+    console: Console | None = None,
+    resolved_endpoints: ResolvedEndpoints | None = None,
+    wrap_in_panel: bool = True,
+) -> None:
+    """Print human-readable status output."""
+    re = resolved_endpoints or {}
+    if console is None:
+        console = Console()
+
+    sections = build_check_sections(vol_statuses, sync_statuses, config, re)
+
+    if wrap_in_panel:
+        console.print(
+            Panel(
+                Group(*sections),
+                title="[bold]Check Results[/bold]",
+                border_style="cyan",
+                padding=(0, 1),
+            )
+        )
+    else:
+        for section in sections:
+            console.print(section)
 
 
 def print_human_results(
@@ -157,7 +210,7 @@ def print_human_results(
     mode = " (dry run)" if dry_run else ""
 
     table = Table(
-        title=f"NBKP run{mode}:",
+        title=f"Sync results{mode}:",
     )
     table.add_column("Name", style="bold")
     table.add_column("Status")
@@ -609,13 +662,14 @@ def print_human_troubleshoot(
         console.print("No issues found." " All volumes and syncs are active.")
 
 
-def _endpoint_display(
+def _sync_endpoint_display(
     endpoint: SyncEndpoint | DestinationSyncEndpoint,
 ) -> str:
     """Format a sync endpoint as volume or volume/subdir."""
     if endpoint.subdir:
-        return f"{endpoint.volume}/{endpoint.subdir}"
-    return endpoint.volume
+        return f"{endpoint.volume}:/{endpoint.subdir}"
+    else:
+        return endpoint.volume
 
 
 def print_human_config(
@@ -656,17 +710,22 @@ def print_human_config(
     vol_table = Table(title="Volumes:")
     vol_table.add_column("Name", style="bold")
     vol_table.add_column("Type")
+    vol_table.add_column("SSH Endpoint")
     vol_table.add_column("URI")
 
     for vol in config.volumes.values():
         match vol:
             case RemoteVolume():
                 vol_type = "remote"
+                ep = re.get(vol.slug)
+                ssh_ep = ep.server.slug if ep else vol.ssh_endpoint
             case LocalVolume():
                 vol_type = "local"
+                ssh_ep = ""
         vol_table.add_row(
             vol.slug,
             vol_type,
+            ssh_ep,
             format_volume_display(vol, re),
         )
 
@@ -677,8 +736,8 @@ def print_human_config(
     sync_table.add_column("Name", style="bold")
     sync_table.add_column("Source")
     sync_table.add_column("Destination")
-    sync_table.add_column("Enabled")
     sync_table.add_column("Options")
+    sync_table.add_column("Enabled")
 
     for sync in config.syncs.values():
         enabled = (
@@ -688,10 +747,10 @@ def print_human_config(
         )
         sync_table.add_row(
             sync.slug,
-            _endpoint_display(sync.source),
-            _endpoint_display(sync.destination),
-            enabled,
+            _sync_endpoint_display(sync.source),
+            _sync_endpoint_display(sync.destination),
             _sync_options(sync),
+            enabled,
         )
 
     console.print(sync_table)

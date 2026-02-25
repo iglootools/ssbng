@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
+from ...config import Config
 from ...sync import PruneResult, SyncResult
 
-_SNAP_BASE = "/mnt/usb-backup/snapshots"
+
+def _snap_base(config: Config) -> str:
+    vol = config.volumes[config.syncs["photos-to-usb"].destination.volume]
+    return f"{vol.path}/snapshots"
 
 
-def run_results() -> list[SyncResult]:
+def run_results(config: Config) -> list[SyncResult]:
     """Sync results: success, success+snapshot, failure."""
-    snap = f"{_SNAP_BASE}/2026-02-19T10:30:00.000Z"
+    snap_base = _snap_base(config)
+    snap = f"{snap_base}/2026-02-19T10:30:00.000Z"
+    src_vol = config.volumes[config.syncs["docs-to-nas"].source.volume]
+    src_subdir = config.syncs["docs-to-nas"].source.subdir
     return [
         SyncResult(
             sync_slug="music-to-usb",
@@ -26,8 +33,8 @@ def run_results() -> list[SyncResult]:
             output="",
             snapshot_path=snap,
             pruned_paths=[
-                f"{_SNAP_BASE}/2026-02-01T08:00:00.000Z",
-                f"{_SNAP_BASE}/2026-02-10T12:00:00.000Z",
+                f"{snap_base}/2026-02-01T08:00:00.000Z",
+                f"{snap_base}/2026-02-10T12:00:00.000Z",
             ],
         ),
         SyncResult(
@@ -37,7 +44,7 @@ def run_results() -> list[SyncResult]:
             rsync_exit_code=23,
             output=(
                 "rsync: [sender] link_stat"
-                ' "/mnt/data/documents" failed:'
+                f' "{src_vol.path}/{src_subdir}" failed:'
                 " No such file or directory (2)\n"
                 "rsync error: some files/attrs"
                 " were not transferred (code 23)\n"
@@ -47,7 +54,7 @@ def run_results() -> list[SyncResult]:
     ]
 
 
-def dry_run_result() -> SyncResult:
+def dry_run_result(config: Config) -> SyncResult:
     """Single dry-run success result."""
     return SyncResult(
         sync_slug="photos-to-usb",
@@ -58,15 +65,16 @@ def dry_run_result() -> SyncResult:
     )
 
 
-def prune_results() -> list[PruneResult]:
+def prune_results(config: Config) -> list[PruneResult]:
     """Prune results: success, noop, error."""
+    snap_base = _snap_base(config)
     return [
         PruneResult(
             sync_slug="photos-to-usb",
             deleted=[
-                f"{_SNAP_BASE}/2026-01-01T00:00:00.000Z",
-                f"{_SNAP_BASE}/2026-01-15T00:00:00.000Z",
-                f"{_SNAP_BASE}/2026-02-01T00:00:00.000Z",
+                f"{snap_base}/2026-01-01T00:00:00.000Z",
+                f"{snap_base}/2026-01-15T00:00:00.000Z",
+                f"{snap_base}/2026-02-01T00:00:00.000Z",
             ],
             kept=7,
             dry_run=False,
@@ -87,14 +95,17 @@ def prune_results() -> list[PruneResult]:
     ]
 
 
-def prune_dry_run_results() -> list[PruneResult]:
+def prune_dry_run_results(
+    config: Config,
+) -> list[PruneResult]:
     """Prune dry-run results."""
+    snap_base = _snap_base(config)
     return [
         PruneResult(
             sync_slug="photos-to-usb",
             deleted=[
-                f"{_SNAP_BASE}/2026-01-01T00:00:00.000Z",
-                f"{_SNAP_BASE}/2026-01-15T00:00:00.000Z",
+                f"{snap_base}/2026-01-01T00:00:00.000Z",
+                f"{snap_base}/2026-01-15T00:00:00.000Z",
             ],
             kept=10,
             dry_run=True,

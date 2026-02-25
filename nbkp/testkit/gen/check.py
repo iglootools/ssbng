@@ -18,11 +18,9 @@ from ...config import (
     SyncEndpoint,
 )
 from .config import (
+    base_ssh_endpoints,
+    base_syncs,
     base_volumes,
-    bastion2_server,
-    bastion_server,
-    nas_public_server,
-    nas_server,
 )
 
 
@@ -32,56 +30,19 @@ def check_config() -> Config:
     volumes["external-drive"] = LocalVolume(
         slug="external-drive", path="/mnt/external"
     )
+    syncs = base_syncs()
+    syncs["disabled-backup"] = SyncConfig(
+        slug="disabled-backup",
+        source=SyncEndpoint(volume="laptop"),
+        destination=DestinationSyncEndpoint(
+            volume="external-drive",
+        ),
+        enabled=False,
+    )
     return Config(
-        ssh_endpoints={
-            "bastion": bastion_server(),
-            "bastion2": bastion2_server(),
-            "nas": nas_server(),
-            "nas-public": nas_public_server(),
-        },
+        ssh_endpoints=base_ssh_endpoints(),
         volumes=volumes,
-        syncs={
-            "photos-to-usb": SyncConfig(
-                slug="photos-to-usb",
-                source=SyncEndpoint(volume="laptop", subdir="photos"),
-                destination=DestinationSyncEndpoint(
-                    volume="usb-drive",
-                    btrfs_snapshots=BtrfsSnapshotConfig(
-                        enabled=True, max_snapshots=10
-                    ),
-                ),
-                filters=[
-                    "+ *.jpg",
-                    "+ *.png",
-                    "- *.tmp",
-                ],
-            ),
-            "docs-to-nas": SyncConfig(
-                slug="docs-to-nas",
-                source=SyncEndpoint(volume="laptop", subdir="documents"),
-                destination=DestinationSyncEndpoint(
-                    volume="nas-backup",
-                    subdir="docs",
-                ),
-            ),
-            "music-to-usb": SyncConfig(
-                slug="music-to-usb",
-                source=SyncEndpoint(volume="laptop"),
-                destination=DestinationSyncEndpoint(volume="usb-drive"),
-                extra_rsync_options=[
-                    "--compress",
-                    "--progress",
-                ],
-            ),
-            "disabled-backup": SyncConfig(
-                slug="disabled-backup",
-                source=SyncEndpoint(volume="laptop"),
-                destination=DestinationSyncEndpoint(
-                    volume="external-drive",
-                ),
-                enabled=False,
-            ),
-        },
+        syncs=syncs,
     )
 
 
@@ -154,12 +115,7 @@ def check_data(
 def troubleshoot_config() -> Config:
     """Config designed to trigger every troubleshoot reason."""
     return Config(
-        ssh_endpoints={
-            "bastion": bastion_server(),
-            "bastion2": bastion2_server(),
-            "nas": nas_server(),
-            "nas-public": nas_public_server(),
-        },
+        ssh_endpoints=base_ssh_endpoints(),
         volumes=base_volumes(),
         syncs={
             "disabled-sync": SyncConfig(

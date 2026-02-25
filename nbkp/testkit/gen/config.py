@@ -67,53 +67,61 @@ def base_volumes() -> dict[str, LocalVolume | RemoteVolume]:
     }
 
 
+def base_ssh_endpoints() -> dict[str, SshEndpoint]:
+    return {
+        "bastion": bastion_server(),
+        "bastion2": bastion2_server(),
+        "nas": nas_server(),
+        "nas-public": nas_public_server(),
+    }
+
+
+def base_syncs() -> dict[str, SyncConfig]:
+    return {
+        "photos-to-usb": SyncConfig(
+            slug="photos-to-usb",
+            source=SyncEndpoint(volume="laptop", subdir="photos"),
+            destination=DestinationSyncEndpoint(
+                volume="usb-drive",
+                btrfs_snapshots=BtrfsSnapshotConfig(
+                    enabled=True, max_snapshots=10
+                ),
+            ),
+            filters=["+ *.jpg", "- *.tmp"],
+        ),
+        "docs-to-nas": SyncConfig(
+            slug="docs-to-nas",
+            source=SyncEndpoint(volume="laptop", subdir="documents"),
+            destination=DestinationSyncEndpoint(
+                volume="nas-backup",
+                subdir="docs",
+            ),
+        ),
+        "music-to-usb": SyncConfig(
+            slug="music-to-usb",
+            source=SyncEndpoint(volume="laptop", subdir="music"),
+            destination=DestinationSyncEndpoint(
+                volume="usb-drive",
+                hard_link_snapshots=HardLinkSnapshotConfig(
+                    enabled=True, max_snapshots=5
+                ),
+            ),
+        ),
+        "disabled-backup": SyncConfig(
+            slug="disabled-backup",
+            source=SyncEndpoint(volume="laptop"),
+            destination=DestinationSyncEndpoint(
+                volume="usb-drive",
+            ),
+            enabled=False,
+        ),
+    }
+
+
 def config_show_config() -> Config:
     """Config exercising all display paths for config show."""
     return Config(
-        ssh_endpoints={
-            "bastion": bastion_server(),
-            "bastion2": bastion2_server(),
-            "nas": nas_server(),
-            "nas-public": nas_public_server(),
-        },
+        ssh_endpoints=base_ssh_endpoints(),
         volumes=base_volumes(),
-        syncs={
-            "photos-to-usb": SyncConfig(
-                slug="photos-to-usb",
-                source=SyncEndpoint(volume="laptop", subdir="photos"),
-                destination=DestinationSyncEndpoint(
-                    volume="usb-drive",
-                    btrfs_snapshots=BtrfsSnapshotConfig(
-                        enabled=True, max_snapshots=10
-                    ),
-                ),
-                filters=["+ *.jpg", "- *.tmp"],
-            ),
-            "docs-to-nas": SyncConfig(
-                slug="docs-to-nas",
-                source=SyncEndpoint(volume="laptop", subdir="documents"),
-                destination=DestinationSyncEndpoint(
-                    volume="nas-backup",
-                    subdir="docs",
-                ),
-            ),
-            "music-to-usb": SyncConfig(
-                slug="music-to-usb",
-                source=SyncEndpoint(volume="laptop", subdir="music"),
-                destination=DestinationSyncEndpoint(
-                    volume="usb-drive",
-                    hard_link_snapshots=HardLinkSnapshotConfig(
-                        enabled=True, max_snapshots=5
-                    ),
-                ),
-            ),
-            "disabled-backup": SyncConfig(
-                slug="disabled-backup",
-                source=SyncEndpoint(volume="laptop"),
-                destination=DestinationSyncEndpoint(
-                    volume="usb-drive",
-                ),
-                enabled=False,
-            ),
-        },
+        syncs=base_syncs(),
     )

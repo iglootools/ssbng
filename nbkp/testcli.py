@@ -134,28 +134,37 @@ def _show_check() -> None:
         config,
         console=console,
         resolved_endpoints=re,
+        wrap_in_panel=False,
     )
     _print_panel("print_human_check", buf)
 
 
 def _show_results() -> None:
+    config = config_show_config()
     console, buf = _capture_console()
-    print_human_results(run_results(), dry_run=False, console=console)
+    print_human_results(run_results(config), dry_run=False, console=console)
     _print_panel("print_human_results (run)", buf)
 
     console, buf = _capture_console()
-    print_human_results([dry_run_result()], dry_run=True, console=console)
+    print_human_results(
+        [dry_run_result(config)], dry_run=True, console=console
+    )
     _print_panel("print_human_results (dry run)", buf)
 
 
 def _show_prune() -> None:
+    config = config_show_config()
     console, buf = _capture_console()
-    print_human_prune_results(prune_results(), dry_run=False, console=console)
+    print_human_prune_results(
+        prune_results(config), dry_run=False, console=console
+    )
     _print_panel("print_human_prune_results (prune)", buf)
 
     console, buf = _capture_console()
     print_human_prune_results(
-        prune_dry_run_results(), dry_run=True, console=console
+        prune_dry_run_results(config),
+        dry_run=True,
+        console=console,
     )
     _print_panel("print_human_prune_results (dry run)", buf)
 
