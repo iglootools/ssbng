@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import socket
 
-import paramiko  # type: ignore[import-untyped]
+import paramiko
 import pytest
 
 from nbkp.remote.resolution import (

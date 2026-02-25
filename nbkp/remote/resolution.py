@@ -6,7 +6,7 @@ import ipaddress
 import socket
 from pathlib import Path
 
-import paramiko  # type: ignore[import-untyped]
+import paramiko
 
 
 def _load_ssh_config() -> paramiko.SSHConfig | None:

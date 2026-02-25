@@ -5,7 +5,7 @@ from __future__ import annotations
 import shlex
 import subprocess
 
-import paramiko  # type: ignore[import-untyped]
+import paramiko
 from fabric import Connection  # type: ignore[import-untyped]
 
 from ..config import SshEndpoint
