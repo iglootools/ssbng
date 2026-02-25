@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+import uuid
 from pathlib import Path
-from typing import Generator
+from typing import Any, Generator
 
 import docker as dockerlib
 import pytest
@@ -52,30 +53,53 @@ def ssh_key_pair() -> Generator[tuple[Path, Path], None, None]:
 
 
 @pytest.fixture(scope="session")
-def docker_container(
-    ssh_key_pair: tuple[Path, Path],
-) -> Generator[SshEndpoint, None, None]:
-    """Start Docker container and yield SshEndpoint."""
-    from testcontainers.core.container import DockerContainer
+def _docker_image() -> str:
+    """Build the Docker image and return its tag."""
     from testcontainers.core.image import DockerImage
-    from testcontainers.core.wait_strategies import (
-        LogMessageWaitStrategy,
-    )
-
-    private_key, public_key = ssh_key_pair
 
     image = DockerImage(
         path=str(DOCKER_DIR),
         tag="nbkp-test-server:latest",
     )
     image.build()
+    return str(image)
+
+
+@pytest.fixture(scope="session")
+def _docker_network() -> Generator[Any, None, None]:
+    """Create a Docker bridge network for inter-container comms."""
+    client = dockerlib.from_env()
+    name = f"nbkp-test-{uuid.uuid4().hex[:8]}"
+    network = client.networks.create(name, driver="bridge")
+
+    yield network
+
+    try:
+        network.remove()
+    except dockerlib.errors.APIError:
+        pass
+
+
+@pytest.fixture(scope="session")
+def docker_container(
+    ssh_key_pair: tuple[Path, Path],
+    _docker_image: str,
+    _docker_network: Any,
+) -> Generator[SshEndpoint, None, None]:
+    """Start Docker container and yield SshEndpoint."""
+    from testcontainers.core.container import DockerContainer
+    from testcontainers.core.wait_strategies import (
+        LogMessageWaitStrategy,
+    )
+
+    private_key, public_key = ssh_key_pair
 
     wait_strategy = LogMessageWaitStrategy(
         "Server listening",
     ).with_startup_timeout(30)
 
     container = (
-        DockerContainer(str(image))
+        DockerContainer(_docker_image)
         .with_exposed_ports(22)
         .with_volume_mapping(
             str(public_key),
@@ -86,6 +110,10 @@ def docker_container(
         .waiting_for(wait_strategy)
     )
     container.start()
+
+    # Connect to network with alias for bastion access
+    wrapped = container.get_wrapped_container()
+    _docker_network.connect(wrapped, aliases=["backup-server"])
 
     server = SshEndpoint(
         slug="test-server",
@@ -103,6 +131,80 @@ def docker_container(
     yield server
 
     container.stop()
+
+
+@pytest.fixture(scope="session")
+def bastion_container(
+    ssh_key_pair: tuple[Path, Path],
+    _docker_image: str,
+    _docker_network: Any,
+) -> Generator[SshEndpoint, None, None]:
+    """Start a bastion (jump proxy) container."""
+    from testcontainers.core.container import DockerContainer
+    from testcontainers.core.wait_strategies import (
+        LogMessageWaitStrategy,
+    )
+
+    private_key, public_key = ssh_key_pair
+
+    wait_strategy = LogMessageWaitStrategy(
+        "Server listening",
+    ).with_startup_timeout(30)
+
+    container = (
+        DockerContainer(_docker_image)
+        .with_exposed_ports(22)
+        .with_volume_mapping(
+            str(public_key),
+            "/tmp/authorized_keys",
+            "ro",
+        )
+        .with_env("NBKP_BASTION_ONLY", "1")
+        .waiting_for(wait_strategy)
+    )
+    container.start()
+
+    wrapped = container.get_wrapped_container()
+    _docker_network.connect(wrapped)
+
+    server = SshEndpoint(
+        slug="bastion",
+        host=container.get_container_host_ip(),
+        port=int(container.get_exposed_port(22)),
+        user="testuser",
+        key=str(private_key),
+        connection_options=SshConnectionOptions(
+            strict_host_key_checking=False,
+            known_hosts_file="/dev/null",
+        ),
+    )
+
+    wait_for_ssh(server, timeout=30)
+    yield server
+
+    container.stop()
+
+
+@pytest.fixture(scope="session")
+def proxied_ssh_endpoint(
+    ssh_key_pair: tuple[Path, Path],
+    bastion_container: SshEndpoint,
+    docker_container: SshEndpoint,
+) -> SshEndpoint:
+    """SshEndpoint that routes through the bastion."""
+    private_key, _ = ssh_key_pair
+    return SshEndpoint(
+        slug="proxied-server",
+        host="backup-server",
+        port=22,
+        user="testuser",
+        key=str(private_key),
+        proxy_jump="bastion",
+        connection_options=SshConnectionOptions(
+            strict_host_key_checking=False,
+            known_hosts_file="/dev/null",
+        ),
+    )
 
 
 @pytest.fixture(scope="session")

@@ -15,7 +15,9 @@ from ..remote.fabricssh import run_remote_command
 
 DOCKER_DIR = Path(__file__).resolve().parent / "dockerbuild"
 CONTAINER_NAME = "nbkp-seed"
+BASTION_CONTAINER_NAME = "nbkp-seed-bastion"
 _IMAGE_TAG = "nbkp-seed-server:latest"
+_NETWORK_NAME = "nbkp-seed-net"
 
 
 def check_docker() -> None:
@@ -63,13 +65,33 @@ def generate_ssh_keypair(
     return private_key_path, public_key_path
 
 
-def start_docker_container(pub_key: Path) -> int:
-    """Build image, destroy old container, start new. Return SSH port."""
+def create_docker_network() -> str:
+    """Create a Docker bridge network for container communication."""
     client = dockerlib.from_env()
-
-    # Build image
     try:
-        image, _ = client.images.build(
+        old = client.networks.get(_NETWORK_NAME)
+        old.remove()
+    except dockerlib.errors.NotFound:
+        pass
+    client.networks.create(_NETWORK_NAME, driver="bridge")
+    return _NETWORK_NAME
+
+
+def remove_docker_network() -> None:
+    """Remove the Docker bridge network."""
+    client = dockerlib.from_env()
+    try:
+        network = client.networks.get(_NETWORK_NAME)
+        network.remove()
+    except dockerlib.errors.NotFound:
+        pass
+
+
+def build_docker_image() -> None:
+    """Build the Docker image used by all seed containers."""
+    client = dockerlib.from_env()
+    try:
+        client.images.build(
             path=str(DOCKER_DIR),
             tag=_IMAGE_TAG,
             nocache=True,
@@ -81,6 +103,18 @@ def start_docker_container(pub_key: Path) -> int:
         )
         raise typer.Exit(1)
 
+
+def start_docker_container(
+    pub_key: Path,
+    network_name: str | None = None,
+    network_alias: str | None = None,
+) -> int:
+    """Destroy old container, start new. Return SSH port.
+
+    The image must already be built via build_docker_image().
+    """
+    client = dockerlib.from_env()
+
     # Remove existing container if any
     try:
         old = client.containers.get(CONTAINER_NAME)
@@ -90,7 +124,7 @@ def start_docker_container(pub_key: Path) -> int:
 
     # Start container
     container = client.containers.run(
-        image,
+        _IMAGE_TAG,
         detach=True,
         name=CONTAINER_NAME,
         privileged=True,
@@ -102,6 +136,48 @@ def start_docker_container(pub_key: Path) -> int:
             }
         },
     )
+
+    if network_name is not None:
+        network = client.networks.get(network_name)
+        aliases = [network_alias] if network_alias else None
+        network.connect(container, aliases=aliases)
+
+    # Get mapped port
+    container.reload()
+    port_info = container.attrs["NetworkSettings"]["Ports"]["22/tcp"]
+    return int(port_info[0]["HostPort"])
+
+
+def start_bastion_container(
+    pub_key: Path,
+    network_name: str,
+) -> int:
+    """Start a bastion (jump proxy) container. Return SSH port."""
+    client = dockerlib.from_env()
+
+    # Remove existing container if any
+    try:
+        old = client.containers.get(BASTION_CONTAINER_NAME)
+        old.remove(force=True)
+    except dockerlib.errors.NotFound:
+        pass
+
+    container = client.containers.run(
+        _IMAGE_TAG,
+        detach=True,
+        name=BASTION_CONTAINER_NAME,
+        ports={"22/tcp": None},
+        environment={"NBKP_BASTION_ONLY": "1"},
+        volumes={
+            str(pub_key): {
+                "bind": "/tmp/authorized_keys",
+                "mode": "ro",
+            }
+        },
+    )
+
+    network = client.networks.get(network_name)
+    network.connect(container)
 
     # Get mapped port
     container.reload()

@@ -136,11 +136,16 @@ class TestBuildSshBaseArgs:
             user="admin",
         )
         args = build_ssh_base_args(server, [proxy])
+        proxy_cmd = (
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+            " -p 2222"
+            " -W %h:%p admin@bastion.example.com"
+        )
         assert args == [
             "ssh",
             *_DEFAULT_O_OPTIONS,
-            "-J",
-            "admin@bastion.example.com:2222",
+            "-o",
+            f"ProxyCommand={proxy_cmd}",
             "target.example.com",
         ]
 
@@ -155,11 +160,15 @@ class TestBuildSshBaseArgs:
             user="admin",
         )
         args = build_ssh_base_args(server, [proxy])
+        proxy_cmd = (
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+            " -W %h:%p admin@bastion.example.com"
+        )
         assert args == [
             "ssh",
             *_DEFAULT_O_OPTIONS,
-            "-J",
-            "admin@bastion.example.com",
+            "-o",
+            f"ProxyCommand={proxy_cmd}",
             "target.example.com",
         ]
 
@@ -174,11 +183,16 @@ class TestBuildSshBaseArgs:
             port=2222,
         )
         args = build_ssh_base_args(server, [proxy])
+        proxy_cmd = (
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+            " -p 2222"
+            " -W %h:%p bastion.example.com"
+        )
         assert args == [
             "ssh",
             *_DEFAULT_O_OPTIONS,
-            "-J",
-            "bastion.example.com:2222",
+            "-o",
+            f"ProxyCommand={proxy_cmd}",
             "target.example.com",
         ]
 
@@ -198,11 +212,21 @@ class TestBuildSshBaseArgs:
             port=2222,
         )
         args = build_ssh_base_args(server, [proxy1, proxy2])
+        inner = (
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+            " -W %%h:%%p user1@bastion1.example.com"
+        )
+        proxy_cmd = (
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+            f" -o ProxyCommand={inner}"
+            " -p 2222"
+            " -W %h:%p bastion2.example.com"
+        )
         assert args == [
             "ssh",
             *_DEFAULT_O_OPTIONS,
-            "-J",
-            "user1@bastion1.example.com,bastion2.example.com:2222",
+            "-o",
+            f"ProxyCommand={proxy_cmd}",
             "target.example.com",
         ]
 
@@ -260,9 +284,17 @@ class TestBuildSshEOption:
             user="admin",
         )
         result = build_ssh_e_option(server, [proxy])
+        proxy_cmd = (
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+            " -p 2222"
+            " -W %h:%p admin@bastion.example.com"
+        )
+        import shlex
+
+        quoted = shlex.quote(f"ProxyCommand={proxy_cmd}")
         assert result == [
             "-e",
-            f"{_DEFAULT_E_PREFIX}" " -J admin@bastion.example.com:2222",
+            f"{_DEFAULT_E_PREFIX} -o {quoted}",
         ]
 
     def test_proxy_chain_multi_hop(self) -> None:
@@ -281,11 +313,22 @@ class TestBuildSshEOption:
             port=2222,
         )
         result = build_ssh_e_option(server, [proxy1, proxy2])
+        inner = (
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+            " -W %%h:%%p user1@bastion1.example.com"
+        )
+        proxy_cmd = (
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+            f" -o ProxyCommand={inner}"
+            " -p 2222"
+            " -W %h:%p bastion2.example.com"
+        )
+        import shlex
+
+        quoted = shlex.quote(f"ProxyCommand={proxy_cmd}")
         assert result == [
             "-e",
-            f"{_DEFAULT_E_PREFIX}"
-            " -J user1@bastion1.example.com"
-            ",bastion2.example.com:2222",
+            f"{_DEFAULT_E_PREFIX} -o {quoted}",
         ]
 
 

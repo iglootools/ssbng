@@ -523,7 +523,7 @@ class TestProxyJump:
         script = generate_script(
             config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
         )
-        assert "-J" in script
+        assert "ProxyCommand=" in script
         assert "admin@bastion.example.com" in script
 
     def test_proxy_jumps_in_ssh(self) -> None:
@@ -535,10 +535,9 @@ class TestProxyJump:
             now=_NOW,
             resolved_endpoints=resolved,
         )
-        assert "-J" in script
-        assert (
-            "admin@bastion1.example.com" ",bastion2.example.com:2222" in script
-        )
+        assert "ProxyCommand=" in script
+        assert "admin@bastion1.example.com" in script
+        assert "bastion2.example.com" in script
 
     def test_proxy_jumps_valid_syntax(self) -> None:
         config = _proxy_jumps_config()

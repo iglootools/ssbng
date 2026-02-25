@@ -38,6 +38,49 @@ def format_proxy_jump_chain(proxies: list[SshEndpoint]) -> str:
     return ",".join(parts)
 
 
+def _build_proxy_command(
+    proxies: list[SshEndpoint],
+) -> str:
+    """Build a nested ProxyCommand string for the proxy chain.
+
+    Uses ProxyCommand instead of -J so that per-proxy SSH
+    options (e.g. StrictHostKeyChecking) are propagated to
+    each hop.
+    """
+    proxy = proxies[0]
+    parts: list[str] = ["ssh"]
+    for opt in _ssh_o_options(proxy.connection_options):
+        parts.extend(["-o", opt])
+    if proxy.port != 22:
+        parts.extend(["-p", str(proxy.port)])
+    if proxy.key:
+        parts.extend(["-i", proxy.key])
+    parts.append("-W")
+    parts.append("%h:%p")
+    host = f"{proxy.user}@{proxy.host}" if proxy.user else proxy.host
+    parts.append(host)
+
+    inner_cmd = " ".join(parts)
+
+    for proxy in proxies[1:]:
+        escaped_inner = inner_cmd.replace("%", "%%")
+        parts = ["ssh"]
+        for opt in _ssh_o_options(proxy.connection_options):
+            parts.extend(["-o", opt])
+        parts.extend(["-o", f"ProxyCommand={escaped_inner}"])
+        if proxy.port != 22:
+            parts.extend(["-p", str(proxy.port)])
+        if proxy.key:
+            parts.extend(["-i", proxy.key])
+        parts.append("-W")
+        parts.append("%h:%p")
+        host = f"{proxy.user}@{proxy.host}" if proxy.user else proxy.host
+        parts.append(host)
+        inner_cmd = " ".join(parts)
+
+    return inner_cmd
+
+
 def build_ssh_base_args(
     server: SshEndpoint,
     proxy_chain: list[SshEndpoint] | None = None,
@@ -55,7 +98,8 @@ def build_ssh_base_args(
     if server.key:
         args.extend(["-i", server.key])
     if proxy_chain:
-        args.extend(["-J", format_proxy_jump_chain(proxy_chain)])
+        proxy_cmd = _build_proxy_command(proxy_chain)
+        args.extend(["-o", f"ProxyCommand={proxy_cmd}"])
 
     host = f"{server.user}@{server.host}" if server.user else server.host
     args.append(host)
@@ -94,7 +138,9 @@ def build_ssh_e_option(
     if server.key:
         ssh_cmd_parts.extend(["-i", server.key])
     if proxy_chain:
-        ssh_cmd_parts.extend(["-J", format_proxy_jump_chain(proxy_chain)])
+        proxy_cmd = _build_proxy_command(proxy_chain)
+        quoted = shlex.quote(f"ProxyCommand={proxy_cmd}")
+        ssh_cmd_parts.extend(["-o", quoted])
 
     return ["-e", " ".join(ssh_cmd_parts)]
 

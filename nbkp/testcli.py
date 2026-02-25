@@ -28,11 +28,15 @@ from .config import (
     SyncEndpoint,
 )
 from .testkit.docker import (
+    BASTION_CONTAINER_NAME,
     CONTAINER_NAME,
     DOCKER_DIR,
+    build_docker_image,
     check_docker,
+    create_docker_network,
     generate_ssh_keypair,
     ssh_exec,
+    start_bastion_container,
     start_docker_container,
     wait_for_ssh,
 )
@@ -266,12 +270,40 @@ def seed(
     src = tmp / "src-data"
     dst = tmp / "dst-backup"
 
-    # Docker container
+    # Docker containers
     docker_endpoint: SshEndpoint | None = None
+    bastion_endpoint: SshEndpoint | None = None
     if docker:
         private_key, pub_key = generate_ssh_keypair(tmp)
+
+        with _console.status("Building Docker image..."):
+            build_docker_image()
+
+        with _console.status("Creating Docker network..."):
+            network_name = create_docker_network()
+
+        with _console.status("Starting bastion container..."):
+            bastion_port = start_bastion_container(pub_key, network_name)
+        bastion_endpoint = SshEndpoint(
+            slug="bastion",
+            host="127.0.0.1",
+            port=bastion_port,
+            user="testuser",
+            key=str(private_key),
+            connection_options=SshConnectionOptions(
+                strict_host_key_checking=False,
+                known_hosts_file="/dev/null",
+            ),
+        )
+        with _console.status("Waiting for bastion SSH..."):
+            wait_for_ssh(bastion_endpoint)
+
         with _console.status("Starting Docker container..."):
-            docker_port = start_docker_container(pub_key)
+            docker_port = start_docker_container(
+                pub_key,
+                network_name=network_name,
+                network_alias="backup-server",
+            )
         docker_endpoint = SshEndpoint(
             slug="docker",
             host="127.0.0.1",
@@ -307,7 +339,21 @@ def seed(
 
     if docker:
         assert docker_endpoint is not None
+        assert bastion_endpoint is not None
+        ssh_endpoints["bastion"] = bastion_endpoint
         ssh_endpoints["docker"] = docker_endpoint
+        ssh_endpoints["docker-via-bastion"] = SshEndpoint(
+            slug="docker-via-bastion",
+            host="backup-server",
+            port=22,
+            user="testuser",
+            key=str(private_key),
+            proxy_jump="bastion",
+            connection_options=SshConnectionOptions(
+                strict_host_key_checking=False,
+                known_hosts_file="/dev/null",
+            ),
+        )
         volumes["remote-backup"] = RemoteVolume(
             slug="remote-backup",
             ssh_endpoint="docker",
@@ -317,6 +363,11 @@ def seed(
             slug="remote-btrfs",
             ssh_endpoint="docker",
             path="/mnt/btrfs",
+        )
+        volumes["proxied-remote"] = RemoteVolume(
+            slug="proxied-remote",
+            ssh_endpoint="docker-via-bastion",
+            path="/data",
         )
         syncs["photos-to-remote"] = SyncConfig(
             slug="photos-to-remote",
@@ -333,6 +384,13 @@ def seed(
                 btrfs_snapshots=BtrfsSnapshotConfig(
                     enabled=True, max_snapshots=5
                 ),
+            ),
+        )
+        syncs["photos-via-bastion"] = SyncConfig(
+            slug="photos-via-bastion",
+            source=SyncEndpoint(volume="src-data", subdir="photos"),
+            destination=DestinationSyncEndpoint(
+                volume="proxied-remote",
             ),
         )
 
@@ -374,6 +432,13 @@ def seed(
     ]
     if docker:
         assert docker_endpoint is not None
+        assert bastion_endpoint is not None
+        rows.append(
+            (
+                "Bastion",
+                f"{BASTION_CONTAINER_NAME}" f" (port {bastion_endpoint.port})",
+            )
+        )
         rows.append(
             (
                 "Docker",
@@ -430,8 +495,9 @@ def seed(
     if docker:
         lines += [
             "",
-            "# Teardown Docker container",
-            f"docker rm -f {CONTAINER_NAME}",
+            "# Teardown Docker containers and network",
+            f"docker rm -f {CONTAINER_NAME}" f" {BASTION_CONTAINER_NAME}",
+            "docker network rm nbkp-seed-net",
         ]
     commands = "\n".join(lines)
     _console.print(

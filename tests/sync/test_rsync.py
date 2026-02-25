@@ -571,6 +571,14 @@ class TestBuildRsyncCommandProxyJump:
         resolved = resolve_all_endpoints(config)
 
         cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
+        import shlex
+
+        proxy_cmd = (
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+            " -p 2222"
+            " -W %h:%p admin@bastion.example.com"
+        )
+        quoted = shlex.quote(f"ProxyCommand={proxy_cmd}")
         assert cmd == [
             "rsync",
             "-a",
@@ -580,7 +588,7 @@ class TestBuildRsyncCommandProxyJump:
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
             " -p 5022 -i ~/.ssh/key"
-            " -J admin@bastion.example.com:2222",
+            f" -o {quoted}",
             "/mnt/src/",
             "backup@nas.local:/backup/latest/",
         ]
@@ -619,6 +627,13 @@ class TestBuildRsyncCommandProxyJump:
         resolved = resolve_all_endpoints(config)
 
         cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
+        import shlex
+
+        proxy_cmd = (
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+            " -W %h:%p admin@bastion.example.com"
+        )
+        quoted = shlex.quote(f"ProxyCommand={proxy_cmd}")
         assert cmd == [
             "rsync",
             "-a",
@@ -626,8 +641,7 @@ class TestBuildRsyncCommandProxyJump:
             "--delete-excluded",
             "--safe-links",
             "-e",
-            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
-            " -J admin@bastion.example.com",
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes" f" -o {quoted}",
             "backup@server.internal:/data/",
             "/mnt/dst/latest/",
         ]
@@ -680,14 +694,17 @@ class TestBuildRsyncCommandProxyJump:
 
         # Should SSH into destination host with proxy
         assert cmd[0] == "ssh"
-        assert "-J" in cmd
-        proxy_idx = cmd.index("-J")
-        assert cmd[proxy_idx + 1] == ("admin@bastion.example.com")
+        proxy_cmd = (
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+            " -W %h:%p admin@bastion.example.com"
+        )
+        assert f"ProxyCommand={proxy_cmd}" in cmd
         assert "dstuser@dst.internal" in cmd
 
         # Inner rsync should also have proxy for source
         inner = cmd[-1]
-        assert "-J admin@bastion.example.com" in inner
+        assert "ProxyCommand=" in inner
+        assert "admin@bastion.example.com" in inner
 
 
 class TestBuildRsyncCommandMultiHopProxy:
@@ -733,6 +750,19 @@ class TestBuildRsyncCommandMultiHopProxy:
         resolved = resolve_all_endpoints(config)
 
         cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
+        import shlex
+
+        inner = (
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+            " -W %%h:%%p admin@bastion1.example.com"
+        )
+        proxy_cmd = (
+            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+            f" -o ProxyCommand={inner}"
+            " -p 2222"
+            " -W %h:%p bastion2.example.com"
+        )
+        quoted = shlex.quote(f"ProxyCommand={proxy_cmd}")
         assert cmd == [
             "rsync",
             "-a",
@@ -742,8 +772,7 @@ class TestBuildRsyncCommandMultiHopProxy:
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
             " -p 5022 -i ~/.ssh/key"
-            " -J admin@bastion1.example.com"
-            ",bastion2.example.com:2222",
+            f" -o {quoted}",
             "/mnt/src/",
             "backup@nas.local:/backup/latest/",
         ]
@@ -804,19 +833,16 @@ class TestBuildRsyncCommandMultiHopProxy:
 
         # Outer SSH into destination host with proxy chain
         assert cmd[0] == "ssh"
-        assert "-J" in cmd
-        proxy_idx = cmd.index("-J")
-        assert cmd[proxy_idx + 1] == (
-            "admin@bastion1.example.com" ",bastion2.example.com:2222"
-        )
+        assert any("ProxyCommand=" in arg for arg in cmd)
+        assert "admin@bastion1.example.com" in str(cmd)
+        assert "bastion2.example.com" in str(cmd)
         assert "dstuser@dst.internal" in cmd
 
         # Inner rsync should also have proxy chain for source
         inner = cmd[-1]
-        assert (
-            "-J admin@bastion1.example.com"
-            ",bastion2.example.com:2222" in inner
-        )
+        assert "ProxyCommand=" in inner
+        assert "admin@bastion1.example.com" in inner
+        assert "bastion2.example.com" in inner
 
 
 class TestBuildRsyncCommandSpacesInPaths:

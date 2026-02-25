@@ -8,19 +8,21 @@ if [ -f /tmp/authorized_keys ]; then
     chown testuser:testuser /home/testuser/.ssh/authorized_keys
 fi
 
-# Create btrfs filesystem on a file-backed image
-truncate -s 4G /var/btrfs.img
-mkfs.btrfs -f /var/btrfs.img
-mkdir -p /mnt/btrfs
-mount -o user_subvol_rm_allowed /var/btrfs.img /mnt/btrfs
+if [ -z "$NBKP_BASTION_ONLY" ]; then
+    # Create btrfs filesystem on a file-backed image
+    truncate -s 4G /var/btrfs.img
+    mkfs.btrfs -f /var/btrfs.img
+    mkdir -p /mnt/btrfs
+    mount -o user_subvol_rm_allowed /var/btrfs.img /mnt/btrfs
 
-# Create directory structures
-mkdir -p /data/src /data/latest
-mkdir -p /mnt/btrfs/src
+    # Create directory structures
+    mkdir -p /data/src /data/latest
+    mkdir -p /mnt/btrfs/src
 
-# Set ownership
-chown -R testuser:testuser /data
-chown -R testuser:testuser /mnt/btrfs
+    # Set ownership
+    chown -R testuser:testuser /data
+    chown -R testuser:testuser /mnt/btrfs
+fi
 
 # Generate SSH host keys if not present
 ssh-keygen -A
