@@ -10,7 +10,7 @@ from pathlib import Path
 import docker as dockerlib
 import typer
 
-from ..config import SshEndpoint
+from ..config import SshConnectionOptions, SshEndpoint
 from ..remote.fabricssh import run_remote_command
 
 DOCKER_DIR = Path(__file__).resolve().parent / "dockerbuild"
@@ -18,6 +18,45 @@ CONTAINER_NAME = "nbkp-seed"
 BASTION_CONTAINER_NAME = "nbkp-seed-bastion"
 _IMAGE_TAG = "nbkp-seed-server:latest"
 _NETWORK_NAME = "nbkp-seed-net"
+
+# ── Standard remote paths inside the test container ──────────
+
+REMOTE_BACKUP_PATH = "/srv/backups"
+REMOTE_BTRFS_PATH = "/srv/btrfs-backups"
+SSH_AUTHORIZED_KEYS_PATH = "/mnt/ssh-authorized-keys"
+
+
+# ── SSH endpoint factory ─────────────────────────────────────
+
+
+def create_test_ssh_endpoint(
+    slug: str,
+    host: str,
+    port: int,
+    private_key: Path,
+    *,
+    proxy_jump: str | None = None,
+) -> SshEndpoint:
+    """Create an SshEndpoint with standard test connection options.
+
+    All test containers use ``testuser``, disabled host-key checking,
+    and ``/dev/null`` as the known-hosts file.
+    """
+    return SshEndpoint(
+        slug=slug,
+        host=host,
+        port=port,
+        user="testuser",
+        key=str(private_key),
+        proxy_jump=proxy_jump,
+        connection_options=SshConnectionOptions(
+            strict_host_key_checking=False,
+            known_hosts_file="/dev/null",
+        ),
+    )
+
+
+# ── Docker lifecycle ─────────────────────────────────────────
 
 
 def check_docker() -> None:
@@ -137,7 +176,7 @@ def start_docker_container(
         ports={"22/tcp": None},
         volumes={
             str(pub_key): {
-                "bind": "/mnt/ssh-authorized-keys",
+                "bind": SSH_AUTHORIZED_KEYS_PATH,
                 "mode": "ro",
             }
         },
@@ -176,7 +215,7 @@ def start_bastion_container(
         environment={"NBKP_BASTION_ONLY": "1"},
         volumes={
             str(pub_key): {
-                "bind": "/mnt/ssh-authorized-keys",
+                "bind": SSH_AUTHORIZED_KEYS_PATH,
                 "mode": "ro",
             }
         },
@@ -211,6 +250,9 @@ def wait_for_ssh(
     raise TimeoutError(f"SSH not ready after {timeout}s")
 
 
+# ── Remote command helpers ───────────────────────────────────
+
+
 def ssh_exec(
     server: SshEndpoint,
     command: str,
@@ -229,13 +271,39 @@ def ssh_exec(
     return result
 
 
-def setup_remote(server: SshEndpoint) -> None:
-    """Create markers and btrfs subvolumes on container."""
+def create_markers(
+    server: SshEndpoint,
+    path: str,
+    markers: list[str],
+) -> None:
+    """Create marker files on the container via SSH."""
+    for marker in markers:
+        result = ssh_exec(server, f"touch {path}/{marker}", check=False)
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"Failed to create marker {marker}:" f" {result.stderr}"
+            )
 
-    def run(cmd: str) -> None:
-        ssh_exec(server, cmd)
 
-    run("touch /srv/backups/.nbkp-vol /srv/backups/.nbkp-dst")
-    run("btrfs subvolume create /srv/btrfs-backups/latest")
-    run("mkdir -p /srv/btrfs-backups/snapshots")
-    run("touch /srv/btrfs-backups/.nbkp-vol" " /srv/btrfs-backups/.nbkp-dst")
+def prepare_btrfs_snapshot_based_backup_dst(
+    server: SshEndpoint,
+    path: str,
+) -> None:
+    """Create btrfs destination structure.
+
+    Creates the ``latest`` btrfs subvolume and the ``snapshots``
+    directory under *path*.
+    """
+    ssh_exec(server, f"btrfs subvolume create {path}/latest")
+    ssh_exec(server, f"mkdir -p {path}/snapshots")
+
+
+def prepare_hardlinks_snapshot_based_backup_dst(
+    server: SshEndpoint,
+    path: str,
+) -> None:
+    """Create hard-link destination structure.
+
+    Creates the ``snapshots`` directory under *path*.
+    """
+    ssh_exec(server, f"mkdir -p {path}/snapshots")

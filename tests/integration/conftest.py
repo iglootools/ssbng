@@ -11,18 +11,18 @@ from typing import Any, Generator
 import docker as dockerlib
 import pytest
 
-from nbkp.config import RemoteVolume, SshEndpoint, SshConnectionOptions
-from nbkp.testkit.docker import (
+from nbkp.config import RemoteVolume, SshEndpoint
+from nbkp.testkit.docker import (  # noqa: F401
+    DOCKER_DIR,
+    REMOTE_BACKUP_PATH,
+    REMOTE_BTRFS_PATH,
+    create_markers,
+    create_test_ssh_endpoint,
     generate_ssh_keypair,
+    prepare_btrfs_snapshot_based_backup_dst,
+    prepare_hardlinks_snapshot_based_backup_dst,
     ssh_exec,
     wait_for_ssh,
-)
-
-DOCKER_DIR = (
-    Path(__file__).resolve().parent.parent.parent
-    / "nbkp"
-    / "testkit"
-    / "dockerbuild"
 )
 
 
@@ -115,16 +115,11 @@ def docker_container(
     wrapped = container.get_wrapped_container()
     _docker_network.connect(wrapped, aliases=["backup-server"])
 
-    server = SshEndpoint(
-        slug="test-server",
-        host=container.get_container_host_ip(),
-        port=int(container.get_exposed_port(22)),
-        user="testuser",
-        key=str(private_key),
-        connection_options=SshConnectionOptions(
-            strict_host_key_checking=False,
-            known_hosts_file="/dev/null",
-        ),
+    server = create_test_ssh_endpoint(
+        "test-server",
+        container.get_container_host_ip(),
+        int(container.get_exposed_port(22)),
+        private_key,
     )
 
     wait_for_ssh(server, timeout=30)
@@ -168,16 +163,11 @@ def bastion_container(
     wrapped = container.get_wrapped_container()
     _docker_network.connect(wrapped)
 
-    server = SshEndpoint(
-        slug="bastion",
-        host=container.get_container_host_ip(),
-        port=int(container.get_exposed_port(22)),
-        user="testuser",
-        key=str(private_key),
-        connection_options=SshConnectionOptions(
-            strict_host_key_checking=False,
-            known_hosts_file="/dev/null",
-        ),
+    server = create_test_ssh_endpoint(
+        "bastion",
+        container.get_container_host_ip(),
+        int(container.get_exposed_port(22)),
+        private_key,
     )
 
     wait_for_ssh(server, timeout=30)
@@ -194,17 +184,12 @@ def proxied_ssh_endpoint(
 ) -> SshEndpoint:
     """SshEndpoint that routes through the bastion."""
     private_key, _ = ssh_key_pair
-    return SshEndpoint(
-        slug="proxied-server",
-        host="backup-server",
-        port=22,
-        user="testuser",
-        key=str(private_key),
+    return create_test_ssh_endpoint(
+        "proxied-server",
+        "backup-server",
+        22,
+        private_key,
         proxy_jump="bastion",
-        connection_options=SshConnectionOptions(
-            strict_host_key_checking=False,
-            known_hosts_file="/dev/null",
-        ),
     )
 
 
@@ -222,7 +207,7 @@ def remote_volume() -> RemoteVolume:
     return RemoteVolume(
         slug="test-remote",
         ssh_endpoint="test-server",
-        path="/srv/backups",
+        path=REMOTE_BACKUP_PATH,
     )
 
 
@@ -232,7 +217,7 @@ def remote_btrfs_volume() -> RemoteVolume:
     return RemoteVolume(
         slug="test-btrfs",
         ssh_endpoint="test-server",
-        path="/srv/btrfs-backups",
+        path=REMOTE_BTRFS_PATH,
     )
 
 
@@ -242,48 +227,8 @@ def remote_hardlink_volume() -> RemoteVolume:
     return RemoteVolume(
         slug="test-hl",
         ssh_endpoint="test-server",
-        path="/srv/backups",
+        path=REMOTE_BACKUP_PATH,
     )
-
-
-# ── Helpers ─────────────────────────────────────────────────────
-
-
-def create_markers(
-    server: SshEndpoint,
-    path: str,
-    markers: list[str],
-) -> None:
-    """Create marker files on the container via SSH."""
-    for marker in markers:
-        result = ssh_exec(server, f"touch {path}/{marker}", check=False)
-        assert (
-            result.returncode == 0
-        ), f"Failed to create marker {marker}: {result.stderr}"
-
-
-def prepare_btrfs_snapshot_based_backup_dst(
-    server: SshEndpoint,
-    path: str,
-) -> None:
-    """Create btrfs destination structure.
-
-    Creates the ``latest`` btrfs subvolume and the ``snapshots``
-    directory under *path*.
-    """
-    ssh_exec(server, f"btrfs subvolume create {path}/latest")
-    ssh_exec(server, f"mkdir -p {path}/snapshots")
-
-
-def prepare_hardlinks_snapshot_based_backup_dst(
-    server: SshEndpoint,
-    path: str,
-) -> None:
-    """Create hard-link destination structure.
-
-    Creates the ``snapshots`` directory under *path*.
-    """
-    ssh_exec(server, f"mkdir -p {path}/snapshots")
 
 
 # ── Cleanup ─────────────────────────────────────────────────────
@@ -305,15 +250,16 @@ def _cleanup_remote(
     def run(cmd: str) -> None:
         ssh_exec(server, cmd, check=False)
 
-    # Clean /srv/backups (glob * skips dotfiles, so also remove markers)
-    run("rm -rf /srv/backups/*")
-    run("find /srv/backups -name '.nbkp-*' -delete")
+    # Clean /srv/backups (glob * skips dotfiles, so also remove
+    # markers)
+    run(f"rm -rf {REMOTE_BACKUP_PATH}/*")
+    run(f"find {REMOTE_BACKUP_PATH}" " -name '.nbkp-*' -delete")
 
     # Clean btrfs paths — delete snapshot subvolumes first,
     # then latest
     snapshots_result = ssh_exec(
         server,
-        "ls /srv/btrfs-backups/snapshots 2>/dev/null || true",
+        f"ls {REMOTE_BTRFS_PATH}/snapshots 2>/dev/null || true",
         check=False,
     )
     if snapshots_result.stdout.strip():
@@ -322,25 +268,25 @@ def _cleanup_remote(
             if snap:
                 run(
                     "btrfs property set"
-                    f" /srv/btrfs-backups/snapshots/{snap}"
+                    f" {REMOTE_BTRFS_PATH}/snapshots/{snap}"
                     " ro false 2>/dev/null || true"
                 )
                 run(
                     "btrfs subvolume delete"
-                    f" /srv/btrfs-backups/snapshots/{snap}"
+                    f" {REMOTE_BTRFS_PATH}/snapshots/{snap}"
                     " 2>/dev/null || true"
                 )
 
     # Delete latest subvolume if it exists
     run(
         "btrfs property set"
-        " /srv/btrfs-backups/latest ro false"
+        f" {REMOTE_BTRFS_PATH}/latest ro false"
         " 2>/dev/null || true"
     )
     run(
         "btrfs subvolume delete"
-        " /srv/btrfs-backups/latest"
+        f" {REMOTE_BTRFS_PATH}/latest"
         " 2>/dev/null || true"
     )
-    run("rm -rf /srv/btrfs-backups/snapshots 2>/dev/null || true")
-    run("find /srv/btrfs-backups -name '.nbkp-*' -delete")
+    run(f"rm -rf {REMOTE_BTRFS_PATH}/snapshots" " 2>/dev/null || true")
+    run(f"find {REMOTE_BTRFS_PATH}" " -name '.nbkp-*' -delete")

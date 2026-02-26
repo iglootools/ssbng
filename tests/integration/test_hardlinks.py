@@ -28,13 +28,12 @@ from nbkp.sync.hardlinks import (
     update_latest_symlink,
 )
 from nbkp.sync.rsync import run_rsync
+from nbkp.testkit.docker import REMOTE_BACKUP_PATH
 from nbkp.testkit.gen.fs import create_seed_markers
 
 from .conftest import ssh_exec
 
 pytestmark = pytest.mark.integration
-
-_HL_PATH = "/srv/backups"
 
 
 def _make_hl_config(
@@ -182,7 +181,7 @@ class TestHardLinkSnapshots:
         # Verify the file is accessible via the symlink
         check = ssh_exec(
             ssh_endpoint,
-            f"cat {_HL_PATH}/latest/data.txt",
+            f"cat {REMOTE_BACKUP_PATH}/latest/data.txt",
         )
         assert check.returncode == 0
         assert check.stdout.strip() == "symlink test"
@@ -224,7 +223,7 @@ class TestHardLinkSnapshots:
         # Verify second snapshot has the file
         check = ssh_exec(
             ssh_endpoint,
-            f"cat {_HL_PATH}/snapshots/{snap2}/file.txt",
+            f"cat {REMOTE_BACKUP_PATH}/snapshots/{snap2}/file.txt",
         )
         assert check.returncode == 0
         assert check.stdout.strip() == "v1"
@@ -274,18 +273,20 @@ class TestHardLinkSnapshots:
         # Verify the unchanged file shares inode (hard-linked)
         inode1 = ssh_exec(
             ssh_endpoint,
-            f"stat -c %i" f" {_HL_PATH}/snapshots/{snap1}/unchanged.txt",
+            f"stat -c %i"
+            f" {REMOTE_BACKUP_PATH}/snapshots/{snap1}/unchanged.txt",
         )
         inode2 = ssh_exec(
             ssh_endpoint,
-            f"stat -c %i" f" {_HL_PATH}/snapshots/{snap2}/unchanged.txt",
+            f"stat -c %i"
+            f" {REMOTE_BACKUP_PATH}/snapshots/{snap2}/unchanged.txt",
         )
         assert inode1.stdout.strip() == inode2.stdout.strip()
 
         # Verify the changed file has different content
         check = ssh_exec(
             ssh_endpoint,
-            f"cat {_HL_PATH}/snapshots/{snap2}/changed.txt",
+            f"cat {REMOTE_BACKUP_PATH}/snapshots/{snap2}/changed.txt",
         )
         assert check.stdout.strip() == "v2 is different"
 
@@ -344,13 +345,19 @@ class TestHardLinkOrphanCleanup:
         # latest but don't update the symlink
         ssh_exec(
             ssh_endpoint,
-            ("mkdir -p" f" {_HL_PATH}/snapshots/9999-99-99T00:00:00.000Z"),
+            (
+                "mkdir -p"
+                f" {REMOTE_BACKUP_PATH}/snapshots/9999-99-99T00:00:00.000Z"
+            ),
         )
 
         # Verify orphan exists
         check = ssh_exec(
             ssh_endpoint,
-            ("test -d" f" {_HL_PATH}/snapshots/9999-99-99T00:00:00.000Z"),
+            (
+                "test -d"
+                f" {REMOTE_BACKUP_PATH}/snapshots/9999-99-99T00:00:00.000Z"
+            ),
         )
         assert check.returncode == 0
 
@@ -364,7 +371,10 @@ class TestHardLinkOrphanCleanup:
         # Verify orphan is gone
         check = ssh_exec(
             ssh_endpoint,
-            ("test -d" f" {_HL_PATH}/snapshots/9999-99-99T00:00:00.000Z"),
+            (
+                "test -d"
+                f" {REMOTE_BACKUP_PATH}/snapshots/9999-99-99T00:00:00.000Z"
+            ),
             check=False,
         )
         assert check.returncode != 0
@@ -372,7 +382,7 @@ class TestHardLinkOrphanCleanup:
         # Verify the real snapshot is still there
         check = ssh_exec(
             ssh_endpoint,
-            f"test -d {_HL_PATH}/snapshots/{snap1}",
+            f"test -d {REMOTE_BACKUP_PATH}/snapshots/{snap1}",
         )
         assert check.returncode == 0
 

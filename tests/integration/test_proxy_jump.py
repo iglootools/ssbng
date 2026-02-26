@@ -17,6 +17,7 @@ from nbkp.config import (
     resolve_all_endpoints,
 )
 from nbkp.sync.rsync import run_rsync
+from nbkp.testkit.docker import REMOTE_BACKUP_PATH
 from nbkp.testkit.gen.fs import create_seed_markers
 
 from .conftest import ssh_exec
@@ -41,7 +42,7 @@ class TestProxyJump:
         dst_vol = RemoteVolume(
             slug="dst",
             ssh_endpoint="proxied-server",
-            path="/srv/backups",
+            path=REMOTE_BACKUP_PATH,
         )
         sync = SyncConfig(
             slug="test-sync",
@@ -71,6 +72,9 @@ class TestProxyJump:
         assert result.returncode == 0
 
         # Verify file arrived via direct connection
-        check = ssh_exec(ssh_endpoint, "cat /srv/backups/latest/hello.txt")
+        check = ssh_exec(
+            ssh_endpoint,
+            f"cat {REMOTE_BACKUP_PATH}/latest/hello.txt",
+        )
         assert check.returncode == 0
         assert check.stdout.strip() == "via bastion"

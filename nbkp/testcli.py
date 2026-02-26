@@ -23,7 +23,6 @@ from .config import (
     LocalVolume,
     RemoteVolume,
     SshEndpoint,
-    SshConnectionOptions,
     SyncConfig,
     SyncEndpoint,
 )
@@ -31,9 +30,12 @@ from .testkit.docker import (
     BASTION_CONTAINER_NAME,
     CONTAINER_NAME,
     DOCKER_DIR,
+    REMOTE_BACKUP_PATH,
+    REMOTE_BTRFS_PATH,
     build_docker_image,
     check_docker,
     create_docker_network,
+    create_test_ssh_endpoint,
     generate_ssh_keypair,
     ssh_exec,
     start_bastion_container,
@@ -280,8 +282,8 @@ def seed(
     dst = tmp / "dst-backup"
 
     # Docker containers
-    docker_endpoint: SshEndpoint | None = None
-    bastion_endpoint: SshEndpoint | None = None
+    docker_endpoint = None
+    bastion_endpoint = None
     if docker:
         private_key, pub_key = generate_ssh_keypair(tmp)
 
@@ -293,16 +295,8 @@ def seed(
 
         with _console.status("Starting bastion container..."):
             bastion_port = start_bastion_container(pub_key, network_name)
-        bastion_endpoint = SshEndpoint(
-            slug="bastion",
-            host="127.0.0.1",
-            port=bastion_port,
-            user="testuser",
-            key=str(private_key),
-            connection_options=SshConnectionOptions(
-                strict_host_key_checking=False,
-                known_hosts_file="/dev/null",
-            ),
+        bastion_endpoint = create_test_ssh_endpoint(
+            "bastion", "127.0.0.1", bastion_port, private_key
         )
         with _console.status("Waiting for bastion SSH..."):
             wait_for_ssh(bastion_endpoint)
@@ -313,16 +307,8 @@ def seed(
                 network_name=network_name,
                 network_alias="backup-server",
             )
-        docker_endpoint = SshEndpoint(
-            slug="docker",
-            host="127.0.0.1",
-            port=docker_port,
-            user="testuser",
-            key=str(private_key),
-            connection_options=SshConnectionOptions(
-                strict_host_key_checking=False,
-                known_hosts_file="/dev/null",
-            ),
+        docker_endpoint = create_test_ssh_endpoint(
+            "docker", "127.0.0.1", docker_port, private_key
         )
         with _console.status("Waiting for SSH..."):
             wait_for_ssh(docker_endpoint)
@@ -351,42 +337,37 @@ def seed(
         assert bastion_endpoint is not None
         ssh_endpoints["bastion"] = bastion_endpoint
         ssh_endpoints["docker"] = docker_endpoint
-        ssh_endpoints["docker-via-bastion"] = SshEndpoint(
-            slug="docker-via-bastion",
-            host="backup-server",
-            port=22,
-            user="testuser",
-            key=str(private_key),
+        ssh_endpoints["docker-via-bastion"] = create_test_ssh_endpoint(
+            "docker-via-bastion",
+            "backup-server",
+            22,
+            private_key,
             proxy_jump="bastion",
-            connection_options=SshConnectionOptions(
-                strict_host_key_checking=False,
-                known_hosts_file="/dev/null",
-            ),
         )
         volumes["remote-backup"] = RemoteVolume(
             slug="remote-backup",
             ssh_endpoint="docker",
-            path="/srv/backups",
+            path=REMOTE_BACKUP_PATH,
         )
         volumes["remote-btrfs"] = RemoteVolume(
             slug="remote-btrfs",
             ssh_endpoint="docker",
-            path="/srv/btrfs-backups",
+            path=REMOTE_BTRFS_PATH,
         )
         volumes["proxied-remote"] = RemoteVolume(
             slug="proxied-remote",
             ssh_endpoint="docker-via-bastion",
-            path="/srv/backups",
+            path=REMOTE_BACKUP_PATH,
         )
         volumes["remote-src"] = RemoteVolume(
             slug="remote-src",
             ssh_endpoint="docker",
-            path="/srv/backups/src",
+            path=f"{REMOTE_BACKUP_PATH}/src",
         )
         volumes["remote-dst"] = RemoteVolume(
             slug="remote-dst",
             ssh_endpoint="docker",
-            path="/srv/backups/dst",
+            path=f"{REMOTE_BACKUP_PATH}/dst",
         )
         syncs["photos-to-remote"] = SyncConfig(
             slug="photos-to-remote",

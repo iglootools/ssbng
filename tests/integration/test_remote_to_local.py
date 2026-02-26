@@ -14,6 +14,7 @@ from nbkp.config import (
     resolve_all_endpoints,
 )
 from nbkp.sync.rsync import run_rsync
+from nbkp.testkit.docker import REMOTE_BACKUP_PATH
 from nbkp.testkit.gen.fs import create_seed_markers
 
 from .conftest import ssh_exec
@@ -29,12 +30,12 @@ class TestRemoteToRemoteSameServer:
         src_vol = RemoteVolume(
             slug="src-remote",
             ssh_endpoint="test-server",
-            path="/srv/backups/src",
+            path=f"{REMOTE_BACKUP_PATH}/src",
         )
         dst_vol = RemoteVolume(
             slug="dst-remote",
             ssh_endpoint="test-server",
-            path="/srv/backups/dst",
+            path=f"{REMOTE_BACKUP_PATH}/dst",
         )
         sync = SyncConfig(
             slug="test-sync",
@@ -55,7 +56,8 @@ class TestRemoteToRemoteSameServer:
         # Create test file on remote source
         ssh_exec(
             ssh_endpoint,
-            ("echo 'hello from remote'" " > /srv/backups/src/remote-file.txt"),
+            "echo 'hello from remote'"
+            f" > {REMOTE_BACKUP_PATH}/src/remote-file.txt",
         )
 
         resolved = resolve_all_endpoints(config)
@@ -68,6 +70,6 @@ class TestRemoteToRemoteSameServer:
 
         out = ssh_exec(
             ssh_endpoint,
-            "cat /srv/backups/dst/latest/remote-file.txt",
+            f"cat {REMOTE_BACKUP_PATH}/dst/latest/remote-file.txt",
         )
         assert out.stdout.strip() == "hello from remote"

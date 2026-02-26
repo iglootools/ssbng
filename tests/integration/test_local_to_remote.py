@@ -17,6 +17,7 @@ from nbkp.config import (
     resolve_all_endpoints,
 )
 from nbkp.sync.rsync import run_rsync
+from nbkp.testkit.docker import REMOTE_BACKUP_PATH
 from nbkp.testkit.gen.fs import create_seed_markers
 
 from .conftest import ssh_exec
@@ -64,7 +65,7 @@ class TestLocalToRemote:
         # Verify file arrived on container
         check = ssh_exec(
             ssh_endpoint,
-            "cat /srv/backups/latest/hello.txt",
+            f"cat {REMOTE_BACKUP_PATH}/latest/hello.txt",
         )
         assert check.returncode == 0
         assert check.stdout.strip() == "hello from local"
@@ -109,7 +110,7 @@ class TestLocalToRemote:
 
         check = ssh_exec(
             ssh_endpoint,
-            "cat /srv/backups/photos-backup/latest/img.jpg",
+            f"cat {REMOTE_BACKUP_PATH}/photos-backup/latest/img.jpg",
         )
         assert check.returncode == 0
         assert check.stdout.strip() == "image-data"

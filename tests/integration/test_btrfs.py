@@ -26,6 +26,7 @@ from nbkp.config import (
     resolve_all_endpoints,
 )
 from nbkp.sync.rsync import run_rsync
+from nbkp.testkit.docker import REMOTE_BTRFS_PATH
 from nbkp.testkit.gen.fs import create_seed_markers
 
 from .conftest import ssh_exec
@@ -174,7 +175,7 @@ class TestBtrfsSnapshots:
         # Count existing snapshots before dry run
         before = ssh_exec(
             ssh_endpoint,
-            "ls /srv/btrfs-backups/snapshots 2>/dev/null || true",
+            f"ls {REMOTE_BTRFS_PATH}/snapshots 2>/dev/null || true",
         )
         count_before = len(
             [s for s in before.stdout.strip().split("\n") if s.strip()]
@@ -200,7 +201,7 @@ class TestBtrfsSnapshots:
         # Verify no new snapshot was created
         after = ssh_exec(
             ssh_endpoint,
-            "ls /srv/btrfs-backups/snapshots 2>/dev/null || true",
+            f"ls {REMOTE_BTRFS_PATH}/snapshots 2>/dev/null || true",
         )
         count_after = len(
             [s for s in after.stdout.strip().split("\n") if s.strip()]

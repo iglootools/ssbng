@@ -24,6 +24,7 @@ from nbkp.config import (
     SyncEndpoint,
     resolve_all_endpoints,
 )
+from nbkp.testkit.docker import REMOTE_BACKUP_PATH, REMOTE_BTRFS_PATH
 from nbkp.testkit.gen.fs import create_seed_markers
 
 from .conftest import create_markers, ssh_exec
@@ -63,7 +64,7 @@ class TestRemoteVolumeCheck:
         ssh_endpoint: SshEndpoint,
         remote_volume: RemoteVolume,
     ) -> None:
-        create_markers(ssh_endpoint, "/srv/backups", [".nbkp-vol"])
+        create_markers(ssh_endpoint, REMOTE_BACKUP_PATH, [".nbkp-vol"])
         config = Config(
             ssh_endpoints={"test-server": ssh_endpoint},
             volumes={"test-remote": remote_volume},
@@ -164,7 +165,7 @@ class TestBtrfsSubvolumeCheck:
     ) -> None:
         ssh_exec(
             ssh_endpoint,
-            "btrfs subvolume create" " /srv/btrfs-backups/test-subvol",
+            f"btrfs subvolume create {REMOTE_BTRFS_PATH}/test-subvol",
         )
         config = Config(
             ssh_endpoints={"test-server": ssh_endpoint},
@@ -183,7 +184,7 @@ class TestBtrfsSubvolumeCheck:
         # Cleanup
         ssh_exec(
             ssh_endpoint,
-            "btrfs subvolume delete" " /srv/btrfs-backups/test-subvol",
+            f"btrfs subvolume delete {REMOTE_BTRFS_PATH}/test-subvol",
         )
 
     def test_regular_dir_not_subvolume(
@@ -193,7 +194,7 @@ class TestBtrfsSubvolumeCheck:
     ) -> None:
         ssh_exec(
             ssh_endpoint,
-            "mkdir -p /srv/btrfs-backups/regular-dir",
+            f"mkdir -p {REMOTE_BTRFS_PATH}/regular-dir",
         )
         config = Config(
             ssh_endpoints={"test-server": ssh_endpoint},
@@ -212,7 +213,7 @@ class TestBtrfsSubvolumeCheck:
         # Cleanup
         ssh_exec(
             ssh_endpoint,
-            "rm -rf /srv/btrfs-backups/regular-dir",
+            f"rm -rf {REMOTE_BTRFS_PATH}/regular-dir",
         )
 
 
@@ -226,16 +227,16 @@ class TestSyncCheckBtrfs:
         # Create a regular directory (not a subvolume)
         ssh_exec(
             ssh_endpoint,
-            "mkdir -p /srv/btrfs-backups/not-a-subvol",
+            f"mkdir -p {REMOTE_BTRFS_PATH}/not-a-subvol",
         )
         create_markers(
             ssh_endpoint,
-            "/srv/btrfs-backups",
+            REMOTE_BTRFS_PATH,
             [".nbkp-vol"],
         )
         create_markers(
             ssh_endpoint,
-            "/srv/btrfs-backups/not-a-subvol",
+            f"{REMOTE_BTRFS_PATH}/not-a-subvol",
             [".nbkp-dst"],
         )
 
@@ -283,5 +284,5 @@ class TestSyncCheckBtrfs:
         # Cleanup
         ssh_exec(
             ssh_endpoint,
-            "rm -rf /srv/btrfs-backups/not-a-subvol",
+            f"rm -rf {REMOTE_BTRFS_PATH}/not-a-subvol",
         )
