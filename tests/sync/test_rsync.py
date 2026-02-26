@@ -10,6 +10,7 @@ from nbkp.config import (
     DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
+    RsyncOptions,
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
@@ -40,6 +41,7 @@ class TestBuildRsyncCommandLocalToLocal:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--checksum",
             "/mnt/src/photos/",
             "/mnt/dst/backup/latest/",
         ]
@@ -116,6 +118,7 @@ class TestBuildRsyncCommandLocalToRemote:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
             " -p 5022 -i ~/.ssh/key",
@@ -157,6 +160,7 @@ class TestBuildRsyncCommandRemoteToLocal:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes",
             "admin@server.local:/data/",
@@ -279,6 +283,7 @@ class TestBuildRsyncCommandFilters:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--checksum",
             "--filter=+ *.jpg",
             "--filter=- *.tmp",
             "/mnt/src/",
@@ -307,6 +312,7 @@ class TestBuildRsyncCommandFilters:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--checksum",
             "--filter=merge /etc/nbkp/filters.rules",
             "/mnt/src/",
             "/mnt/dst/latest/",
@@ -335,6 +341,7 @@ class TestBuildRsyncCommandFilters:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--checksum",
             "--filter=+ *.jpg",
             "--filter=merge /etc/nbkp/filters.rules",
             "/mnt/src/",
@@ -395,14 +402,31 @@ class TestBuildRsyncCommandFilters:
 
 
 class TestBuildRsyncCommandOptions:
-    def test_override_rsync_options(self) -> None:
+    def _simple_config(self) -> tuple[SyncConfig, Config]:
         src = LocalVolume(slug="src", path="/mnt/src")
         dst = LocalVolume(slug="dst", path="/mnt/dst")
         sync = SyncConfig(
             slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
-            rsync_options=["-a"],
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+        return sync, config
+
+    def test_override_default_options(self) -> None:
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+            rsync_options=RsyncOptions(
+                default_options_override=["-a"],
+                checksum=False,
+            ),
         )
         config = Config(
             volumes={"src": src, "dst": dst},
@@ -417,14 +441,17 @@ class TestBuildRsyncCommandOptions:
             "/mnt/dst/latest/",
         ]
 
-    def test_extra_rsync_options(self) -> None:
+    def test_extra_options(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/src")
         dst = LocalVolume(slug="dst", path="/mnt/dst")
         sync = SyncConfig(
             slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
-            extra_rsync_options=["--compress"],
+            rsync_options=RsyncOptions(
+                extra_options=["--bwlimit=1000"],
+                checksum=False,
+            ),
         )
         config = Config(
             volumes={"src": src, "dst": dst},
@@ -439,7 +466,7 @@ class TestBuildRsyncCommandOptions:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
-            "--compress",
+            "--bwlimit=1000",
             "/mnt/src/",
             "/mnt/dst/latest/",
         ]
@@ -451,8 +478,11 @@ class TestBuildRsyncCommandOptions:
             slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
-            rsync_options=["-a", "--delete"],
-            extra_rsync_options=["--compress"],
+            rsync_options=RsyncOptions(
+                default_options_override=["-a", "--delete"],
+                extra_options=["--bwlimit=1000"],
+                checksum=False,
+            ),
         )
         config = Config(
             volumes={"src": src, "dst": dst},
@@ -464,7 +494,7 @@ class TestBuildRsyncCommandOptions:
             "rsync",
             "-a",
             "--delete",
-            "--compress",
+            "--bwlimit=1000",
             "/mnt/src/",
             "/mnt/dst/latest/",
         ]
@@ -486,7 +516,10 @@ class TestBuildRsyncCommandOptions:
             slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
-            rsync_options=["-a"],
+            rsync_options=RsyncOptions(
+                default_options_override=["-a"],
+                checksum=False,
+            ),
         )
         config = Config(
             ssh_endpoints={
@@ -520,7 +553,10 @@ class TestBuildRsyncCommandOptions:
             slug="s1",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
-            extra_rsync_options=["--compress"],
+            rsync_options=RsyncOptions(
+                extra_options=["--bwlimit=1000"],
+                checksum=False,
+            ),
         )
         config = Config(
             ssh_endpoints={
@@ -534,12 +570,55 @@ class TestBuildRsyncCommandOptions:
 
         cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
         inner = cmd[-1]
-        assert "--compress" in inner
+        assert "--bwlimit=1000" in inner
         assert inner.startswith(
             "rsync -a --delete --delete-excluded"
             " --partial-dir=.rsync-partial --safe-links"
-            " --compress"
+            " --bwlimit=1000"
         )
+
+    def test_checksum_default(self) -> None:
+        sync, config = self._simple_config()
+        cmd = build_rsync_command(sync, config)
+        assert "--checksum" in cmd
+
+    def test_checksum_disabled(self) -> None:
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+            rsync_options=RsyncOptions(checksum=False),
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+        cmd = build_rsync_command(sync, config)
+        assert "--checksum" not in cmd
+
+    def test_compress_enabled(self) -> None:
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+            rsync_options=RsyncOptions(compress=True),
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+        cmd = build_rsync_command(sync, config)
+        assert "--compress" in cmd
+        assert "--checksum" in cmd
+
+    def test_compress_default(self) -> None:
+        sync, config = self._simple_config()
+        cmd = build_rsync_command(sync, config)
+        assert "--compress" not in cmd
 
 
 class TestBuildRsyncCommandProxyJump:
@@ -595,6 +674,7 @@ class TestBuildRsyncCommandProxyJump:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
             " -p 5022 -i ~/.ssh/key"
@@ -651,6 +731,7 @@ class TestBuildRsyncCommandProxyJump:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes" f" -o {quoted}",
             "backup@server.internal:/data/",
@@ -781,6 +862,7 @@ class TestBuildRsyncCommandMultiHopProxy:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
             " -p 5022 -i ~/.ssh/key"
@@ -881,6 +963,7 @@ class TestBuildRsyncCommandSpacesInPaths:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--checksum",
             "/mnt/my src/my photos/",
             "/mnt/my dst/my backup/latest/",
         ]

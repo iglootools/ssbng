@@ -12,6 +12,7 @@ from nbkp.config import (
     HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
+    RsyncOptions,
     SshEndpoint,
     SshConnectionOptions,
     SyncConfig,
@@ -781,15 +782,17 @@ class TestEdgeCases:
             slug="custom-sync",
             source=SyncEndpoint(volume="src"),
             destination=DestinationSyncEndpoint(volume="dst"),
-            rsync_options=["-a", "--delete"],
-            extra_rsync_options=["--compress", "--progress"],
+            rsync_options=RsyncOptions(
+                default_options_override=["-a", "--delete"],
+                extra_options=["--bwlimit=1000", "--progress"],
+            ),
         )
         config = Config(
             volumes={"src": src, "dst": dst},
             syncs={"custom-sync": sync},
         )
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert "--compress" in script
+        assert "--bwlimit=1000" in script
         assert "--progress" in script
 
     def test_mixed_enabled_disabled(self) -> None:

@@ -214,6 +214,16 @@ class DestinationSyncEndpoint(SyncEndpoint):
             return "none"
 
 
+class RsyncOptions(_BaseModel):
+    """Rsync flag configuration for a sync operation."""
+
+    model_config = ConfigDict(frozen=True)
+    compress: bool = False
+    checksum: bool = True
+    default_options_override: Optional[List[str]] = None
+    extra_options: List[str] = Field(default_factory=list)
+
+
 class SyncConfig(_BaseModel):
     """Configuration for a single sync operation."""
 
@@ -221,8 +231,7 @@ class SyncConfig(_BaseModel):
     source: SyncEndpoint
     destination: DestinationSyncEndpoint
     enabled: bool = True
-    rsync_options: Optional[List[str]] = None
-    extra_rsync_options: List[str] = Field(default_factory=list)
+    rsync_options: RsyncOptions = Field(default_factory=lambda: RsyncOptions())
     filters: List[str] = Field(default_factory=list)
     filter_file: Optional[str] = None
 

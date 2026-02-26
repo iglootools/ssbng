@@ -154,29 +154,30 @@ To be considered active, a remote volume must have a `.nbkp-vol` file in the roo
 
 ### Rsync Options
 
-By default, every sync uses the following rsync flags: `-a --delete --delete-excluded --partial-dir=.rsync-partial --safe-links`. Two optional fields let you customise the flags per sync:
-
-**`rsync-options`** — replaces the default flags entirely:
+By default, every sync uses the following rsync flags: `-a --delete --delete-excluded --partial-dir=.rsync-partial --safe-links --checksum`. The `rsync-options` section lets you customise flags per sync:
 
 ```yaml
 syncs:
   my-sync:
     rsync-options:
-      - "-a"
-      - "--delete"
+      compress: true              # default false — adds --compress
+      checksum: false             # default true — adds --checksum
+      default-options-override:   # replaces the default flags entirely
+        - "-a"
+        - "--delete"
+      extra-options:              # appends additional flags
+        - "--progress"
 ```
 
-**`extra-rsync-options`** — appends additional flags after the defaults (or after `rsync-options` when both are set):
+**`compress`** — enables rsync `--compress` for transfer compression. Useful for remote syncs over slow links. Default: `false`.
 
-```yaml
-syncs:
-  my-sync:
-    extra-rsync-options:
-      - "--compress"
-      - "--progress"
-```
+**`checksum`** — enables rsync `--checksum` to compare files by checksum instead of mod-time and size. More reliable but slower. Default: `true`.
 
-When neither field is set, the defaults are used unchanged.
+**`default-options-override`** — replaces the default flags entirely. When omitted, the defaults are used unchanged.
+
+**`extra-options`** — appends additional flags after the defaults (or after `default-options-override` when set).
+
+When `rsync-options` is omitted entirely, the defaults are used with `checksum: true` and `compress: false`.
 
 ### Filters
 
@@ -334,9 +335,8 @@ syncs:
     destination:
       volume: nas-backups
       subdir: music-backup
-    extra-rsync-options:        # optional, appended to defaults
-      - "--compress"
-      - "--progress"
+    rsync-options:
+      compress: true            # enable --compress for remote sync
 ```
 
 **Location-aware usage:**

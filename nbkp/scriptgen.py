@@ -875,7 +875,6 @@ def _build_disabled_body(
         destination=sync.destination,
         enabled=True,
         rsync_options=sync.rsync_options,
-        extra_rsync_options=sync.extra_rsync_options,
         filters=sync.filters,
         filter_file=sync.filter_file,
     )

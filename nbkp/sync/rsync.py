@@ -57,12 +57,18 @@ def _base_rsync_args(
     progress: ProgressMode | None = None,
 ) -> list[str]:
     """Build common rsync flags."""
+    rsync_opts = sync.rsync_options
     options = (
-        sync.rsync_options
-        if sync.rsync_options is not None
+        rsync_opts.default_options_override
+        if rsync_opts.default_options_override is not None
         else _DEFAULT_RSYNC_OPTIONS
     )
-    args = ["rsync"] + list(options) + list(sync.extra_rsync_options)
+    args = ["rsync"] + list(options)
+    if rsync_opts.checksum:
+        args.append("--checksum")
+    if rsync_opts.compress:
+        args.append("--compress")
+    args.extend(rsync_opts.extra_options)
     match progress:
         case ProgressMode.OVERALL:
             args.extend(
@@ -200,14 +206,18 @@ def _build_remote_to_remote(
     dest_suffix: str = "latest",
 ) -> list[str]:
     """Build remote-to-remote rsync command (SSH into dest, rsync from src)."""
+    rsync_opts = sync.rsync_options
     options = (
-        sync.rsync_options
-        if sync.rsync_options is not None
+        rsync_opts.default_options_override
+        if rsync_opts.default_options_override is not None
         else _DEFAULT_RSYNC_OPTIONS
     )
-    inner_rsync_parts = (
-        ["rsync"] + list(options) + list(sync.extra_rsync_options)
-    )
+    inner_rsync_parts = ["rsync"] + list(options)
+    if rsync_opts.checksum:
+        inner_rsync_parts.append("--checksum")
+    if rsync_opts.compress:
+        inner_rsync_parts.append("--compress")
+    inner_rsync_parts.extend(rsync_opts.extra_options)
     match progress:
         case ProgressMode.OVERALL:
             inner_rsync_parts.extend(

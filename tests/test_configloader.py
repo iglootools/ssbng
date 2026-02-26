@@ -16,6 +16,7 @@ from nbkp.config import (
     HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
+    RsyncOptions,
     SshEndpoint,
     SshConnectionOptions,
     SyncConfig,
@@ -88,8 +89,10 @@ class TestLoadConfig:
         assert sync.destination.subdir == "photos-backup"
         assert sync.enabled is True
         assert sync.destination.btrfs_snapshots.enabled is False
-        assert sync.rsync_options is None
-        assert sync.extra_rsync_options == []
+        assert sync.rsync_options.default_options_override is None
+        assert sync.rsync_options.extra_options == []
+        assert sync.rsync_options.checksum is True
+        assert sync.rsync_options.compress is False
         assert sync.filters == ["+ *.jpg", "- *.tmp"]
         assert sync.filter_file == "~/.config/nbkp/filters/photos.rules"
 
@@ -99,8 +102,8 @@ class TestLoadConfig:
         assert sync.enabled is True
         assert sync.destination.btrfs_snapshots.enabled is False
         assert sync.source.subdir is None
-        assert sync.rsync_options is None
-        assert sync.extra_rsync_options == []
+        assert sync.rsync_options.default_options_override is None
+        assert sync.rsync_options.extra_options == []
         assert sync.filters == []
         assert sync.filter_file is None
 
@@ -245,7 +248,9 @@ class TestLoadConfig:
                     slug="s",
                     source=SyncEndpoint(volume="v"),
                     destination=DestinationSyncEndpoint(volume="v"),
-                    rsync_options=["-a", "--delete"],
+                    rsync_options=RsyncOptions(
+                        default_options_override=["-a", "--delete"],
+                    ),
                 ),
             },
         )
@@ -253,10 +258,13 @@ class TestLoadConfig:
         p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
-        assert sync.rsync_options == ["-a", "--delete"]
-        assert sync.extra_rsync_options == []
+        assert sync.rsync_options.default_options_override == [
+            "-a",
+            "--delete",
+        ]
+        assert sync.rsync_options.extra_options == []
 
-    def test_extra_rsync_options(self, tmp_path: Path) -> None:
+    def test_rsync_extra_options(self, tmp_path: Path) -> None:
         config = Config(
             volumes={
                 "v": LocalVolume(slug="v", path="/x"),
@@ -266,10 +274,12 @@ class TestLoadConfig:
                     slug="s",
                     source=SyncEndpoint(volume="v"),
                     destination=DestinationSyncEndpoint(volume="v"),
-                    extra_rsync_options=[
-                        "--compress",
-                        "--progress",
-                    ],
+                    rsync_options=RsyncOptions(
+                        extra_options=[
+                            "--bwlimit=1000",
+                            "--progress",
+                        ],
+                    ),
                 ),
             },
         )
@@ -277,9 +287,9 @@ class TestLoadConfig:
         p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
-        assert sync.rsync_options is None
-        assert sync.extra_rsync_options == [
-            "--compress",
+        assert sync.rsync_options.default_options_override is None
+        assert sync.rsync_options.extra_options == [
+            "--bwlimit=1000",
             "--progress",
         ]
 

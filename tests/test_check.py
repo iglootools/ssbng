@@ -14,6 +14,7 @@ from nbkp.config import (
     RemoteVolume,
     ResolvedEndpoint,
     ResolvedEndpoints,
+    RsyncOptions,
     SshEndpoint,
     SshConnectionOptions,
     SyncConfig,
@@ -138,8 +139,10 @@ class TestSyncConfig:
         assert sc.slug == "sync1"
         assert sc.enabled is True
         assert sc.destination.btrfs_snapshots.enabled is False
-        assert sc.rsync_options is None
-        assert sc.extra_rsync_options == []
+        assert sc.rsync_options.default_options_override is None
+        assert sc.rsync_options.extra_options == []
+        assert sc.rsync_options.checksum is True
+        assert sc.rsync_options.compress is False
         assert sc.filters == []
         assert sc.filter_file is None
 
@@ -153,15 +156,23 @@ class TestSyncConfig:
                 btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
             ),
             enabled=False,
-            rsync_options=["-a", "--delete"],
-            extra_rsync_options=["--compress"],
+            rsync_options=RsyncOptions(
+                default_options_override=["-a", "--delete"],
+                extra_options=["--bwlimit=1000"],
+                compress=True,
+            ),
             filters=["+ *.jpg", "- *.tmp"],
             filter_file="/etc/nbkp/filters.rules",
         )
         assert sc.enabled is False
         assert sc.destination.btrfs_snapshots.enabled is True
-        assert sc.rsync_options == ["-a", "--delete"]
-        assert sc.extra_rsync_options == ["--compress"]
+        assert sc.rsync_options.default_options_override == [
+            "-a",
+            "--delete",
+        ]
+        assert sc.rsync_options.extra_options == ["--bwlimit=1000"]
+        assert sc.rsync_options.compress is True
+        assert sc.rsync_options.checksum is True
         assert sc.filters == ["+ *.jpg", "- *.tmp"]
         assert sc.filter_file == "/etc/nbkp/filters.rules"
 
