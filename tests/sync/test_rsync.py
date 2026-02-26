@@ -168,103 +168,6 @@ class TestBuildRsyncCommandRemoteToLocal:
         ]
 
 
-class TestBuildRsyncCommandRemoteToRemote:
-    def test_basic(self) -> None:
-        src_server = SshEndpoint(
-            slug="src-server",
-            host="src.local",
-            port=2222,
-            user="srcuser",
-        )
-        dst_server = SshEndpoint(
-            slug="dst-server",
-            host="dst.local",
-            user="dstuser",
-            key="~/.ssh/dst_key",
-        )
-        src = RemoteVolume(
-            slug="src",
-            ssh_endpoint="src-server",
-            path="/data",
-        )
-        dst = RemoteVolume(
-            slug="dst",
-            ssh_endpoint="dst-server",
-            path="/backup",
-        )
-        sync = SyncConfig(
-            slug="s1",
-            source=SyncEndpoint(volume="src", subdir="photos"),
-            destination=DestinationSyncEndpoint(volume="dst", subdir="photos"),
-        )
-        config = Config(
-            ssh_endpoints={
-                "src-server": src_server,
-                "dst-server": dst_server,
-            },
-            volumes={"src": src, "dst": dst},
-            syncs={"s1": sync},
-        )
-        resolved = resolve_all_endpoints(config)
-
-        cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
-
-        # Should SSH into source host
-        assert cmd[0] == "ssh"
-        assert "srcuser@src.local" in cmd
-
-        # Inner command should be the last arg
-        inner = cmd[-1]
-        assert inner.startswith("rsync -a --delete")
-        assert "--delete-excluded" in inner
-        assert "--safe-links" in inner
-        # Inner rsync uses SSH to reach destination
-        assert (
-            "-e 'ssh -o ConnectTimeout=10"
-            " -o BatchMode=yes"
-            " -i ~/.ssh/dst_key'" in inner
-        )
-        # Source is local (on the source server)
-        assert "/data/photos/" in inner
-        assert "srcuser@src.local:" not in inner
-        # Destination is remote
-        assert "dstuser@dst.local:/backup/photos/latest/" in inner
-
-    def test_dry_run(self) -> None:
-        src_server = SshEndpoint(slug="src-server", host="src.local")
-        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
-        src = RemoteVolume(
-            slug="src",
-            ssh_endpoint="src-server",
-            path="/data",
-        )
-        dst = RemoteVolume(
-            slug="dst",
-            ssh_endpoint="dst-server",
-            path="/backup",
-        )
-        sync = SyncConfig(
-            slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(volume="dst"),
-        )
-        config = Config(
-            ssh_endpoints={
-                "src-server": src_server,
-                "dst-server": dst_server,
-            },
-            volumes={"src": src, "dst": dst},
-            syncs={"s1": sync},
-        )
-        resolved = resolve_all_endpoints(config)
-
-        cmd = build_rsync_command(
-            sync, config, dry_run=True, resolved_endpoints=resolved
-        )
-        inner = cmd[-1]
-        assert "--dry-run" in inner
-
-
 class TestBuildRsyncCommandRemoteToRemoteSameServer:
     """When both volumes resolve to the same SSH endpoint,
     rsync should use local paths (no inner SSH)."""
@@ -514,42 +417,6 @@ class TestBuildRsyncCommandFilters:
             "/mnt/dst/latest/",
         ]
 
-    def test_remote_to_remote_filters(self) -> None:
-        src_server = SshEndpoint(slug="src-server", host="src.local")
-        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
-        src = RemoteVolume(
-            slug="src",
-            ssh_endpoint="src-server",
-            path="/data",
-        )
-        dst = RemoteVolume(
-            slug="dst",
-            ssh_endpoint="dst-server",
-            path="/backup",
-        )
-        sync = SyncConfig(
-            slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(volume="dst"),
-            filters=["+ *.jpg", "- *.tmp"],
-            filter_file="/etc/nbkp/filters.rules",
-        )
-        config = Config(
-            ssh_endpoints={
-                "src-server": src_server,
-                "dst-server": dst_server,
-            },
-            volumes={"src": src, "dst": dst},
-            syncs={"s1": sync},
-        )
-        resolved = resolve_all_endpoints(config)
-
-        cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
-        inner = cmd[-1]
-        assert "'--filter=+ *.jpg'" in inner
-        assert "'--filter=- *.tmp'" in inner
-        assert "'--filter=merge /etc/nbkp/filters.rules'" in inner
-
     def test_no_filters(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/src")
         dst = LocalVolume(slug="dst", path="/mnt/dst")
@@ -664,84 +531,6 @@ class TestBuildRsyncCommandOptions:
             "/mnt/src/",
             "/mnt/dst/latest/",
         ]
-
-    def test_remote_to_remote_override(self) -> None:
-        src_server = SshEndpoint(slug="src-server", host="src.local")
-        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
-        src = RemoteVolume(
-            slug="src",
-            ssh_endpoint="src-server",
-            path="/data",
-        )
-        dst = RemoteVolume(
-            slug="dst",
-            ssh_endpoint="dst-server",
-            path="/backup",
-        )
-        sync = SyncConfig(
-            slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(volume="dst"),
-            rsync_options=RsyncOptions(
-                default_options_override=["-a"],
-                checksum=False,
-            ),
-        )
-        config = Config(
-            ssh_endpoints={
-                "src-server": src_server,
-                "dst-server": dst_server,
-            },
-            volumes={"src": src, "dst": dst},
-            syncs={"s1": sync},
-        )
-        resolved = resolve_all_endpoints(config)
-
-        cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
-        inner = cmd[-1]
-        assert inner.startswith("rsync -a")
-        assert "--delete" not in inner
-
-    def test_remote_to_remote_extra(self) -> None:
-        src_server = SshEndpoint(slug="src-server", host="src.local")
-        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
-        src = RemoteVolume(
-            slug="src",
-            ssh_endpoint="src-server",
-            path="/data",
-        )
-        dst = RemoteVolume(
-            slug="dst",
-            ssh_endpoint="dst-server",
-            path="/backup",
-        )
-        sync = SyncConfig(
-            slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(volume="dst"),
-            rsync_options=RsyncOptions(
-                extra_options=["--bwlimit=1000"],
-                checksum=False,
-            ),
-        )
-        config = Config(
-            ssh_endpoints={
-                "src-server": src_server,
-                "dst-server": dst_server,
-            },
-            volumes={"src": src, "dst": dst},
-            syncs={"s1": sync},
-        )
-        resolved = resolve_all_endpoints(config)
-
-        cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
-        inner = cmd[-1]
-        assert "--bwlimit=1000" in inner
-        assert inner.startswith(
-            "rsync -a --delete --delete-excluded"
-            " --partial-dir=.rsync-partial --safe-links"
-            " --bwlimit=1000"
-        )
 
     def test_checksum_default(self) -> None:
         sync, config = self._simple_config()
@@ -904,66 +693,6 @@ class TestBuildRsyncCommandProxyJump:
             "/mnt/dst/latest/",
         ]
 
-    def test_remote_to_remote_with_proxy(self) -> None:
-        bastion = SshEndpoint(
-            slug="bastion",
-            host="bastion.example.com",
-            user="admin",
-        )
-        src_server = SshEndpoint(
-            slug="src-server",
-            host="src.internal",
-            user="srcuser",
-            proxy_jump="bastion",
-        )
-        dst_server = SshEndpoint(
-            slug="dst-server",
-            host="dst.internal",
-            user="dstuser",
-            proxy_jump="bastion",
-        )
-        src = RemoteVolume(
-            slug="src",
-            ssh_endpoint="src-server",
-            path="/data",
-        )
-        dst = RemoteVolume(
-            slug="dst",
-            ssh_endpoint="dst-server",
-            path="/backup",
-        )
-        sync = SyncConfig(
-            slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(volume="dst"),
-        )
-        config = Config(
-            ssh_endpoints={
-                "bastion": bastion,
-                "src-server": src_server,
-                "dst-server": dst_server,
-            },
-            volumes={"src": src, "dst": dst},
-            syncs={"s1": sync},
-        )
-        resolved = resolve_all_endpoints(config)
-
-        cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
-
-        # Should SSH into source host with proxy
-        assert cmd[0] == "ssh"
-        proxy_cmd = (
-            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
-            " -W %h:%p admin@bastion.example.com"
-        )
-        assert f"ProxyCommand={proxy_cmd}" in cmd
-        assert "srcuser@src.internal" in cmd
-
-        # Inner rsync should have proxy for destination
-        inner = cmd[-1]
-        assert "ProxyCommand=" in inner
-        assert "admin@bastion.example.com" in inner
-
 
 class TestBuildRsyncCommandMultiHopProxy:
     def test_local_to_remote_with_multi_hop_proxy(self) -> None:
@@ -1037,73 +766,6 @@ class TestBuildRsyncCommandMultiHopProxy:
             "backup@nas.local:/backup/latest/",
         ]
 
-    def test_remote_to_remote_with_multi_hop_proxy(
-        self,
-    ) -> None:
-        bastion1 = SshEndpoint(
-            slug="bastion1",
-            host="bastion1.example.com",
-            user="admin",
-        )
-        bastion2 = SshEndpoint(
-            slug="bastion2",
-            host="bastion2.example.com",
-            port=2222,
-        )
-        src_server = SshEndpoint(
-            slug="src-server",
-            host="src.internal",
-            user="srcuser",
-            proxy_jumps=["bastion1", "bastion2"],
-        )
-        dst_server = SshEndpoint(
-            slug="dst-server",
-            host="dst.internal",
-            user="dstuser",
-            proxy_jumps=["bastion1", "bastion2"],
-        )
-        src = RemoteVolume(
-            slug="src",
-            ssh_endpoint="src-server",
-            path="/data",
-        )
-        dst = RemoteVolume(
-            slug="dst",
-            ssh_endpoint="dst-server",
-            path="/backup",
-        )
-        sync = SyncConfig(
-            slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(volume="dst"),
-        )
-        config = Config(
-            ssh_endpoints={
-                "bastion1": bastion1,
-                "bastion2": bastion2,
-                "src-server": src_server,
-                "dst-server": dst_server,
-            },
-            volumes={"src": src, "dst": dst},
-            syncs={"s1": sync},
-        )
-        resolved = resolve_all_endpoints(config)
-
-        cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
-
-        # Outer SSH into source host with proxy chain
-        assert cmd[0] == "ssh"
-        assert any("ProxyCommand=" in arg for arg in cmd)
-        assert "admin@bastion1.example.com" in str(cmd)
-        assert "bastion2.example.com" in str(cmd)
-        assert "srcuser@src.internal" in cmd
-
-        # Inner rsync should have proxy chain for destination
-        inner = cmd[-1]
-        assert "ProxyCommand=" in inner
-        assert "admin@bastion1.example.com" in inner
-        assert "bastion2.example.com" in inner
-
 
 class TestBuildRsyncCommandSpacesInPaths:
     def test_local_to_local_spaces(self) -> None:
@@ -1133,54 +795,6 @@ class TestBuildRsyncCommandSpacesInPaths:
             "/mnt/my src/my photos/",
             "/mnt/my dst/my backup/latest/",
         ]
-
-    def test_remote_to_remote_spaces(self) -> None:
-        src_server = SshEndpoint(
-            slug="src-server",
-            host="src.local",
-            port=2222,
-            user="srcuser",
-        )
-        dst_server = SshEndpoint(
-            slug="dst-server",
-            host="dst.local",
-            user="dstuser",
-        )
-        src = RemoteVolume(
-            slug="src",
-            ssh_endpoint="src-server",
-            path="/my data",
-        )
-        dst = RemoteVolume(
-            slug="dst",
-            ssh_endpoint="dst-server",
-            path="/my backup",
-        )
-        sync = SyncConfig(
-            slug="s1",
-            source=SyncEndpoint(volume="src", subdir="my photos"),
-            destination=DestinationSyncEndpoint(
-                volume="dst", subdir="my dest"
-            ),
-        )
-        config = Config(
-            ssh_endpoints={
-                "src-server": src_server,
-                "dst-server": dst_server,
-            },
-            volumes={"src": src, "dst": dst},
-            syncs={"s1": sync},
-        )
-        resolved = resolve_all_endpoints(config)
-
-        cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
-        inner = cmd[-1]
-        # Source is local (on source server), paths with spaces
-        # must be shlex-quoted
-        assert "'/my data/my photos/'" in inner
-        assert "srcuser@src.local:" not in inner
-        # Destination is remote
-        assert "'dstuser@dst.local:/my backup/my dest/latest/'" in inner
 
 
 class TestBuildRsyncCommandProgress:
@@ -1240,44 +854,6 @@ class TestBuildRsyncCommandProgress:
         assert "--info=progress2" in cmd
         assert "--stats" in cmd
         assert "--human-readable" in cmd
-
-    def test_remote_to_remote_progress(self) -> None:
-        src_server = SshEndpoint(slug="src-server", host="src.local")
-        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
-        src = RemoteVolume(
-            slug="src",
-            ssh_endpoint="src-server",
-            path="/data",
-        )
-        dst = RemoteVolume(
-            slug="dst",
-            ssh_endpoint="dst-server",
-            path="/backup",
-        )
-        sync = SyncConfig(
-            slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(volume="dst"),
-        )
-        config = Config(
-            ssh_endpoints={
-                "src-server": src_server,
-                "dst-server": dst_server,
-            },
-            volumes={"src": src, "dst": dst},
-            syncs={"s1": sync},
-        )
-        resolved = resolve_all_endpoints(config)
-
-        cmd = build_rsync_command(
-            sync,
-            config,
-            progress=ProgressMode.PER_FILE,
-            resolved_endpoints=resolved,
-        )
-        inner = cmd[-1]
-        assert "-v" in inner
-        assert "--progress" in inner
 
 
 class TestDestSuffix:
@@ -1362,37 +938,6 @@ class TestDestSuffix:
             dest_suffix="snapshots/T1",
         )
         assert cmd[-1] == "/mnt/dst/snapshots/T1/"
-
-    def test_remote_to_remote(self) -> None:
-        src_server = SshEndpoint(slug="src-server", host="src.local")
-        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
-        src = RemoteVolume(slug="src", ssh_endpoint="src-server", path="/data")
-        dst = RemoteVolume(
-            slug="dst", ssh_endpoint="dst-server", path="/backup"
-        )
-        sync = SyncConfig(
-            slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(volume="dst"),
-        )
-        config = Config(
-            ssh_endpoints={
-                "src-server": src_server,
-                "dst-server": dst_server,
-            },
-            volumes={"src": src, "dst": dst},
-            syncs={"s1": sync},
-        )
-        resolved = resolve_all_endpoints(config)
-
-        cmd = build_rsync_command(
-            sync,
-            config,
-            resolved_endpoints=resolved,
-            dest_suffix="snapshots/T1",
-        )
-        inner = cmd[-1]
-        assert "/backup/snapshots/T1/" in inner
 
 
 class TestRunRsync:

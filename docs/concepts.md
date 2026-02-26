@@ -386,7 +386,7 @@ nbkp sh --config backup.yaml -o /mnt/data/backup.sh --relative-src --relative-ds
 The generated script resolves its own directory at runtime via `NBKP_SCRIPT_DIR` and uses it to compute the actual paths. This makes the script portable — it works regardless of where the drive is mounted.
 
 **What is preserved from `nbkp run`:**
-- All 4 rsync command variants (local-to-local, local-to-remote, remote-to-local, remote-to-remote)
+- All rsync command variants (local-to-local, local-to-remote, remote-to-local, remote-to-remote same server)
 - SSH options (port, key, `-o` options, proxy jump `-J`)
 - Rsync filters and filter-file support
 - Btrfs snapshot creation and pruning

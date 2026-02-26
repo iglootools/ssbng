@@ -29,8 +29,9 @@ All modules resolve volumes from `Config.volumes[name]` and dispatch on volume t
 
 - **Local→Local**: direct rsync
 - **Local→Remote / Remote→Local**: rsync with `-e "ssh -p PORT -i KEY -o OPT"`
-- **Remote→Remote (different servers)**: SSH into source, run rsync pushing to destination via `-e "ssh ..."`
 - **Remote→Remote (same server)**: SSH into the server once, run rsync with local paths
+
+Cross-server remote-to-remote syncs (different SSH endpoints) are not supported. Use two separate syncs through the local machine instead.
 
 ## Config resolution (config.py)
 

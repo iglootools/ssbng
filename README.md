@@ -30,6 +30,19 @@ It replaces the rsync shell scripts you'd normally maintain, adding:
 
 Full feature list: [docs/features.md](https://github.com/iglootools/nbkp/blob/main/docs/features.md).
 
+## Non-Goals
+
+nbkp is designed around a single orchestrator (typically a laptop) that initiates all syncs. 
+It intentionally does not support multi-server topologies where data flows directly between remote servers, for several reasons:
+
+- **SSH credentials are local.** Keys, proxy-jump chains, and connection options in the config describe how the orchestrator reaches each server — not how servers reach each other. Forwarding credentials between servers adds security risk and configuration complexity.
+- **Checks and transfers take different paths.** Pre-flight checks (sentinel files, rsync availability, btrfs detection) run from the orchestrator to each server independently, but a server-to-server transfer would bypass the orchestrator entirely — meaning checks can pass while the actual sync fails.
+- **Post-sync operations (snapshots, pruning) assume orchestrator access.** Btrfs and hard-link snapshot management connects from the orchestrator to the destination, not from the source server.
+
+If you need server-to-server replication:
+- **Install nbkp on one of the servers** and configure separate syncs from there, treating that server as the orchestrator.
+- **Use tools designed for multi-server topologies**: check the [Similar Tools](#similar-tools) section for options that support enterpris-y / multi-host setups.
+
 ## Philosophy
 
 **Design Principles**
@@ -122,6 +135,24 @@ If you believe that the representation is inaccurate or if there are other tools
 - **[btrbk](https://github.com/digint/btrbk)** — btrfs-native snapshot management with send/receive for remote transfers. Btrfs-only (no rsync); more sophisticated retention policies (hourly/daily/weekly/monthly); no non-btrfs filesystem support.
 - **[Snapper](http://snapper.io/)** — automated btrfs snapshot creation with timeline-based retention and rollback. Local snapshot management only; no rsync or remote transfer; no external backup targets.
 - **[Timeshift](https://github.com/linuxmint/timeshift)** — system restore via rsync + hard links or btrfs snapshots. Targets root filesystem for system-level rollback; excludes user data by default; no remote backup.
+
+#### Continuous / real-time
+
+- **[Syncthing](https://syncthing.net/)** — continuous peer-to-peer file synchronization across devices. Decentralized (no central server); syncs bidirectionally in real time; no snapshots or point-in-time recovery; designed for keeping folders in sync rather than creating backups.
+- **[Lsyncd](https://lsyncd.github.io/lsyncd/)** — monitors directories via inotify and triggers rsync (or other tools) on changes. Daemon-based, continuous replication; designed for server-to-server mirroring; no snapshot management or removable-drive awareness.
+
+#### Cloud / multi-backend
+
+- **[Rclone](https://rclone.org/)** — syncs files to and between 70+ cloud and remote backends (S3, SFTP, Google Drive, etc.). Can transfer server-to-server directly; not rsync-based; no btrfs integration or volume detection.
+
+#### Bidirectional sync
+
+- **[Unison](https://github.com/bcpierce00/unison)** — bidirectional file synchronization between two hosts. Detects conflicts; requires Unison on both sides with matching versions; no snapshots or removable-drive awareness.
+
+#### Enterprise / multi-host
+
+- **[Bacula](https://www.bacula.org/) / [Bareos](https://www.bareos.com/)** — enterprise client-server backup with a director, storage daemons, and file daemons across multiple hosts. Full multi-server topology; proprietary catalog and storage format; significant setup complexity.
+- **[Amanda](https://www.amanda.org/)** — network backup orchestrating multiple clients from a central server. Designed for tape and disk pools; uses native dump/tar; heavier infrastructure than nbkp targets.
 
 ## License
 

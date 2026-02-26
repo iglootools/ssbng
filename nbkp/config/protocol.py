@@ -499,4 +499,21 @@ class Config(_BaseModel):
                     f"Sync '{sync_slug}' references "
                     f"unknown destination volume '{dst}'"
                 )
+            src_vol = self.volumes[sync.source.volume]
+            dst_vol = self.volumes[sync.destination.volume]
+            if (
+                isinstance(src_vol, RemoteVolume)
+                and isinstance(dst_vol, RemoteVolume)
+                and src_vol.ssh_endpoint != dst_vol.ssh_endpoint
+            ):
+                raise ValueError(
+                    f"Sync '{sync_slug}' has source on"
+                    f" '{src_vol.ssh_endpoint}' and"
+                    f" destination on"
+                    f" '{dst_vol.ssh_endpoint}'."
+                    f" Cross-server remote-to-remote"
+                    f" syncs are not supported."
+                    f" Use two separate syncs through"
+                    f" the local machine instead."
+                )
         return self

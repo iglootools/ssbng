@@ -91,43 +91,6 @@ def _remote_to_local_config() -> Config:
     )
 
 
-def _remote_to_remote_config() -> Config:
-    src_server = SshEndpoint(
-        slug="src-server",
-        host="src.example.com",
-        user="srcuser",
-    )
-    dst_server = SshEndpoint(
-        slug="dst-server",
-        host="dst.example.com",
-        user="dstuser",
-        port=2222,
-    )
-    src = RemoteVolume(
-        slug="src-vol",
-        ssh_endpoint="src-server",
-        path="/data",
-    )
-    dst = RemoteVolume(
-        slug="dst-vol",
-        ssh_endpoint="dst-server",
-        path="/backup",
-    )
-    sync = SyncConfig(
-        slug="r2r-sync",
-        source=SyncEndpoint(volume="src-vol"),
-        destination=DestinationSyncEndpoint(volume="dst-vol"),
-    )
-    return Config(
-        ssh_endpoints={
-            "src-server": src_server,
-            "dst-server": dst_server,
-        },
-        volumes={"src-vol": src, "dst-vol": dst},
-        syncs={"r2r-sync": sync},
-    )
-
-
 def _btrfs_config() -> Config:
     src = LocalVolume(slug="src", path="/mnt/src")
     dst = LocalVolume(slug="dst", path="/mnt/dst")
@@ -379,19 +342,6 @@ class TestRemoteToLocal:
         assert "/mnt/backup/latest/" in script
 
 
-class TestRemoteToRemote:
-    def test_ssh_wrapper(self) -> None:
-        config = _remote_to_remote_config()
-        resolved = resolve_all_endpoints(config)
-        script = generate_script(
-            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
-        )
-        # R2R: SSH into dest, run rsync from there
-        assert "dst.example.com" in script
-        assert "src.example.com" in script
-        assert "rsync" in script
-
-
 class TestDisabledSync:
     def test_commented_out(self) -> None:
         config = _disabled_config()
@@ -626,20 +576,6 @@ class TestShellValidity:
 
     def test_remote_to_local_valid_syntax(self) -> None:
         config = _remote_to_local_config()
-        resolved = resolve_all_endpoints(config)
-        script = generate_script(
-            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
-        )
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
-
-    def test_remote_to_remote_valid_syntax(self) -> None:
-        config = _remote_to_remote_config()
         resolved = resolve_all_endpoints(config)
         script = generate_script(
             config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
@@ -1124,21 +1060,6 @@ class TestRelativePaths:
         assert "${NBKP_SCRIPT_DIR}" in script
         # Remote source stays absolute
         assert "admin@remote.example.com" in script
-
-    def test_relative_remote_to_remote_unchanged(self) -> None:
-        config = _remote_to_remote_config()
-        resolved = resolve_all_endpoints(config)
-        options = ScriptOptions(
-            config_path="/etc/nbkp/config.yaml",
-            output_file="/tmp/backup.sh",
-            relative_src=True,
-            relative_dst=True,
-        )
-        script = generate_script(
-            config, options, now=_NOW, resolved_endpoints=resolved
-        )
-        # Remote volumes are never relativized
-        assert "NBKP_SCRIPT_DIR" not in script
 
     def test_script_dir_in_header(self) -> None:
         config = _local_to_local_config()

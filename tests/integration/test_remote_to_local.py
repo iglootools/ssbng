@@ -1,12 +1,15 @@
-"""Integration tests: remote-to-remote sync, same server (Docker)."""
+"""Integration tests: remote-to-local sync (Docker)."""
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import pytest
 
 from nbkp.config import (
     Config,
     DestinationSyncEndpoint,
+    LocalVolume,
     RemoteVolume,
     SshEndpoint,
     SyncConfig,
@@ -22,21 +25,24 @@ from .conftest import ssh_exec
 pytestmark = pytest.mark.integration
 
 
-class TestRemoteToRemoteSameServer:
-    def test_sync_on_container(
+class TestRemoteToLocal:
+    def test_sync_from_container(
         self,
+        tmp_path: Path,
         ssh_endpoint: SshEndpoint,
+        remote_volume: RemoteVolume,
     ) -> None:
-        src_vol = RemoteVolume(
-            slug="src-remote",
-            ssh_endpoint="test-server",
-            path=f"{REMOTE_BACKUP_PATH}/src",
+        # Create test file on remote source
+        ssh_exec(
+            ssh_endpoint,
+            "echo 'hello from remote'"
+            f" > {REMOTE_BACKUP_PATH}/remote-file.txt",
         )
-        dst_vol = RemoteVolume(
-            slug="dst-remote",
-            ssh_endpoint="test-server",
-            path=f"{REMOTE_BACKUP_PATH}/dst",
-        )
+
+        dst_dir = tmp_path / "dst"
+        dst_dir.mkdir()
+
+        dst_vol = LocalVolume(slug="dst", path=str(dst_dir))
         sync = SyncConfig(
             slug="test-sync",
             source=SyncEndpoint(volume="src"),
@@ -44,7 +50,7 @@ class TestRemoteToRemoteSameServer:
         )
         config = Config(
             ssh_endpoints={"test-server": ssh_endpoint},
-            volumes={"src": src_vol, "dst": dst_vol},
+            volumes={"src": remote_volume, "dst": dst_vol},
             syncs={"test-sync": sync},
         )
 
@@ -52,13 +58,6 @@ class TestRemoteToRemoteSameServer:
             ssh_exec(ssh_endpoint, cmd)
 
         create_seed_sentinels(config, remote_exec=_run_remote)
-
-        # Create test file on remote source
-        ssh_exec(
-            ssh_endpoint,
-            "echo 'hello from remote'"
-            f" > {REMOTE_BACKUP_PATH}/src/remote-file.txt",
-        )
 
         resolved = resolve_all_endpoints(config)
         result = run_rsync(
@@ -68,8 +67,57 @@ class TestRemoteToRemoteSameServer:
         )
         assert result.returncode == 0
 
-        out = ssh_exec(
+        # Verify file arrived locally
+        local_file = dst_dir / "latest" / "remote-file.txt"
+        assert local_file.exists()
+        assert local_file.read_text().strip() == "hello from remote"
+
+    def test_sync_with_subdir(
+        self,
+        tmp_path: Path,
+        ssh_endpoint: SshEndpoint,
+        remote_volume: RemoteVolume,
+    ) -> None:
+        # Create test file in a subdir on remote source
+        ssh_exec(
             ssh_endpoint,
-            f"cat {REMOTE_BACKUP_PATH}/dst/latest/remote-file.txt",
+            f"mkdir -p {REMOTE_BACKUP_PATH}/photos",
         )
-        assert out.stdout.strip() == "hello from remote"
+        ssh_exec(
+            ssh_endpoint,
+            "echo 'image-data'" f" > {REMOTE_BACKUP_PATH}/photos/img.jpg",
+        )
+
+        dst_dir = tmp_path / "dst"
+        dst_dir.mkdir()
+
+        dst_vol = LocalVolume(slug="dst", path=str(dst_dir))
+        sync = SyncConfig(
+            slug="test-sync",
+            source=SyncEndpoint(volume="src", subdir="photos"),
+            destination=DestinationSyncEndpoint(
+                volume="dst", subdir="photos-backup"
+            ),
+        )
+        config = Config(
+            ssh_endpoints={"test-server": ssh_endpoint},
+            volumes={"src": remote_volume, "dst": dst_vol},
+            syncs={"test-sync": sync},
+        )
+
+        def _run_remote(cmd: str) -> None:
+            ssh_exec(ssh_endpoint, cmd)
+
+        create_seed_sentinels(config, remote_exec=_run_remote)
+
+        resolved = resolve_all_endpoints(config)
+        result = run_rsync(
+            sync,
+            config,
+            resolved_endpoints=resolved,
+        )
+        assert result.returncode == 0
+
+        local_file = dst_dir / "photos-backup" / "latest" / "img.jpg"
+        assert local_file.exists()
+        assert local_file.read_text().strip() == "image-data"

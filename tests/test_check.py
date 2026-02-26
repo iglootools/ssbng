@@ -198,6 +198,66 @@ class TestConfig:
         assert "s1" in cfg.syncs
 
 
+class TestCrossServerValidation:
+    def test_cross_server_remote_to_remote_rejected(self) -> None:
+        import pydantic
+        import pytest
+
+        with pytest.raises(pydantic.ValidationError):
+            Config(
+                ssh_endpoints={
+                    "a": SshEndpoint(slug="a", host="a.com"),
+                    "b": SshEndpoint(slug="b", host="b.com"),
+                },
+                volumes={
+                    "src": RemoteVolume(
+                        slug="src",
+                        ssh_endpoint="a",
+                        path="/s",
+                    ),
+                    "dst": RemoteVolume(
+                        slug="dst",
+                        ssh_endpoint="b",
+                        path="/d",
+                    ),
+                },
+                syncs={
+                    "x": SyncConfig(
+                        slug="x",
+                        source=SyncEndpoint(volume="src"),
+                        destination=DestinationSyncEndpoint(volume="dst"),
+                    )
+                },
+            )
+
+    def test_same_server_remote_to_remote_allowed(self) -> None:
+        config = Config(
+            ssh_endpoints={
+                "server": SshEndpoint(slug="server", host="server.com"),
+            },
+            volumes={
+                "src": RemoteVolume(
+                    slug="src",
+                    ssh_endpoint="server",
+                    path="/src",
+                ),
+                "dst": RemoteVolume(
+                    slug="dst",
+                    ssh_endpoint="server",
+                    path="/dst",
+                ),
+            },
+            syncs={
+                "x": SyncConfig(
+                    slug="x",
+                    source=SyncEndpoint(volume="src"),
+                    destination=DestinationSyncEndpoint(volume="dst"),
+                )
+            },
+        )
+        assert "x" in config.syncs
+
+
 class TestVolumeStatus:
     def test_construction_active(self) -> None:
         vol = LocalVolume(slug="data", path="/mnt/data")

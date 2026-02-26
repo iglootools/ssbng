@@ -71,21 +71,16 @@ def _make_btrfs_config_with_max() -> Config:
     )
 
 
-def _make_remote_to_remote_config() -> Config:
-    src_server = SshEndpoint(
-        slug="src-server", host="src.local", user="srcuser"
-    )
-    dst_server = SshEndpoint(
-        slug="dst-server", host="dst.local", user="dstuser"
-    )
+def _make_remote_same_server_btrfs_config() -> Config:
+    server = SshEndpoint(slug="server", host="nas.local", user="backup")
     src = RemoteVolume(
         slug="src",
-        ssh_endpoint="src-server",
+        ssh_endpoint="server",
         path="/data",
     )
     dst = RemoteVolume(
         slug="dst",
-        ssh_endpoint="dst-server",
+        ssh_endpoint="server",
         path="/backup",
     )
     sync = SyncConfig(
@@ -97,10 +92,7 @@ def _make_remote_to_remote_config() -> Config:
         ),
     )
     return Config(
-        ssh_endpoints={
-            "src-server": src_server,
-            "dst-server": dst_server,
-        },
+        ssh_endpoints={"server": server},
         volumes={"src": src, "dst": dst},
         syncs={"s1": sync},
     )
@@ -258,12 +250,12 @@ class TestRunAllSyncs:
 
     @patch("nbkp.sync.runner.create_snapshot")
     @patch("nbkp.sync.runner.run_rsync")
-    def test_remote_to_remote_with_btrfs(
+    def test_remote_same_server_with_btrfs(
         self,
         mock_rsync: MagicMock,
         mock_snap: MagicMock,
     ) -> None:
-        config = _make_remote_to_remote_config()
+        config = _make_remote_same_server_btrfs_config()
         _, sync_statuses = _active_statuses(config)
         mock_rsync.return_value = MagicMock(
             returncode=0, stdout="done\n", stderr=""
