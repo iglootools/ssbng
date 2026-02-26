@@ -8,8 +8,10 @@
 ![License](https://img.shields.io/github/license/iglootools/nbkp)
 ![CI Status](https://github.com/iglootools/nbkp/actions/workflows/test.yml/badge.svg?branch=main)
 
-A robust backup tool powered by rsync, designed for both local and remote targets—including removable drives and intermittently available backup servers. 
-It optionally leverages btrfs snapshots to retain historical backups space-efficiently, and encrypted volumes for enhanced security.
+An rsync-based backup tool for nomadic setups where sources and destinations aren't always available — laptops on the move, removable drives, 
+home servers behind changing networks. 
+
+Sentinel files ensure backups only run when volumes are genuinely present, with optional btrfs or hard-link snapshots for point-in-time recovery.
 
 ## Main Use Cases
 
@@ -17,13 +19,14 @@ The tool is primarily designed for the following backup scenarios:
 - **Laptop to Server** — back up to your home server whenever you're on the home network
 - **Laptop to External Drive** — back up to an external drive whenever it's connected
 - **External Drive to Server** — replicate an external drive to your home server when both are available
-- **Server to External Drive** — back up your home server to an external drive, piloted from your laptop
+- **Server to External Drive** — back up your home server to an external drive
+- **Easy Setup** - pilot the backups from your laptop, minimal setup on the server (`rsync`, `btrfs`)
 
 It replaces the rsync shell scripts you'd normally maintain, adding:
-- **Volume detection** — only runs when sources and destinations are actually available
-- **Btrfs snapshots** — keeps point-in-time copies so a bad sync can't wipe good backups
+- **Volume detection** (through sentinel files) — only runs when sources and destinations are actually available
+- **Btrfs and hard-link snapshots** — keeps point-in-time copies so a bad sync can't wipe good backups
 - **Declarative config** — one YAML file describes all your backup pairs
-- **Structured output** — human-readable and JSON output for scripting and automation
+- **Structured output** — human-readable for convenience and JSON output for scripting and automation
 
 Full feature list: [docs/features.md](https://github.com/iglootools/nbkp/blob/main/docs/features.md).
 
@@ -32,19 +35,22 @@ Full feature list: [docs/features.md](https://github.com/iglootools/nbkp/blob/ma
 **Design Principles**
 - Laptop-centric workflows
 - Changing networks
--	Drives being plugged/unplugged
+- Drives being plugged/unplugged
 - Backups happening when possible
 - Not always-on infrastructure
 - Personal homelab / Raspberry Pi setups
 
 **Implementation Principles**
+
 No custom storage format, protocol, or encryption — just proven tools composed together:
 - **rsync + SSH** — handles the actual file transfer, locally or remotely
 - **Plain directories** — files are stored as-is; restoring is just a copy
 - **Btrfs snapshots (optional)** — space-efficient point-in-time copies via copy-on-write, with automatic pruning. Each snapshot is a read-only subvolume exposing a plain directory tree
+- **Hard-link snapshots (optional)** — alternative to btrfs snapshots, works on any filesystem that supports hard links, but less efficient and more fragile
 - **cryptsetup (optional)** — full-volume encryption for backup destinations
 
 **Nomad backup metaphor**
+
 A nomad:
 - Moves between places
 - Sets up temporary camp

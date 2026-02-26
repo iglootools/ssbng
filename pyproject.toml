@@ -1,23 +1,22 @@
 [project]
 name = "nbkp"
-description = "Nomad Backup: A robust backup tool powered by rsync, designed for both local and remote targets—including removable drives and intermittently available backup servers. It optionally leverages btrfs snapshots to retain historical backups space-efficiently, and encrypted volumes for enhanced security."
-authors = [{name = "Sami Dalouche", email = "sami.dalouche@gmail.com"}]
+description = "Nomad Backup: An rsync-based backup tool for nomadic setups where sources and destinations aren't always available — laptops on the move, removable drives, home servers behind changing networks. Sentinel files ensure backups only run when volumes are genuinely present, with optional btrfs or hard-link snapshots for point-in-time recovery."
 readme = "README.md"
+requires-python = ">=3.14"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-requires-python = ">=3.14"
+authors = [{ name = "Sami Dalouche", email = "sami.dalouche@gmail.com" }]
 dependencies = [
-    "typer (>=0.24.0,<1.0.0)",
-    "pyyaml (>=6.0,<7.0)",
-    "pydantic (>=2.12.5,<3.0.0)",
-    "fabric (>=3.0,<4.0)",
-    "jinja2 (>=3.0,<4.0)",
+  "fabric (>=3.0,<4.0)",
+  "jinja2 (>=3.0,<4.0)",
+  "pydantic (>=2.12.5,<3.0.0)",
+  "pyyaml (>=6.0,<7.0)",
+  "typer (>=0.24.0,<1.0.0)",
 ]
 dynamic = ["version"]
 
 [tool.poetry.requires-plugins]
 poetry-dynamic-versioning = { version = ">=1.0.0,<2.0.0", extras = ["plugin"] }
-
 
 [tool.poetry-dynamic-versioning]
 enable = true
@@ -27,18 +26,18 @@ nbkp = "nbkp.cli:main"
 nbkp-test = "nbkp.testcli:main"
 
 [tool.poetry]
-packages = [{include = "nbkp"}]
+packages = [{ include = "nbkp" }]
 version = "0.0.0"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^9.0.0"
 black = "^26.0.0"
 flake8 = "^7.0.0"
 mypy = "^1.9.0"
-types-pyyaml = "^6.0"
+pytest = "^9.0.0"
 testcontainers = "^4.0.0"
 types-docker = "^7.1.0.20260109"
 types-paramiko = "^4.0.0.20250822"
+types-pyyaml = "^6.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
@@ -46,11 +45,11 @@ build-backend = "poetry_dynamic_versioning.backend"
 
 [tool.black]
 line-length = 79
-target-version = ['py314']
+target-version = ["py314"]
 
 [tool.pytest.ini_options]
 markers = [
-    "integration: Integration tests requiring Docker",
+  "integration: Integration tests requiring Docker",
 ]
 
 [tool.mypy]
