@@ -137,7 +137,7 @@ def start_docker_container(
         ports={"22/tcp": None},
         volumes={
             str(pub_key): {
-                "bind": "/tmp/authorized_keys",
+                "bind": "/mnt/ssh-authorized-keys",
                 "mode": "ro",
             }
         },
@@ -176,7 +176,7 @@ def start_bastion_container(
         environment={"NBKP_BASTION_ONLY": "1"},
         volumes={
             str(pub_key): {
-                "bind": "/tmp/authorized_keys",
+                "bind": "/mnt/ssh-authorized-keys",
                 "mode": "ro",
             }
         },
@@ -235,7 +235,7 @@ def setup_remote(server: SshEndpoint) -> None:
     def run(cmd: str) -> None:
         ssh_exec(server, cmd)
 
-    run("touch /data/.nbkp-vol /data/.nbkp-dst")
-    run("btrfs subvolume create /mnt/btrfs/latest")
-    run("mkdir -p /mnt/btrfs/snapshots")
-    run("touch /mnt/btrfs/.nbkp-vol" " /mnt/btrfs/.nbkp-dst")
+    run("touch /srv/backups/.nbkp-vol /srv/backups/.nbkp-dst")
+    run("btrfs subvolume create /srv/btrfs-backups/latest")
+    run("mkdir -p /srv/btrfs-backups/snapshots")
+    run("touch /srv/btrfs-backups/.nbkp-vol" " /srv/btrfs-backups/.nbkp-dst")

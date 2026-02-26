@@ -2,26 +2,25 @@
 set -e
 
 # Set up authorized keys from mounted file
-if [ -f /tmp/authorized_keys ]; then
-    cp /tmp/authorized_keys /home/testuser/.ssh/authorized_keys
+if [ -f /mnt/ssh-authorized-keys ]; then
+    cp /mnt/ssh-authorized-keys /home/testuser/.ssh/authorized_keys
     chmod 600 /home/testuser/.ssh/authorized_keys
     chown testuser:testuser /home/testuser/.ssh/authorized_keys
 fi
 
 if [ -z "$NBKP_BASTION_ONLY" ]; then
     # Create btrfs filesystem on a file-backed image
-    truncate -s 4G /var/btrfs.img
-    mkfs.btrfs -f /var/btrfs.img
-    mkdir -p /mnt/btrfs
-    mount -o user_subvol_rm_allowed /var/btrfs.img /mnt/btrfs
+    truncate -s 4G /srv/btrfs-backups.img
+    mkfs.btrfs -f /srv/btrfs-backups.img
+    mkdir -p /srv/btrfs-backups
+    mount -o user_subvol_rm_allowed /srv/btrfs-backups.img /srv/btrfs-backups
 
-    # Create directory structures
-    mkdir -p /data/src /data/latest
-    mkdir -p /mnt/btrfs/src
+    # Create base directories
+    mkdir -p /srv/backups
 
     # Set ownership
-    chown -R testuser:testuser /data
-    chown -R testuser:testuser /mnt/btrfs
+    chown -R testuser:testuser /srv/backups
+    chown -R testuser:testuser /srv/btrfs-backups
 fi
 
 # Generate SSH host keys if not present

@@ -1,4 +1,4 @@
-"""Integration tests: remote-to-local sync (Docker)."""
+"""Integration tests: remote-to-remote sync, same server (Docker)."""
 
 from __future__ import annotations
 
@@ -14,38 +14,27 @@ from nbkp.config import (
     resolve_all_endpoints,
 )
 from nbkp.sync.rsync import run_rsync
+from nbkp.testkit.gen.fs import create_seed_markers
 
 from .conftest import ssh_exec
 
 pytestmark = pytest.mark.integration
 
 
-class TestRemoteToLocal:
-    def test_sync_from_container(
+class TestRemoteToRemoteSameServer:
+    def test_sync_on_container(
         self,
         ssh_endpoint: SshEndpoint,
     ) -> None:
-        # Create test files on remote source
-        ssh_exec(
-            ssh_endpoint,
-            "echo 'hello from remote' > /data/src/remote-file.txt",
-        )
-
-        # Set up remote destination
-        ssh_exec(ssh_endpoint, "mkdir -p /data/dst/latest")
-
-        # Both volumes reference the same SSH endpoint.
-        # The same-server optimization SSHes in once and
-        # runs rsync with local paths.
         src_vol = RemoteVolume(
             slug="src-remote",
             ssh_endpoint="test-server",
-            path="/data/src",
+            path="/srv/backups/src",
         )
         dst_vol = RemoteVolume(
             slug="dst-remote",
             ssh_endpoint="test-server",
-            path="/data/dst",
+            path="/srv/backups/dst",
         )
         sync = SyncConfig(
             slug="test-sync",
@@ -58,6 +47,17 @@ class TestRemoteToLocal:
             syncs={"test-sync": sync},
         )
 
+        def _run_remote(cmd: str) -> None:
+            ssh_exec(ssh_endpoint, cmd)
+
+        create_seed_markers(config, remote_exec=_run_remote)
+
+        # Create test file on remote source
+        ssh_exec(
+            ssh_endpoint,
+            ("echo 'hello from remote'" " > /srv/backups/src/remote-file.txt"),
+        )
+
         resolved = resolve_all_endpoints(config)
         result = run_rsync(
             sync,
@@ -65,8 +65,9 @@ class TestRemoteToLocal:
             resolved_endpoints=resolved,
         )
         assert result.returncode == 0
+
         out = ssh_exec(
             ssh_endpoint,
-            "cat /data/dst/latest/remote-file.txt",
+            "cat /srv/backups/dst/latest/remote-file.txt",
         )
         assert out.stdout.strip() == "hello from remote"

@@ -28,17 +28,13 @@ from nbkp.sync.hardlinks import (
     update_latest_symlink,
 )
 from nbkp.sync.rsync import run_rsync
+from nbkp.testkit.gen.fs import create_seed_markers
 
 from .conftest import ssh_exec
 
 pytestmark = pytest.mark.integration
 
-_HL_PATH = "/data/hl"
-
-
-def _setup_hardlink_dest(ssh_endpoint: SshEndpoint) -> None:
-    """Create the snapshots directory for hard-link tests."""
-    ssh_exec(ssh_endpoint, f"mkdir -p {_HL_PATH}/snapshots")
+_HL_PATH = "/srv/backups"
 
 
 def _make_hl_config(
@@ -47,6 +43,7 @@ def _make_hl_config(
     ssh_endpoint: SshEndpoint,
     max_snapshots: int | None = 5,
 ) -> tuple[SyncConfig, Config, ResolvedEndpoints]:
+    """Build hard-link config and create seed markers."""
     src_vol = LocalVolume(slug="src", path=src_path)
     sync = SyncConfig(
         slug="test-sync",
@@ -66,6 +63,12 @@ def _make_hl_config(
         },
         syncs={"test-sync": sync},
     )
+
+    def _run_remote(cmd: str) -> None:
+        ssh_exec(ssh_endpoint, cmd)
+
+    create_seed_markers(config, remote_exec=_run_remote)
+
     resolved = resolve_all_endpoints(config)
     return sync, config, resolved
 
@@ -107,8 +110,6 @@ class TestHardLinkSnapshots:
         ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
-        _setup_hardlink_dest(ssh_endpoint)
-
         src = tmp_path / "src"
         src.mkdir()
         (src / "data.txt").write_text("snapshot me")
@@ -130,8 +131,6 @@ class TestHardLinkSnapshots:
         ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
-        _setup_hardlink_dest(ssh_endpoint)
-
         src = tmp_path / "src"
         src.mkdir()
         (src / "hello.txt").write_text("hello hard-link")
@@ -166,8 +165,6 @@ class TestHardLinkSnapshots:
         ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
-        _setup_hardlink_dest(ssh_endpoint)
-
         src = tmp_path / "src"
         src.mkdir()
         (src / "data.txt").write_text("symlink test")
@@ -196,8 +193,6 @@ class TestHardLinkSnapshots:
         ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
-        _setup_hardlink_dest(ssh_endpoint)
-
         src = tmp_path / "src"
         src.mkdir()
         (src / "file.txt").write_text("v1")
@@ -247,8 +242,6 @@ class TestHardLinkSnapshots:
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
         """Unchanged files should be hard-linked between snapshots."""
-        _setup_hardlink_dest(ssh_endpoint)
-
         src = tmp_path / "src"
         src.mkdir()
         (src / "unchanged.txt").write_text("same content")
@@ -281,11 +274,11 @@ class TestHardLinkSnapshots:
         # Verify the unchanged file shares inode (hard-linked)
         inode1 = ssh_exec(
             ssh_endpoint,
-            f"stat -c %i {_HL_PATH}/snapshots/{snap1}/unchanged.txt",
+            f"stat -c %i" f" {_HL_PATH}/snapshots/{snap1}/unchanged.txt",
         )
         inode2 = ssh_exec(
             ssh_endpoint,
-            f"stat -c %i {_HL_PATH}/snapshots/{snap2}/unchanged.txt",
+            f"stat -c %i" f" {_HL_PATH}/snapshots/{snap2}/unchanged.txt",
         )
         assert inode1.stdout.strip() == inode2.stdout.strip()
 
@@ -302,8 +295,6 @@ class TestHardLinkSnapshots:
         ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
-        _setup_hardlink_dest(ssh_endpoint)
-
         src = tmp_path / "src"
         src.mkdir()
         (src / "data.txt").write_text("dry run")
@@ -338,8 +329,6 @@ class TestHardLinkOrphanCleanup:
         ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
-        _setup_hardlink_dest(ssh_endpoint)
-
         src = tmp_path / "src"
         src.mkdir()
         (src / "data.txt").write_text("orphan test")
@@ -355,13 +344,13 @@ class TestHardLinkOrphanCleanup:
         # latest but don't update the symlink
         ssh_exec(
             ssh_endpoint,
-            f"mkdir -p {_HL_PATH}/snapshots/9999-99-99T00:00:00.000Z",
+            ("mkdir -p" f" {_HL_PATH}/snapshots/9999-99-99T00:00:00.000Z"),
         )
 
         # Verify orphan exists
         check = ssh_exec(
             ssh_endpoint,
-            f"test -d {_HL_PATH}/snapshots/9999-99-99T00:00:00.000Z",
+            ("test -d" f" {_HL_PATH}/snapshots/9999-99-99T00:00:00.000Z"),
         )
         assert check.returncode == 0
 
@@ -375,7 +364,7 @@ class TestHardLinkOrphanCleanup:
         # Verify orphan is gone
         check = ssh_exec(
             ssh_endpoint,
-            f"test -d {_HL_PATH}/snapshots/9999-99-99T00:00:00.000Z",
+            ("test -d" f" {_HL_PATH}/snapshots/9999-99-99T00:00:00.000Z"),
             check=False,
         )
         assert check.returncode != 0
@@ -393,8 +382,6 @@ class TestHardLinkOrphanCleanup:
         ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
-        _setup_hardlink_dest(ssh_endpoint)
-
         src = tmp_path / "src"
         src.mkdir()
 
@@ -445,8 +432,6 @@ class TestHardLinkPrune:
         ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
-        _setup_hardlink_dest(ssh_endpoint)
-
         src = tmp_path / "src"
         src.mkdir()
         (src / "data.txt").write_text("prune test")
@@ -470,8 +455,6 @@ class TestHardLinkPrune:
         ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
-        _setup_hardlink_dest(ssh_endpoint)
-
         src = tmp_path / "src"
         src.mkdir()
         (src / "data.txt").write_text("never delete latest")
@@ -498,8 +481,6 @@ class TestHardLinkPrune:
         ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
-        _setup_hardlink_dest(ssh_endpoint)
-
         src = tmp_path / "src"
         src.mkdir()
         (src / "data.txt").write_text("dry run prune")
@@ -524,8 +505,6 @@ class TestHardLinkPrune:
         ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
-        _setup_hardlink_dest(ssh_endpoint)
-
         src = tmp_path / "src"
         src.mkdir()
         (src / "data.txt").write_text("noop prune")

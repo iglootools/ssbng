@@ -103,7 +103,7 @@ def docker_container(
         .with_exposed_ports(22)
         .with_volume_mapping(
             str(public_key),
-            "/tmp/authorized_keys",
+            "/mnt/ssh-authorized-keys",
             "ro",
         )
         .with_kwargs(privileged=True)
@@ -157,7 +157,7 @@ def bastion_container(
         .with_exposed_ports(22)
         .with_volume_mapping(
             str(public_key),
-            "/tmp/authorized_keys",
+            "/mnt/ssh-authorized-keys",
             "ro",
         )
         .with_env("NBKP_BASTION_ONLY", "1")
@@ -218,32 +218,35 @@ def ssh_endpoint(
 
 @pytest.fixture(scope="session")
 def remote_volume() -> RemoteVolume:
-    """RemoteVolume pointing at /data on the container."""
+    """RemoteVolume pointing at /srv/backups on the container."""
     return RemoteVolume(
         slug="test-remote",
         ssh_endpoint="test-server",
-        path="/data",
+        path="/srv/backups",
     )
 
 
 @pytest.fixture(scope="session")
 def remote_btrfs_volume() -> RemoteVolume:
-    """RemoteVolume pointing at /mnt/btrfs on the container."""
+    """RemoteVolume pointing at /srv/btrfs-backups."""
     return RemoteVolume(
         slug="test-btrfs",
         ssh_endpoint="test-server",
-        path="/mnt/btrfs",
+        path="/srv/btrfs-backups",
     )
 
 
 @pytest.fixture(scope="session")
 def remote_hardlink_volume() -> RemoteVolume:
-    """RemoteVolume pointing at /data/hl on the container."""
+    """RemoteVolume pointing at /srv/backups."""
     return RemoteVolume(
         slug="test-hl",
         ssh_endpoint="test-server",
-        path="/data/hl",
+        path="/srv/backups",
     )
+
+
+# ── Helpers ─────────────────────────────────────────────────────
 
 
 def create_markers(
@@ -259,11 +262,38 @@ def create_markers(
         ), f"Failed to create marker {marker}: {result.stderr}"
 
 
+def prepare_btrfs_snapshot_based_backup_dst(
+    server: SshEndpoint,
+    path: str,
+) -> None:
+    """Create btrfs destination structure.
+
+    Creates the ``latest`` btrfs subvolume and the ``snapshots``
+    directory under *path*.
+    """
+    ssh_exec(server, f"btrfs subvolume create {path}/latest")
+    ssh_exec(server, f"mkdir -p {path}/snapshots")
+
+
+def prepare_hardlinks_snapshot_based_backup_dst(
+    server: SshEndpoint,
+    path: str,
+) -> None:
+    """Create hard-link destination structure.
+
+    Creates the ``snapshots`` directory under *path*.
+    """
+    ssh_exec(server, f"mkdir -p {path}/snapshots")
+
+
+# ── Cleanup ─────────────────────────────────────────────────────
+
+
 @pytest.fixture(autouse=True)
 def _cleanup_remote(
     request: pytest.FixtureRequest,
 ) -> Generator[None, None, None]:
-    """Clean up /data and /mnt/btrfs paths between tests."""
+    """Clean up /srv/backups and /srv/btrfs-backups between tests."""
     yield
 
     # Only clean up if ssh_endpoint was used by this test
@@ -275,26 +305,15 @@ def _cleanup_remote(
     def run(cmd: str) -> None:
         ssh_exec(server, cmd, check=False)
 
-    # Clean /data paths
-    run("rm -rf /data/src/* /data/latest/*")
-    run("find /data -name '.nbkp-*' -delete")
-    # Recreate latest in case it was removed
-    run("mkdir -p /data/latest")
-    # Remove any subdir structures created by tests
-    run(
-        "find /data -mindepth 1 -maxdepth 1"
-        " ! -name src ! -name latest -exec rm -rf {} +"
-    )
-
-    # Clean hard-link test paths
-    run("rm -rf /data/hl/snapshots/* /data/hl/latest")
-    run("find /data/hl -name '.nbkp-*' -delete 2>/dev/null || true")
+    # Clean /srv/backups (glob * skips dotfiles, so also remove markers)
+    run("rm -rf /srv/backups/*")
+    run("find /srv/backups -name '.nbkp-*' -delete")
 
     # Clean btrfs paths — delete snapshot subvolumes first,
     # then latest
     snapshots_result = ssh_exec(
         server,
-        "ls /mnt/btrfs/snapshots 2>/dev/null || true",
+        "ls /srv/btrfs-backups/snapshots 2>/dev/null || true",
         check=False,
     )
     if snapshots_result.stdout.strip():
@@ -303,18 +322,25 @@ def _cleanup_remote(
             if snap:
                 run(
                     "btrfs property set"
-                    f" /mnt/btrfs/snapshots/{snap} ro false"
-                    " 2>/dev/null || true"
+                    f" /srv/btrfs-backups/snapshots/{snap}"
+                    " ro false 2>/dev/null || true"
                 )
                 run(
                     "btrfs subvolume delete"
-                    f" /mnt/btrfs/snapshots/{snap}"
+                    f" /srv/btrfs-backups/snapshots/{snap}"
                     " 2>/dev/null || true"
                 )
 
     # Delete latest subvolume if it exists
-    run("btrfs property set" " /mnt/btrfs/latest ro false 2>/dev/null || true")
-    run("btrfs subvolume delete" " /mnt/btrfs/latest 2>/dev/null || true")
-    run("rm -rf /mnt/btrfs/snapshots 2>/dev/null || true")
-    run("rm -rf /mnt/btrfs/src/*")
-    run("find /mnt/btrfs -name '.nbkp-*' -delete")
+    run(
+        "btrfs property set"
+        " /srv/btrfs-backups/latest ro false"
+        " 2>/dev/null || true"
+    )
+    run(
+        "btrfs subvolume delete"
+        " /srv/btrfs-backups/latest"
+        " 2>/dev/null || true"
+    )
+    run("rm -rf /srv/btrfs-backups/snapshots 2>/dev/null || true")
+    run("find /srv/btrfs-backups -name '.nbkp-*' -delete")

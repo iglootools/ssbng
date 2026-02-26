@@ -17,8 +17,9 @@ from nbkp.config import (
     resolve_all_endpoints,
 )
 from nbkp.sync.rsync import run_rsync
+from nbkp.testkit.gen.fs import create_seed_markers
 
-from .conftest import create_markers, ssh_exec
+from .conftest import ssh_exec
 
 pytestmark = pytest.mark.integration
 
@@ -31,9 +32,6 @@ class TestProxyJump:
         bastion_container: SshEndpoint,
         proxied_ssh_endpoint: SshEndpoint,
     ) -> None:
-        # Set up remote markers via direct connection
-        create_markers(ssh_endpoint, "/data", [".nbkp-vol", ".nbkp-dst"])
-
         # Create local source files
         src_dir = tmp_path / "src"
         src_dir.mkdir()
@@ -43,7 +41,7 @@ class TestProxyJump:
         dst_vol = RemoteVolume(
             slug="dst",
             ssh_endpoint="proxied-server",
-            path="/data",
+            path="/srv/backups",
         )
         sync = SyncConfig(
             slug="test-sync",
@@ -59,6 +57,11 @@ class TestProxyJump:
             syncs={"test-sync": sync},
         )
 
+        def _run_remote(cmd: str) -> None:
+            ssh_exec(ssh_endpoint, cmd)
+
+        create_seed_markers(config, remote_exec=_run_remote)
+
         resolved = resolve_all_endpoints(config)
         result = run_rsync(
             sync,
@@ -68,6 +71,6 @@ class TestProxyJump:
         assert result.returncode == 0
 
         # Verify file arrived via direct connection
-        check = ssh_exec(ssh_endpoint, "cat /data/latest/hello.txt")
+        check = ssh_exec(ssh_endpoint, "cat /srv/backups/latest/hello.txt")
         assert check.returncode == 0
         assert check.stdout.strip() == "via bastion"

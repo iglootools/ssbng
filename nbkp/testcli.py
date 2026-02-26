@@ -366,27 +366,27 @@ def seed(
         volumes["remote-backup"] = RemoteVolume(
             slug="remote-backup",
             ssh_endpoint="docker",
-            path="/data",
+            path="/srv/backups",
         )
         volumes["remote-btrfs"] = RemoteVolume(
             slug="remote-btrfs",
             ssh_endpoint="docker",
-            path="/mnt/btrfs",
+            path="/srv/btrfs-backups",
         )
         volumes["proxied-remote"] = RemoteVolume(
             slug="proxied-remote",
             ssh_endpoint="docker-via-bastion",
-            path="/data",
+            path="/srv/backups",
         )
         volumes["remote-src"] = RemoteVolume(
             slug="remote-src",
             ssh_endpoint="docker",
-            path="/data/src",
+            path="/srv/backups/src",
         )
         volumes["remote-dst"] = RemoteVolume(
             slug="remote-dst",
             ssh_endpoint="docker",
-            path="/data/dst",
+            path="/srv/backups/dst",
         )
         syncs["photos-to-remote"] = SyncConfig(
             slug="photos-to-remote",

@@ -17,8 +17,9 @@ from nbkp.config import (
     resolve_all_endpoints,
 )
 from nbkp.sync.rsync import run_rsync
+from nbkp.testkit.gen.fs import create_seed_markers
 
-from .conftest import create_markers, ssh_exec
+from .conftest import ssh_exec
 
 pytestmark = pytest.mark.integration
 
@@ -30,9 +31,6 @@ class TestLocalToRemote:
         ssh_endpoint: SshEndpoint,
         remote_volume: RemoteVolume,
     ) -> None:
-        # Create markers on remote
-        create_markers(ssh_endpoint, "/data", [".nbkp-vol", ".nbkp-dst"])
-
         # Create local source files
         src_dir = tmp_path / "src"
         src_dir.mkdir()
@@ -50,6 +48,11 @@ class TestLocalToRemote:
             syncs={"test-sync": sync},
         )
 
+        def _run_remote(cmd: str) -> None:
+            ssh_exec(ssh_endpoint, cmd)
+
+        create_seed_markers(config, remote_exec=_run_remote)
+
         resolved = resolve_all_endpoints(config)
         result = run_rsync(
             sync,
@@ -59,7 +62,10 @@ class TestLocalToRemote:
         assert result.returncode == 0
 
         # Verify file arrived on container
-        check = ssh_exec(ssh_endpoint, "cat /data/latest/hello.txt")
+        check = ssh_exec(
+            ssh_endpoint,
+            "cat /srv/backups/latest/hello.txt",
+        )
         assert check.returncode == 0
         assert check.stdout.strip() == "hello from local"
 
@@ -69,18 +75,6 @@ class TestLocalToRemote:
         ssh_endpoint: SshEndpoint,
         remote_volume: RemoteVolume,
     ) -> None:
-        # Create remote subdir structure and markers
-        ssh_exec(
-            ssh_endpoint,
-            "mkdir -p /data/photos-backup/latest",
-        )
-        create_markers(ssh_endpoint, "/data", [".nbkp-vol"])
-        create_markers(
-            ssh_endpoint,
-            "/data/photos-backup",
-            [".nbkp-dst"],
-        )
-
         # Create local source with subdir
         src_dir = tmp_path / "src" / "photos"
         src_dir.mkdir(parents=True)
@@ -100,6 +94,11 @@ class TestLocalToRemote:
             syncs={"test-sync": sync},
         )
 
+        def _run_remote(cmd: str) -> None:
+            ssh_exec(ssh_endpoint, cmd)
+
+        create_seed_markers(config, remote_exec=_run_remote)
+
         resolved = resolve_all_endpoints(config)
         result = run_rsync(
             sync,
@@ -110,7 +109,7 @@ class TestLocalToRemote:
 
         check = ssh_exec(
             ssh_endpoint,
-            "cat /data/photos-backup/latest/img.jpg",
+            "cat /srv/backups/photos-backup/latest/img.jpg",
         )
         assert check.returncode == 0
         assert check.stdout.strip() == "image-data"

@@ -26,19 +26,11 @@ from nbkp.config import (
     resolve_all_endpoints,
 )
 from nbkp.sync.rsync import run_rsync
+from nbkp.testkit.gen.fs import create_seed_markers
 
 from .conftest import ssh_exec
 
 pytestmark = pytest.mark.integration
-
-
-def _setup_btrfs_latest(ssh_endpoint: SshEndpoint) -> None:
-    """Create the 'latest' btrfs subvolume and snapshots dir."""
-    ssh_exec(
-        ssh_endpoint,
-        "btrfs subvolume create /mnt/btrfs/latest",
-    )
-    ssh_exec(ssh_endpoint, "mkdir -p /mnt/btrfs/snapshots")
 
 
 def _make_btrfs_config(
@@ -46,6 +38,7 @@ def _make_btrfs_config(
     remote_btrfs_volume: RemoteVolume,
     ssh_endpoint: SshEndpoint,
 ) -> tuple[SyncConfig, Config, ResolvedEndpoints]:
+    """Build btrfs config and create seed markers."""
     src_vol = LocalVolume(slug="src", path=src_path)
     sync = SyncConfig(
         slug="test-sync",
@@ -63,6 +56,12 @@ def _make_btrfs_config(
         },
         syncs={"test-sync": sync},
     )
+
+    def _run_remote(cmd: str) -> None:
+        ssh_exec(ssh_endpoint, cmd)
+
+    create_seed_markers(config, remote_exec=_run_remote)
+
     resolved = resolve_all_endpoints(config)
     return sync, config, resolved
 
@@ -74,8 +73,6 @@ class TestBtrfsSnapshots:
         ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(ssh_endpoint)
-
         src = tmp_path / "src"
         src.mkdir()
         (src / "data.txt").write_text("snapshot me")
@@ -103,8 +100,6 @@ class TestBtrfsSnapshots:
         ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(ssh_endpoint)
-
         src = tmp_path / "src"
         src.mkdir()
         (src / "data.txt").write_text("readonly test")
@@ -131,8 +126,6 @@ class TestBtrfsSnapshots:
         ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(ssh_endpoint)
-
         src = tmp_path / "src"
         src.mkdir()
         (src / "file.txt").write_text("v1")
@@ -178,12 +171,10 @@ class TestBtrfsSnapshots:
         ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(ssh_endpoint)
-
         # Count existing snapshots before dry run
         before = ssh_exec(
             ssh_endpoint,
-            "ls /mnt/btrfs/snapshots 2>/dev/null || true",
+            "ls /srv/btrfs-backups/snapshots 2>/dev/null || true",
         )
         count_before = len(
             [s for s in before.stdout.strip().split("\n") if s.strip()]
@@ -209,7 +200,7 @@ class TestBtrfsSnapshots:
         # Verify no new snapshot was created
         after = ssh_exec(
             ssh_endpoint,
-            "ls /mnt/btrfs/snapshots 2>/dev/null || true",
+            "ls /srv/btrfs-backups/snapshots 2>/dev/null || true",
         )
         count_after = len(
             [s for s in after.stdout.strip().split("\n") if s.strip()]
@@ -243,8 +234,6 @@ class TestPruneSnapshots:
         ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(ssh_endpoint)
-
         src = tmp_path / "src"
         src.mkdir()
         (src / "data.txt").write_text("prune test")
@@ -279,8 +268,6 @@ class TestPruneSnapshots:
         ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(ssh_endpoint)
-
         src = tmp_path / "src"
         src.mkdir()
         (src / "data.txt").write_text("dry run prune")
@@ -316,8 +303,6 @@ class TestPruneSnapshots:
         ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        _setup_btrfs_latest(ssh_endpoint)
-
         src = tmp_path / "src"
         src.mkdir()
         (src / "data.txt").write_text("noop prune")

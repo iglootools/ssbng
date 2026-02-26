@@ -24,6 +24,7 @@ from nbkp.config import (
     SyncEndpoint,
     resolve_all_endpoints,
 )
+from nbkp.testkit.gen.fs import create_seed_markers
 
 from .conftest import create_markers, ssh_exec
 
@@ -62,7 +63,7 @@ class TestRemoteVolumeCheck:
         ssh_endpoint: SshEndpoint,
         remote_volume: RemoteVolume,
     ) -> None:
-        create_markers(ssh_endpoint, "/data", [".nbkp-vol"])
+        create_markers(ssh_endpoint, "/srv/backups", [".nbkp-vol"])
         config = Config(
             ssh_endpoints={"test-server": ssh_endpoint},
             volumes={"test-remote": remote_volume},
@@ -93,19 +94,7 @@ class TestSyncCheck:
         ssh_endpoint: SshEndpoint,
         remote_volume: RemoteVolume,
     ) -> None:
-        # Set up local source volume
         src_path = tmp_path / "src"
-        src_path.mkdir()
-        (src_path / ".nbkp-vol").touch()
-        (src_path / ".nbkp-src").touch()
-
-        # Set up remote destination markers
-        create_markers(
-            ssh_endpoint,
-            "/data",
-            [".nbkp-vol", ".nbkp-dst"],
-        )
-
         src_vol = LocalVolume(slug="src", path=str(src_path))
         sync = SyncConfig(
             slug="test-sync",
@@ -117,6 +106,11 @@ class TestSyncCheck:
             volumes={"src": src_vol, "dst": remote_volume},
             syncs={"test-sync": sync},
         )
+
+        def _run_remote(cmd: str) -> None:
+            ssh_exec(ssh_endpoint, cmd)
+
+        create_seed_markers(config, remote_exec=_run_remote)
 
         resolved = resolve_all_endpoints(config)
         src_status = check_volume(src_vol, resolved)
@@ -170,7 +164,7 @@ class TestBtrfsSubvolumeCheck:
     ) -> None:
         ssh_exec(
             ssh_endpoint,
-            "btrfs subvolume create /mnt/btrfs/test-subvol",
+            "btrfs subvolume create" " /srv/btrfs-backups/test-subvol",
         )
         config = Config(
             ssh_endpoints={"test-server": ssh_endpoint},
@@ -189,7 +183,7 @@ class TestBtrfsSubvolumeCheck:
         # Cleanup
         ssh_exec(
             ssh_endpoint,
-            "btrfs subvolume delete /mnt/btrfs/test-subvol",
+            "btrfs subvolume delete" " /srv/btrfs-backups/test-subvol",
         )
 
     def test_regular_dir_not_subvolume(
@@ -199,7 +193,7 @@ class TestBtrfsSubvolumeCheck:
     ) -> None:
         ssh_exec(
             ssh_endpoint,
-            "mkdir -p /mnt/btrfs/regular-dir",
+            "mkdir -p /srv/btrfs-backups/regular-dir",
         )
         config = Config(
             ssh_endpoints={"test-server": ssh_endpoint},
@@ -218,7 +212,7 @@ class TestBtrfsSubvolumeCheck:
         # Cleanup
         ssh_exec(
             ssh_endpoint,
-            "rm -rf /mnt/btrfs/regular-dir",
+            "rm -rf /srv/btrfs-backups/regular-dir",
         )
 
 
@@ -232,16 +226,16 @@ class TestSyncCheckBtrfs:
         # Create a regular directory (not a subvolume)
         ssh_exec(
             ssh_endpoint,
-            "mkdir -p /mnt/btrfs/not-a-subvol",
+            "mkdir -p /srv/btrfs-backups/not-a-subvol",
         )
         create_markers(
             ssh_endpoint,
-            "/mnt/btrfs",
+            "/srv/btrfs-backups",
             [".nbkp-vol"],
         )
         create_markers(
             ssh_endpoint,
-            "/mnt/btrfs/not-a-subvol",
+            "/srv/btrfs-backups/not-a-subvol",
             [".nbkp-dst"],
         )
 
@@ -289,5 +283,5 @@ class TestSyncCheckBtrfs:
         # Cleanup
         ssh_exec(
             ssh_endpoint,
-            "rm -rf /mnt/btrfs/not-a-subvol",
+            "rm -rf /srv/btrfs-backups/not-a-subvol",
         )
