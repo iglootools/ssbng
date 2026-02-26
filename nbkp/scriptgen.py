@@ -1110,8 +1110,11 @@ def _build_script_context(
         for slug, vol in config.volumes.items()
     ]
 
+    from .sync.ordering import sort_syncs
+
     syncs: list[_SyncContext] = []
-    for slug, sync in config.syncs.items():
+    for slug in sort_syncs(config.syncs):
+        sync = config.syncs[slug]
         ctx = _build_sync_context(
             slug, sync, config, vol_paths, resolved_endpoints
         )

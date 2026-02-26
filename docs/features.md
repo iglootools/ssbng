@@ -2,6 +2,8 @@
 
 TODO
 
+- compute dependencies between syncs when sync endpoints are shared between writers and readers
+
 ## Commands
 
 - run (with support for dry run)

@@ -65,13 +65,18 @@ def run_all_syncs(
 
     results: list[SyncResult] = []
 
+    from .ordering import sort_syncs
+
     selected = (
         {s: st for s, st in sync_statuses.items() if s in only_syncs}
         if only_syncs
         else sync_statuses
     )
 
-    for slug, status in selected.items():
+    ordered_slugs = sort_syncs({s: config.syncs[s] for s in selected})
+
+    for slug in ordered_slugs:
+        status = selected[slug]
         if on_sync_start:
             on_sync_start(slug)
 
