@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import enum
+import shlex
 
 from pydantic import ValidationError
 from rich.console import Console, Group, RenderableType
@@ -24,6 +25,7 @@ from .config import (
     SyncEndpoint,
 )
 from .sync import PruneResult, SyncResult
+from .sync.rsync import build_rsync_command
 from .check import SyncReason, SyncStatus, VolumeReason, VolumeStatus
 from .remote.ssh import format_proxy_jump_chain
 
@@ -164,6 +166,23 @@ def build_check_sections(
         )
 
     sections.append(sync_table)
+
+    active_syncs = [ss for ss in sync_statuses.values() if ss.active]
+    if active_syncs:
+        sections.append(Text(""))
+        cmd_table = Table(title="Rsync Commands:")
+        cmd_table.add_column("Sync", style="bold")
+        cmd_table.add_column("Command")
+
+        for ss in active_syncs:
+            cmd = build_rsync_command(
+                ss.config,
+                config,
+                resolved_endpoints=resolved_endpoints,
+            )
+            cmd_table.add_row(ss.slug, shlex.join(cmd))
+
+        sections.append(cmd_table)
 
     return sections
 
