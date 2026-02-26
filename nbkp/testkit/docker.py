@@ -70,6 +70,12 @@ def create_docker_network() -> str:
     client = dockerlib.from_env()
     try:
         old = client.networks.get(_NETWORK_NAME)
+        old.reload()
+        for cid in list(old.attrs.get("Containers") or {}):
+            try:
+                old.disconnect(cid, force=True)
+            except dockerlib.errors.APIError:
+                pass
         old.remove()
     except dockerlib.errors.NotFound:
         pass
