@@ -35,6 +35,7 @@ _DEFAULT_RSYNC_OPTIONS: list[str] = [
     "-a",
     "--delete",
     "--delete-excluded",
+    "--partial-dir=.rsync-partial",
     "--safe-links",
 ]
 

@@ -154,7 +154,7 @@ To be considered active, a remote volume must have a `.nbkp-vol` file in the roo
 
 ### Rsync Options
 
-By default, every sync uses the following rsync flags: `-a --delete --delete-excluded --safe-links`. The `-v` flag is not included by default; pass `-v`, `-vv`, or `-vvv` to the `run` command to increase rsync verbosity. Two optional fields let you customise the flags per sync:
+By default, every sync uses the following rsync flags: `-a --delete --delete-excluded --partial-dir=.rsync-partial --safe-links`. Two optional fields let you customise the flags per sync:
 
 **`rsync-options`** — replaces the default flags entirely:
 

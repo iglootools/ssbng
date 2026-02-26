@@ -38,6 +38,7 @@ class TestBuildRsyncCommandLocalToLocal:
             "-a",
             "--delete",
             "--delete-excluded",
+            "--partial-dir=.rsync-partial",
             "--safe-links",
             "/mnt/src/photos/",
             "/mnt/dst/backup/latest/",
@@ -113,6 +114,7 @@ class TestBuildRsyncCommandLocalToRemote:
             "-a",
             "--delete",
             "--delete-excluded",
+            "--partial-dir=.rsync-partial",
             "--safe-links",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
@@ -153,6 +155,7 @@ class TestBuildRsyncCommandRemoteToLocal:
             "-a",
             "--delete",
             "--delete-excluded",
+            "--partial-dir=.rsync-partial",
             "--safe-links",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes",
@@ -274,6 +277,7 @@ class TestBuildRsyncCommandFilters:
             "-a",
             "--delete",
             "--delete-excluded",
+            "--partial-dir=.rsync-partial",
             "--safe-links",
             "--filter=+ *.jpg",
             "--filter=- *.tmp",
@@ -301,6 +305,7 @@ class TestBuildRsyncCommandFilters:
             "-a",
             "--delete",
             "--delete-excluded",
+            "--partial-dir=.rsync-partial",
             "--safe-links",
             "--filter=merge /etc/nbkp/filters.rules",
             "/mnt/src/",
@@ -328,6 +333,7 @@ class TestBuildRsyncCommandFilters:
             "-a",
             "--delete",
             "--delete-excluded",
+            "--partial-dir=.rsync-partial",
             "--safe-links",
             "--filter=+ *.jpg",
             "--filter=merge /etc/nbkp/filters.rules",
@@ -431,6 +437,7 @@ class TestBuildRsyncCommandOptions:
             "-a",
             "--delete",
             "--delete-excluded",
+            "--partial-dir=.rsync-partial",
             "--safe-links",
             "--compress",
             "/mnt/src/",
@@ -529,7 +536,9 @@ class TestBuildRsyncCommandOptions:
         inner = cmd[-1]
         assert "--compress" in inner
         assert inner.startswith(
-            "rsync -a --delete --delete-excluded --safe-links" " --compress"
+            "rsync -a --delete --delete-excluded"
+            " --partial-dir=.rsync-partial --safe-links"
+            " --compress"
         )
 
 
@@ -584,6 +593,7 @@ class TestBuildRsyncCommandProxyJump:
             "-a",
             "--delete",
             "--delete-excluded",
+            "--partial-dir=.rsync-partial",
             "--safe-links",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
@@ -639,6 +649,7 @@ class TestBuildRsyncCommandProxyJump:
             "-a",
             "--delete",
             "--delete-excluded",
+            "--partial-dir=.rsync-partial",
             "--safe-links",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes" f" -o {quoted}",
@@ -768,6 +779,7 @@ class TestBuildRsyncCommandMultiHopProxy:
             "-a",
             "--delete",
             "--delete-excluded",
+            "--partial-dir=.rsync-partial",
             "--safe-links",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
@@ -867,6 +879,7 @@ class TestBuildRsyncCommandSpacesInPaths:
             "-a",
             "--delete",
             "--delete-excluded",
+            "--partial-dir=.rsync-partial",
             "--safe-links",
             "/mnt/my src/my photos/",
             "/mnt/my dst/my backup/latest/",
