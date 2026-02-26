@@ -378,6 +378,16 @@ def seed(
             ssh_endpoint="docker-via-bastion",
             path="/data",
         )
+        volumes["remote-src"] = RemoteVolume(
+            slug="remote-src",
+            ssh_endpoint="docker",
+            path="/data/src",
+        )
+        volumes["remote-dst"] = RemoteVolume(
+            slug="remote-dst",
+            ssh_endpoint="docker",
+            path="/data/dst",
+        )
         syncs["photos-to-remote"] = SyncConfig(
             slug="photos-to-remote",
             source=SyncEndpoint(volume="src-data", subdir="photos"),
@@ -402,6 +412,13 @@ def seed(
                 volume="proxied-remote",
             ),
         )
+        syncs["remote-to-local"] = SyncConfig(
+            slug="remote-to-local",
+            source=SyncEndpoint(volume="remote-src"),
+            destination=DestinationSyncEndpoint(
+                volume="remote-dst",
+            ),
+        )
 
     config = Config(
         ssh_endpoints=ssh_endpoints,
@@ -419,9 +436,14 @@ def seed(
 
         with _console.status("Setting up volumes..."):
             create_seed_markers(config, remote_exec=_run_remote)
+        create_seed_data(
+            config,
+            big_file_size_mb=big_file_size,
+            remote_exec=_run_remote,
+        )
     else:
         create_seed_markers(config)
-    create_seed_data(config, big_file_size_mb=big_file_size)
+        create_seed_data(config, big_file_size_mb=big_file_size)
 
     config_path = tmp / "config.yaml"
     config_path.write_text(

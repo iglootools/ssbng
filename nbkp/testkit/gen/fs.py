@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 from collections.abc import Callable
 from pathlib import Path
 
@@ -125,30 +126,51 @@ def _create_dest_markers(
 def create_seed_data(
     config: Config,
     big_file_size_mb: int = 0,
+    remote_exec: Callable[[str], None] | None = None,
 ) -> None:
-    """Generate sample files in local source volumes.
+    """Generate sample files in source volumes.
 
     Creates a handful of small files in each unique source
     path.  When *big_file_size_mb* > 0, an additional large
     zeroed file is written to slow down syncs for manual
     testing.
+
+    For remote source volumes, uses *remote_exec(command)*
+    to create files on the remote host.
     """
     size_bytes = big_file_size_mb * 1024 * 1024
     seen: set[str] = set()
 
     for sync in config.syncs.values():
         vol = config.volumes[sync.source.volume]
-        if not isinstance(vol, LocalVolume):
-            continue
-        base = Path(vol.path)
-        path = base / sync.source.subdir if sync.source.subdir else base
-        key = str(path)
-        if key in seen:
-            continue
-        seen.add(key)
+        match vol:
+            case LocalVolume():
+                base = Path(vol.path)
+                path = (
+                    base / sync.source.subdir if sync.source.subdir else base
+                )
+                key = str(path)
+                if key in seen:
+                    continue
+                seen.add(key)
 
-        path.mkdir(parents=True, exist_ok=True)
-        for name, content in _SAMPLE_FILES:
-            (path / name).write_text(content)
-        if big_file_size_mb:
-            _write_zeroed_file(path / "large-file.bin", size_bytes)
+                path.mkdir(parents=True, exist_ok=True)
+                for name, content in _SAMPLE_FILES:
+                    (path / name).write_text(content)
+                if big_file_size_mb:
+                    _write_zeroed_file(path / "large-file.bin", size_bytes)
+            case RemoteVolume():
+                if remote_exec is None:
+                    continue
+                rp = vol.path
+                if sync.source.subdir:
+                    rp = f"{rp}/{sync.source.subdir}"
+                if rp in seen:
+                    continue
+                seen.add(rp)
+
+                remote_exec(f"mkdir -p {rp}")
+                for name, content in _SAMPLE_FILES:
+                    remote_exec(
+                        f"printf %s {shlex.quote(content)}" f" > {rp}/{name}"
+                    )
