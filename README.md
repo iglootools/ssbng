@@ -41,7 +41,7 @@ Full feature list: [docs/features.md](https://github.com/iglootools/nbkp/blob/ma
 No custom storage format, protocol, or encryption — just proven tools composed together:
 - **rsync + SSH** — handles the actual file transfer, locally or remotely
 - **Plain directories** — files are stored as-is; restoring is just a copy
-- **Btrfs snapshot (optional)s** — space-efficient point-in-time copies via copy-on-write, with automatic pruning. Each snapshot is a read-only subvolume exposing a plain directory tree
+- **Btrfs snapshots (optional)** — space-efficient point-in-time copies via copy-on-write, with automatic pruning. Each snapshot is a read-only subvolume exposing a plain directory tree
 - **cryptsetup (optional)** — full-volume encryption for backup destinations
 
 **Nomad backup metaphor**

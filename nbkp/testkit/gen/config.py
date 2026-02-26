@@ -39,7 +39,7 @@ def nas_server() -> SshEndpoint:
         user="backup",
         key="~/.ssh/nas_ed25519",
         proxy_jumps=["bastion", "bastion2"],
-        location="home",
+        locations=["home", "travel"],
     )
 
 

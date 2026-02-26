@@ -103,7 +103,7 @@ def build_check_sections(
         ep_table.add_column("User")
         ep_table.add_column("Key")
         ep_table.add_column("Proxy Jump")
-        ep_table.add_column("Location")
+        ep_table.add_column("Locations")
 
         for server in config.ssh_endpoints.values():
             ep_table.add_row(
@@ -113,7 +113,7 @@ def build_check_sections(
                 server.user or "",
                 server.key or "",
                 ", ".join(server.proxy_jump_chain) or "",
-                server.location or "",
+                ", ".join(server.location_list),
             )
 
         sections.append(ep_table)
@@ -691,7 +691,7 @@ def print_human_config(
         server_table.add_column("User")
         server_table.add_column("Key")
         server_table.add_column("Proxy Jump")
-        server_table.add_column("Location")
+        server_table.add_column("Locations")
 
         for server in config.ssh_endpoints.values():
             server_table.add_row(
@@ -701,7 +701,7 @@ def print_human_config(
                 server.user or "",
                 server.key or "",
                 ", ".join(server.proxy_jump_chain) or "",
-                server.location or "",
+                ", ".join(server.location_list),
             )
 
         console.print(server_table)

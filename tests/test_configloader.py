@@ -12,6 +12,7 @@ from nbkp.config import (
     Config,
     ConfigError,
     DestinationSyncEndpoint,
+    EndpointFilter,
     HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
@@ -750,3 +751,148 @@ class TestLoadConfig:
             hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
         )
         assert ep.snapshot_mode == "hard-link"
+
+    def test_location_and_locations_mutual_exclusivity(
+        self, tmp_path: Path
+    ) -> None:
+        p = tmp_path / "exclusive_loc.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "ssh-endpoints": {
+                        "server": {
+                            "host": "server.example.com",
+                            "location": "home",
+                            "locations": ["home", "travel"],
+                        },
+                    },
+                }
+            )
+        )
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        cause = excinfo.value.__cause__
+        assert cause is not None
+        assert "mutually exclusive" in str(cause)
+
+    def test_location_list_property(self) -> None:
+        # Single location
+        ep_single = SshEndpoint(
+            slug="single",
+            host="host.example.com",
+            location="home",
+        )
+        assert ep_single.location_list == ["home"]
+
+        # List locations
+        ep_list = SshEndpoint(
+            slug="multi",
+            host="host.example.com",
+            locations=["home", "travel"],
+        )
+        assert ep_list.location_list == ["home", "travel"]
+
+        # No location
+        ep_none = SshEndpoint(
+            slug="no-loc",
+            host="host.example.com",
+        )
+        assert ep_none.location_list == []
+
+    def test_extends_locations_overrides_parent_location(
+        self, tmp_path: Path
+    ) -> None:
+        p = tmp_path / "extends_locs.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "ssh-endpoints": {
+                        "parent": {
+                            "host": "parent.internal",
+                            "location": "home",
+                        },
+                        "child": {
+                            "host": "child.internal",
+                            "extends": "parent",
+                            "locations": ["home", "travel"],
+                        },
+                    },
+                }
+            )
+        )
+        cfg = load_config(str(p))
+        assert cfg.ssh_endpoints["child"].location_list == [
+            "home",
+            "travel",
+        ]
+
+    def test_extends_location_overrides_parent_locations(
+        self, tmp_path: Path
+    ) -> None:
+        p = tmp_path / "extends_loc.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "ssh-endpoints": {
+                        "parent": {
+                            "host": "parent.internal",
+                            "locations": [
+                                "home",
+                                "travel",
+                            ],
+                        },
+                        "child": {
+                            "host": "child.internal",
+                            "extends": "parent",
+                            "location": "office",
+                        },
+                    },
+                }
+            )
+        )
+        cfg = load_config(str(p))
+        assert cfg.ssh_endpoints["child"].location_list == [
+            "office",
+        ]
+
+    def test_resolve_endpoint_location_filter_with_locations(
+        self,
+    ) -> None:
+        config = Config(
+            ssh_endpoints={
+                "home-server": SshEndpoint(
+                    slug="home-server",
+                    host="192.168.1.10",
+                    location="home",
+                ),
+                "multi-server": SshEndpoint(
+                    slug="multi-server",
+                    host="10.0.0.5",
+                    locations=["home", "travel"],
+                ),
+                "office-server": SshEndpoint(
+                    slug="office-server",
+                    host="10.1.0.5",
+                    location="office",
+                ),
+            },
+            volumes={
+                "remote": RemoteVolume(
+                    slug="remote",
+                    ssh_endpoint="home-server",
+                    ssh_endpoints=[
+                        "home-server",
+                        "multi-server",
+                        "office-server",
+                    ],
+                    path="/data",
+                ),
+            },
+            syncs={},
+        )
+        # Filter for "travel" should match multi-server
+        ef = EndpointFilter(locations=["travel"])
+        result = config.resolve_endpoint_for_volume(
+            config.volumes["remote"], ef  # type: ignore[arg-type]
+        )
+        assert result.slug == "multi-server"

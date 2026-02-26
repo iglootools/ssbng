@@ -107,6 +107,7 @@ class SshEndpoint(_BaseModel):
     proxy_jump: Optional[str] = None
     proxy_jumps: Optional[List[str]] = None
     location: Optional[str] = None
+    locations: Optional[List[str]] = None
     extends: Optional[str] = None
 
     @model_validator(mode="after")
@@ -117,6 +118,12 @@ class SshEndpoint(_BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def validate_location_exclusivity(self) -> SshEndpoint:
+        if self.location is not None and self.locations is not None:
+            raise ValueError("location and locations are mutually exclusive")
+        return self
+
     @property
     def proxy_jump_chain(self) -> list[str]:
         """Return the proxy-jump chain as a list of slugs."""
@@ -124,6 +131,16 @@ class SshEndpoint(_BaseModel):
             return list(self.proxy_jumps)
         elif self.proxy_jump is not None:
             return [self.proxy_jump]
+        else:
+            return []
+
+    @property
+    def location_list(self) -> list[str]:
+        """Return locations as a list."""
+        if self.locations is not None:
+            return list(self.locations)
+        elif self.location is not None:
+            return [self.location]
         else:
             return []
 
@@ -234,7 +251,7 @@ class EndpointFilter(_BaseModel):
     """Endpoint selection filter (not serialized)."""
 
     model_config = ConfigDict(frozen=True)
-    location: Optional[str] = None
+    locations: List[str] = Field(default_factory=list)
     network: Optional[Literal["private", "public"]] = None
 
 
@@ -290,6 +307,12 @@ class Config(_BaseModel):
             child_proxy_keys = proxy_keys & set(ep.keys())
             if child_proxy_keys:
                 for k in proxy_keys - child_proxy_keys:
+                    merged.pop(k, None)
+            # Same for location / locations
+            loc_keys = {"location", "locations"}
+            child_loc_keys = loc_keys & set(ep.keys())
+            if child_loc_keys:
+                for k in loc_keys - child_loc_keys:
                     merged.pop(k, None)
             resolved[slug] = merged
             return merged
@@ -381,11 +404,12 @@ class Config(_BaseModel):
             return self.ssh_endpoints[vol.ssh_endpoint]
 
         # Location filter
-        if ef.location is not None:
+        if ef.locations:
+            filter_locs = set(ef.locations)
             by_loc = [
                 slug
                 for slug in reachable
-                if self.ssh_endpoints[slug].location == ef.location
+                if filter_locs & set(self.ssh_endpoints[slug].location_list)
             ]
             if by_loc:
                 reachable = by_loc

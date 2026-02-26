@@ -84,12 +84,12 @@ def check(
             ),
         ),
     ] = False,
-    location: Annotated[
-        Optional[str],
+    locations: Annotated[
+        Optional[list[str]],
         typer.Option(
-            "--location",
+            "--locations",
             "-l",
-            help="Prefer endpoints at this location",
+            help="Prefer endpoints at these locations",
         ),
     ] = None,
     private: Annotated[
@@ -109,7 +109,7 @@ def check(
 ) -> None:
     """Check status of volumes and syncs."""
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, location, private, public)
+    resolved = _resolve_endpoints(cfg, locations, private, public)
     output_format = output
     vol_statuses, sync_statuses, has_errors = _check_and_display(
         cfg,
@@ -195,12 +195,12 @@ def run(
             ),
         ),
     ] = False,
-    location: Annotated[
-        Optional[str],
+    locations: Annotated[
+        Optional[list[str]],
         typer.Option(
-            "--location",
+            "--locations",
             "-l",
-            help="Prefer endpoints at this location",
+            help="Prefer endpoints at these locations",
         ),
     ] = None,
     private: Annotated[
@@ -220,7 +220,7 @@ def run(
 ) -> None:
     """Run backup syncs."""
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, location, private, public)
+    resolved = _resolve_endpoints(cfg, locations, private, public)
     output_format = output
     vol_statuses, sync_statuses, has_errors = _check_and_display(
         cfg,
@@ -333,12 +333,12 @@ def sh(
             ),
         ),
     ] = False,
-    location: Annotated[
-        Optional[str],
+    locations: Annotated[
+        Optional[list[str]],
         typer.Option(
-            "--location",
+            "--locations",
             "-l",
-            help="Prefer endpoints at this location",
+            help="Prefer endpoints at these locations",
         ),
     ] = None,
     private: Annotated[
@@ -369,7 +369,7 @@ def sh(
         raise typer.Exit(2)
 
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, location, private, public)
+    resolved = _resolve_endpoints(cfg, locations, private, public)
     script = generate_script(
         cfg,
         ScriptOptions(
@@ -397,12 +397,12 @@ def troubleshoot(
         Optional[str],
         typer.Option("--config", "-c", help="Path to config file"),
     ] = None,
-    location: Annotated[
-        Optional[str],
+    locations: Annotated[
+        Optional[list[str]],
         typer.Option(
-            "--location",
+            "--locations",
             "-l",
-            help="Prefer endpoints at this location",
+            help="Prefer endpoints at these locations",
         ),
     ] = None,
     private: Annotated[
@@ -422,7 +422,7 @@ def troubleshoot(
 ) -> None:
     """Diagnose issues and show how to fix them."""
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, location, private, public)
+    resolved = _resolve_endpoints(cfg, locations, private, public)
     vol_statuses, sync_statuses = _check_all_with_progress(
         cfg,
         use_progress=True,
@@ -454,12 +454,12 @@ def prune(
         OutputFormat,
         typer.Option("--output", "-o", help="Output format"),
     ] = OutputFormat.HUMAN,
-    location: Annotated[
-        Optional[str],
+    locations: Annotated[
+        Optional[list[str]],
         typer.Option(
-            "--location",
+            "--locations",
             "-l",
-            help="Prefer endpoints at this location",
+            help="Prefer endpoints at these locations",
         ),
     ] = None,
     private: Annotated[
@@ -479,7 +479,7 @@ def prune(
 ) -> None:
     """Prune old snapshots beyond max-snapshots limit."""
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, location, private, public)
+    resolved = _resolve_endpoints(cfg, locations, private, public)
     output_format = output
     _, sync_statuses = _check_all_with_progress(
         cfg,
@@ -579,7 +579,7 @@ def _load_config_or_exit(
 
 
 def _build_endpoint_filter(
-    location: str | None,
+    locations: list[str] | None,
     private: bool,
     public: bool,
 ) -> EndpointFilter | None:
@@ -589,19 +589,20 @@ def _build_endpoint_filter(
         network = "private"
     elif public:
         network = "public"
-    if location is None and network is None:
+    locs = locations or []
+    if not locs and network is None:
         return None
-    return EndpointFilter(location=location, network=network)
+    return EndpointFilter(locations=locs, network=network)
 
 
 def _resolve_endpoints(
     cfg: Config,
-    location: str | None,
+    locations: list[str] | None,
     private: bool,
     public: bool,
 ) -> ResolvedEndpoints:
     """Build filter and resolve all endpoints once."""
-    ef = _build_endpoint_filter(location, private, public)
+    ef = _build_endpoint_filter(locations, private, public)
     return resolve_all_endpoints(cfg, ef)
 
 
