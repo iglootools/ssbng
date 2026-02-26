@@ -140,19 +140,32 @@ def build_rsync_command(
         case (RemoteVolume() as sv, RemoteVolume() as dv):
             src_ep = re[sv.slug]
             dst_ep = re[dv.slug]
-            return _build_remote_to_remote(
-                sync,
-                src_ep.server,
-                dst_ep.server,
-                src_path,
-                dst_path,
-                dry_run,
-                link_dest,
-                progress,
-                src_proxy=src_ep.proxy_chain,
-                dst_proxy=dst_ep.proxy_chain,
-                dest_suffix=dest_suffix,
-            )
+            if src_ep == dst_ep:
+                return _build_remote_same_server(
+                    sync,
+                    dst_ep.server,
+                    src_path,
+                    dst_path,
+                    dry_run,
+                    link_dest,
+                    progress,
+                    proxy_chain=dst_ep.proxy_chain,
+                    dest_suffix=dest_suffix,
+                )
+            else:
+                return _build_remote_to_remote(
+                    sync,
+                    src_ep.server,
+                    dst_ep.server,
+                    src_path,
+                    dst_path,
+                    dry_run,
+                    link_dest,
+                    progress,
+                    src_proxy=src_ep.proxy_chain,
+                    dst_proxy=dst_ep.proxy_chain,
+                    dest_suffix=dest_suffix,
+                )
         case (RemoteVolume() as sv, LocalVolume()):
             src_ep = re[sv.slug]
             rsync_args = _base_rsync_args(sync, dry_run, link_dest, progress)
@@ -205,63 +218,46 @@ def _build_remote_to_remote(
     dst_proxy: list[SshEndpoint] | None = None,
     dest_suffix: str = "latest",
 ) -> list[str]:
-    """Build remote-to-remote rsync command (SSH into dest, rsync from src)."""
-    rsync_opts = sync.rsync_options
-    options = (
-        rsync_opts.default_options_override
-        if rsync_opts.default_options_override is not None
-        else _DEFAULT_RSYNC_OPTIONS
-    )
-    inner_rsync_parts = ["rsync"] + list(options)
-    if rsync_opts.checksum:
-        inner_rsync_parts.append("--checksum")
-    if rsync_opts.compress:
-        inner_rsync_parts.append("--compress")
-    inner_rsync_parts.extend(rsync_opts.extra_options)
-    match progress:
-        case ProgressMode.OVERALL:
-            inner_rsync_parts.extend(
-                [
-                    "--info=progress2",
-                    "--stats",
-                    "--human-readable",
-                ]
-            )
-        case ProgressMode.PER_FILE:
-            inner_rsync_parts.extend(
-                [
-                    "-v",
-                    "--progress",
-                    "--human-readable",
-                ]
-            )
-        case ProgressMode.FULL:
-            inner_rsync_parts.extend(
-                [
-                    "-v",
-                    "--progress",
-                    "--info=progress2",
-                    "--stats",
-                    "--human-readable",
-                ]
-            )
-        case ProgressMode.NONE | None:
-            pass
-    if dry_run:
-        inner_rsync_parts.append("--dry-run")
-    if link_dest:
-        inner_rsync_parts.append(f"--link-dest={link_dest}")
-    inner_rsync_parts.extend(_filter_args(sync))
+    """Build remote-to-remote rsync command.
 
-    inner_rsync_parts.extend(build_ssh_e_option(src_server, src_proxy))
+    SSH into the source server and push to the destination
+    via rsync's SSH transport.
+    """
+    rsync_args = _base_rsync_args(sync, dry_run, link_dest, progress)
+    rsync_args.extend(_filter_args(sync))
+    rsync_args.extend(build_ssh_e_option(dst_server, dst_proxy))
 
-    src_remote = format_remote_path(src_server, src_path)
-    inner_rsync_parts.append(f"{src_remote}/")
-    inner_rsync_parts.append(f"{dst_path}/{dest_suffix}/")
+    rsync_args.append(f"{src_path}/")
+    dst_remote = format_remote_path(dst_server, dst_path)
+    rsync_args.append(f"{dst_remote}/{dest_suffix}/")
 
-    inner_command = " ".join(shlex.quote(p) for p in inner_rsync_parts)
+    inner_command = " ".join(shlex.quote(p) for p in rsync_args)
 
-    return build_ssh_base_args(dst_server, dst_proxy) + [inner_command]
+    return build_ssh_base_args(src_server, src_proxy) + [inner_command]
+
+
+def _build_remote_same_server(
+    sync: SyncConfig,
+    server: SshEndpoint,
+    src_path: str,
+    dst_path: str,
+    dry_run: bool,
+    link_dest: str | None,
+    progress: ProgressMode | None = None,
+    proxy_chain: list[SshEndpoint] | None = None,
+    dest_suffix: str = "latest",
+) -> list[str]:
+    """Build rsync command when both volumes are on the same server.
+
+    SSH into the server once and run rsync with local paths.
+    """
+    rsync_args = _base_rsync_args(sync, dry_run, link_dest, progress)
+    rsync_args.extend(_filter_args(sync))
+    rsync_args.append(f"{src_path}/")
+    rsync_args.append(f"{dst_path}/{dest_suffix}/")
+
+    inner_command = shlex.join(rsync_args)
+    return build_ssh_base_args(server, proxy_chain) + [inner_command]
 
 
 def run_rsync(

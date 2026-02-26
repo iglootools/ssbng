@@ -29,7 +29,8 @@ All modules resolve volumes from `Config.volumes[name]` and dispatch on volume t
 
 - **Local→Local**: direct rsync
 - **Local→Remote / Remote→Local**: rsync with `-e "ssh -p PORT -i KEY -o OPT"`
-- **Remote→Remote**: SSH into destination, run rsync from there pointing at source
+- **Remote→Remote (different servers)**: SSH into source, run rsync pushing to destination via `-e "ssh ..."`
+- **Remote→Remote (same server)**: SSH into the server once, run rsync with local paths
 
 ## Config resolution (config.py)
 

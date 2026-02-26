@@ -106,6 +106,11 @@ def docker_container(
             "/tmp/authorized_keys",
             "ro",
         )
+        .with_volume_mapping(
+            str(private_key),
+            "/tmp/id_ed25519",
+            "ro",
+        )
         .with_kwargs(privileged=True)
         .waiting_for(wait_strategy)
     )
@@ -128,6 +133,15 @@ def docker_container(
     )
 
     wait_for_ssh(server, timeout=30)
+
+    # Install private key inside the container so it can
+    # SSH to itself (needed for remote-to-remote syncs)
+    ssh_exec(
+        server,
+        "cp /tmp/id_ed25519 /home/testuser/.ssh/id_ed25519"
+        " && chmod 600 /home/testuser/.ssh/id_ed25519",
+    )
+
     yield server
 
     container.stop()

@@ -209,21 +209,26 @@ class TestBuildRsyncCommandRemoteToRemote:
 
         cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
 
-        # Should SSH into destination host
+        # Should SSH into source host
         assert cmd[0] == "ssh"
-        assert "dstuser@dst.local" in cmd
+        assert "srcuser@src.local" in cmd
 
         # Inner command should be the last arg
         inner = cmd[-1]
         assert inner.startswith("rsync -a --delete")
         assert "--delete-excluded" in inner
         assert "--safe-links" in inner
+        # Inner rsync uses SSH to reach destination
         assert (
             "-e 'ssh -o ConnectTimeout=10"
-            " -o BatchMode=yes -p 2222'" in inner
+            " -o BatchMode=yes"
+            " -i ~/.ssh/dst_key'" in inner
         )
-        assert "srcuser@src.local:/data/photos/" in inner
-        assert "/backup/photos/latest/" in inner
+        # Source is local (on the source server)
+        assert "/data/photos/" in inner
+        assert "srcuser@src.local:" not in inner
+        # Destination is remote
+        assert "dstuser@dst.local:/backup/photos/latest/" in inner
 
     def test_dry_run(self) -> None:
         src_server = SshEndpoint(slug="src-server", host="src.local")
@@ -258,6 +263,167 @@ class TestBuildRsyncCommandRemoteToRemote:
         )
         inner = cmd[-1]
         assert "--dry-run" in inner
+
+
+class TestBuildRsyncCommandRemoteToRemoteSameServer:
+    """When both volumes resolve to the same SSH endpoint,
+    rsync should use local paths (no inner SSH)."""
+
+    def _simple_config(
+        self,
+        server: SshEndpoint | None = None,
+        extra_endpoints: dict[str, SshEndpoint] | None = None,
+        src_path: str = "/data/src",
+        dst_path: str = "/data/dst",
+        src_subdir: str | None = None,
+        dst_subdir: str | None = None,
+        **sync_kwargs: object,
+    ) -> tuple[SyncConfig, Config]:
+        srv = server or SshEndpoint(
+            slug="nas",
+            host="nas.local",
+            port=5022,
+            user="backup",
+            key="~/.ssh/key",
+        )
+        endpoints: dict[str, SshEndpoint] = {"nas": srv}
+        if extra_endpoints:
+            endpoints.update(extra_endpoints)
+        src = RemoteVolume(
+            slug="src",
+            ssh_endpoint="nas",
+            path=src_path,
+        )
+        dst = RemoteVolume(
+            slug="dst",
+            ssh_endpoint="nas",
+            path=dst_path,
+        )
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src", subdir=src_subdir),
+            destination=DestinationSyncEndpoint(
+                volume="dst", subdir=dst_subdir
+            ),
+            **sync_kwargs,  # type: ignore[arg-type]
+        )
+        config = Config(
+            ssh_endpoints=endpoints,
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+        return sync, config
+
+    def test_basic(self) -> None:
+        sync, config = self._simple_config(
+            src_subdir="photos", dst_subdir="backup"
+        )
+        resolved = resolve_all_endpoints(config)
+
+        cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
+
+        assert cmd[0] == "ssh"
+        assert "backup@nas.local" in cmd
+
+        inner = cmd[-1]
+        assert inner.startswith("rsync")
+        # No SSH transport — both paths are local
+        assert "-e 'ssh" not in inner
+        assert "backup@nas.local:" not in inner
+        assert "/data/src/photos/" in inner
+        assert "/data/dst/backup/latest/" in inner
+
+    def test_dry_run(self) -> None:
+        sync, config = self._simple_config()
+        resolved = resolve_all_endpoints(config)
+
+        cmd = build_rsync_command(
+            sync, config, dry_run=True, resolved_endpoints=resolved
+        )
+        inner = cmd[-1]
+        assert "--dry-run" in inner
+
+    def test_with_filters(self) -> None:
+        sync, config = self._simple_config(
+            filters=["+ *.jpg", "- *.tmp"],
+            filter_file="/etc/nbkp/filters.rules",
+        )
+        resolved = resolve_all_endpoints(config)
+
+        cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
+        inner = cmd[-1]
+        assert "'--filter=+ *.jpg'" in inner
+        assert "'--filter=- *.tmp'" in inner
+        assert "'--filter=merge /etc/nbkp/filters.rules'" in inner
+
+    def test_with_link_dest(self) -> None:
+        sync, config = self._simple_config()
+        resolved = resolve_all_endpoints(config)
+
+        cmd = build_rsync_command(
+            sync,
+            config,
+            link_dest="../../snapshots/20240101T000000Z",
+            resolved_endpoints=resolved,
+        )
+        inner = cmd[-1]
+        assert "--link-dest=../../snapshots/20240101T000000Z" in inner
+
+    def test_custom_dest_suffix(self) -> None:
+        sync, config = self._simple_config()
+        resolved = resolve_all_endpoints(config)
+
+        cmd = build_rsync_command(
+            sync,
+            config,
+            resolved_endpoints=resolved,
+            dest_suffix="snapshots/T1",
+        )
+        inner = cmd[-1]
+        assert "/data/dst/snapshots/T1/" in inner
+
+    def test_with_proxy_chain(self) -> None:
+        bastion = SshEndpoint(
+            slug="bastion",
+            host="bastion.example.com",
+            user="admin",
+        )
+        server = SshEndpoint(
+            slug="nas",
+            host="nas.internal",
+            user="backup",
+            proxy_jump="bastion",
+        )
+        sync, config = self._simple_config(
+            server=server,
+            extra_endpoints={"bastion": bastion},
+        )
+        resolved = resolve_all_endpoints(config)
+
+        cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
+
+        assert cmd[0] == "ssh"
+        assert any("ProxyCommand=" in arg for arg in cmd)
+        assert "backup@nas.internal" in cmd
+
+        inner = cmd[-1]
+        assert "-e 'ssh" not in inner
+        assert "/data/src/" in inner
+        assert "/data/dst/latest/" in inner
+
+    def test_progress(self) -> None:
+        sync, config = self._simple_config()
+        resolved = resolve_all_endpoints(config)
+
+        cmd = build_rsync_command(
+            sync,
+            config,
+            progress=ProgressMode.PER_FILE,
+            resolved_endpoints=resolved,
+        )
+        inner = cmd[-1]
+        assert "-v" in inner
+        assert "--progress" in inner
 
 
 class TestBuildRsyncCommandFilters:
@@ -784,16 +950,16 @@ class TestBuildRsyncCommandProxyJump:
 
         cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
 
-        # Should SSH into destination host with proxy
+        # Should SSH into source host with proxy
         assert cmd[0] == "ssh"
         proxy_cmd = (
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
             " -W %h:%p admin@bastion.example.com"
         )
         assert f"ProxyCommand={proxy_cmd}" in cmd
-        assert "dstuser@dst.internal" in cmd
+        assert "srcuser@src.internal" in cmd
 
-        # Inner rsync should also have proxy for source
+        # Inner rsync should have proxy for destination
         inner = cmd[-1]
         assert "ProxyCommand=" in inner
         assert "admin@bastion.example.com" in inner
@@ -925,14 +1091,14 @@ class TestBuildRsyncCommandMultiHopProxy:
 
         cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
 
-        # Outer SSH into destination host with proxy chain
+        # Outer SSH into source host with proxy chain
         assert cmd[0] == "ssh"
         assert any("ProxyCommand=" in arg for arg in cmd)
         assert "admin@bastion1.example.com" in str(cmd)
         assert "bastion2.example.com" in str(cmd)
-        assert "dstuser@dst.internal" in cmd
+        assert "srcuser@src.internal" in cmd
 
-        # Inner rsync should also have proxy chain for source
+        # Inner rsync should have proxy chain for destination
         inner = cmd[-1]
         assert "ProxyCommand=" in inner
         assert "admin@bastion1.example.com" in inner
@@ -1009,9 +1175,12 @@ class TestBuildRsyncCommandSpacesInPaths:
 
         cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
         inner = cmd[-1]
-        # Paths with spaces must be shlex-quoted
-        assert "'srcuser@src.local:/my data/my photos/'" in inner
-        assert "'/my backup/my dest/latest/'" in inner
+        # Source is local (on source server), paths with spaces
+        # must be shlex-quoted
+        assert "'/my data/my photos/'" in inner
+        assert "srcuser@src.local:" not in inner
+        # Destination is remote
+        assert "'dstuser@dst.local:/my backup/my dest/latest/'" in inner
 
 
 class TestBuildRsyncCommandProgress:
