@@ -20,7 +20,7 @@ from .hardlinks import (
 from .btrfs import get_latest_snapshot
 from ..config import Config, ResolvedEndpoints
 from ..check import SyncStatus
-from .rsync import run_rsync
+from .rsync import ProgressMode, run_rsync
 
 
 class SyncResult(BaseModel):
@@ -51,7 +51,7 @@ def run_all_syncs(
     sync_statuses: dict[str, SyncStatus],
     dry_run: bool = False,
     only_syncs: list[str] | None = None,
-    verbose: int = 0,
+    progress: ProgressMode | None = None,
     prune: bool = True,
     on_rsync_output: Callable[[str], None] | None = None,
     on_sync_start: Callable[[str], None] | None = None,
@@ -98,7 +98,7 @@ def run_all_syncs(
                 status,
                 config,
                 dry_run,
-                verbose,
+                progress,
                 prune,
                 on_rsync_output,
                 resolved_endpoints,
@@ -116,7 +116,7 @@ def _run_single_sync(
     status: SyncStatus,
     config: Config,
     dry_run: bool,
-    verbose: int = 0,
+    progress: ProgressMode | None = None,
     prune: bool = True,
     on_rsync_output: Callable[[str], None] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
@@ -131,7 +131,7 @@ def _run_single_sync(
                 sync,
                 config,
                 dry_run,
-                verbose,
+                progress,
                 prune,
                 on_rsync_output,
                 resolved_endpoints,
@@ -142,7 +142,7 @@ def _run_single_sync(
                 sync,
                 config,
                 dry_run,
-                verbose,
+                progress,
                 prune,
                 on_rsync_output,
                 resolved_endpoints,
@@ -153,7 +153,7 @@ def _run_single_sync(
                 sync,
                 config,
                 dry_run,
-                verbose,
+                progress,
                 on_rsync_output,
                 resolved_endpoints,
             )
@@ -164,7 +164,7 @@ def _run_plain_sync(
     sync: object,
     config: Config,
     dry_run: bool,
-    verbose: int,
+    progress: ProgressMode | None,
     on_rsync_output: Callable[[str], None] | None,
     resolved_endpoints: ResolvedEndpoints | None,
 ) -> SyncResult:
@@ -177,7 +177,7 @@ def _run_plain_sync(
             sync,
             config,
             dry_run=dry_run,
-            verbose=verbose,
+            progress=progress,
             on_output=on_rsync_output,
             resolved_endpoints=resolved_endpoints,
         )
@@ -215,7 +215,7 @@ def _run_btrfs_sync(
     sync: object,
     config: Config,
     dry_run: bool,
-    verbose: int,
+    progress: ProgressMode | None,
     prune: bool,
     on_rsync_output: Callable[[str], None] | None,
     resolved_endpoints: ResolvedEndpoints | None,
@@ -229,7 +229,7 @@ def _run_btrfs_sync(
             sync,
             config,
             dry_run=dry_run,
-            verbose=verbose,
+            progress=progress,
             on_output=on_rsync_output,
             resolved_endpoints=resolved_endpoints,
         )
@@ -296,7 +296,7 @@ def _run_hard_link_sync(
     sync: object,
     config: Config,
     dry_run: bool,
-    verbose: int,
+    progress: ProgressMode | None,
     prune: bool,
     on_rsync_output: Callable[[str], None] | None,
     resolved_endpoints: ResolvedEndpoints | None,
@@ -345,7 +345,7 @@ def _run_hard_link_sync(
             config,
             dry_run=dry_run,
             link_dest=link_dest,
-            verbose=verbose,
+            progress=progress,
             on_output=on_rsync_output,
             resolved_endpoints=resolved_endpoints,
             dest_suffix=f"snapshots/{snapshot_name}",

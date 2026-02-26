@@ -9,7 +9,7 @@ ${{ config_line }}
 #   - Btrfs: snapshot creation, pruning
 #   - Hard-link: incremental backups via --link-dest, symlink management, pruning
 #   - Pre-flight checks: volume markers (.nbkp-vol), endpoint markers (.nbkp-src/.nbkp-dst)
-#   - Dry-run and verbose support (as runtime script arguments)
+#   - Dry-run and progress mode support (as runtime script arguments)
 #   - Nonzero exit on any sync failure
 #
 # Dropped from nbkp run:
@@ -28,14 +28,15 @@ NBKP_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 <% endif %>
 
 NBKP_DRY_RUN=false
-NBKP_VERBOSE=0
+NBKP_PROGRESS=""
 
 # --- Argument parsing ---
 while [ $# -gt 0 ]; do
   case "$1" in
     -n|--dry-run) NBKP_DRY_RUN=true; shift;;
-    -v) NBKP_VERBOSE=$((NBKP_VERBOSE + 1)); shift;;
-    --verbose) NBKP_VERBOSE=$((NBKP_VERBOSE + 1)); shift;;
+    --progress=*) NBKP_PROGRESS="${1#--progress=}"; shift;;
+    --progress) NBKP_PROGRESS="$2"; shift 2;;
+    -p) NBKP_PROGRESS="$2"; shift 2;;
     *) echo "Unknown option: $1" >&2; exit 1;;
   esac
 done
@@ -52,11 +53,15 @@ nbkp_log() {
 # --- Rsync runtime flags ---
 RSYNC_DRY_RUN_FLAG=""
 if [ "$NBKP_DRY_RUN" = true ]; then RSYNC_DRY_RUN_FLAG="--dry-run"; fi
-RSYNC_VERBOSE_FLAG=""
-if [ "$NBKP_VERBOSE" -ge 3 ]; then RSYNC_VERBOSE_FLAG="-vvv"
-elif [ "$NBKP_VERBOSE" -ge 2 ]; then RSYNC_VERBOSE_FLAG="-vv"
-elif [ "$NBKP_VERBOSE" -ge 1 ]; then RSYNC_VERBOSE_FLAG="-v"
-fi
+RSYNC_PROGRESS_FLAGS=""
+case "$NBKP_PROGRESS" in
+  none) ;;
+  overall) RSYNC_PROGRESS_FLAGS="--info=progress2 --stats --human-readable";;
+  per-file) RSYNC_PROGRESS_FLAGS="-v --progress --human-readable";;
+  full) RSYNC_PROGRESS_FLAGS="-v --progress --info=progress2 --stats --human-readable";;
+  "") ;;
+  *) echo "Unknown progress mode: $NBKP_PROGRESS (use 'none', 'overall', 'per-file', or 'full')" >&2; exit 1;;
+esac
 
 # --- Volume checks ---
 <% for check in volume_checks %>

@@ -3,7 +3,7 @@
 Compiles a Config into a self-contained shell script that performs
 the same sync operations as ``nbkp run``, with all paths and
 options baked in.  The generated script accepts ``--dry-run``
-and ``--verbose`` flags at runtime.
+and ``--progress`` flags at runtime.
 """
 
 from __future__ import annotations
@@ -609,7 +609,7 @@ def _build_rsync_block(
         config,
         dry_run=False,
         link_dest=None,
-        verbose=0,
+        progress=None,
         resolved_endpoints=resolved_endpoints,
         dest_suffix=dest_suffix,
     )
@@ -638,7 +638,7 @@ def _build_rsync_block(
 
     runtime_vars = [
         '${RSYNC_DRY_RUN_FLAG:+"$RSYNC_DRY_RUN_FLAG"}',
-        '${RSYNC_VERBOSE_FLAG:+"$RSYNC_VERBOSE_FLAG"}',
+        "$RSYNC_PROGRESS_FLAGS",
     ]
     if has_link_dest:
         runtime_vars.insert(0, '${RSYNC_LINK_DEST:+"$RSYNC_LINK_DEST"}')

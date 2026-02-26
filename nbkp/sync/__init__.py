@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .rsync import ProgressMode as ProgressMode
+
 if TYPE_CHECKING:
     from .runner import PruneResult as PruneResult
     from .runner import SyncResult as SyncResult
     from .runner import run_all_syncs as run_all_syncs
 
 __all__ = [
+    "ProgressMode",
     "PruneResult",
     "SyncResult",
     "run_all_syncs",

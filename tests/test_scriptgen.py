@@ -297,7 +297,7 @@ class TestHeader:
         config = _local_to_local_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert "NBKP_DRY_RUN=false" in script
-        assert "NBKP_VERBOSE=0" in script
+        assert 'NBKP_PROGRESS=""' in script
         assert "-n|--dry-run" in script
         assert "NBKP_FAILURES=0" in script
 
@@ -481,25 +481,26 @@ class TestPreflightChecks:
         assert ".nbkp-dst" in script
 
 
-class TestDryRunAndVerbose:
+class TestDryRunAndProgress:
     def test_dry_run_flag_injected(self) -> None:
         config = _local_to_local_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert "RSYNC_DRY_RUN_FLAG" in script
         assert '${RSYNC_DRY_RUN_FLAG:+"$RSYNC_DRY_RUN_FLAG"}' in script
 
-    def test_verbose_flag_injected(self) -> None:
+    def test_progress_flags_injected(self) -> None:
         config = _local_to_local_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert "RSYNC_VERBOSE_FLAG" in script
-        assert '${RSYNC_VERBOSE_FLAG:+"$RSYNC_VERBOSE_FLAG"}' in script
+        assert "RSYNC_PROGRESS_FLAGS" in script
+        assert "$RSYNC_PROGRESS_FLAGS" in script
 
-    def test_verbose_levels(self) -> None:
+    def test_progress_modes(self) -> None:
         config = _local_to_local_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert '"-vvv"' in script
-        assert '"-vv"' in script
-        assert '"-v"' in script
+        assert "overall" in script
+        assert "per-file" in script
+        assert "--info=progress2" in script
+        assert "--progress" in script
 
 
 class TestFilters:

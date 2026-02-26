@@ -19,7 +19,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.sync import SyncResult
+from nbkp.sync import ProgressMode, SyncResult
 from nbkp.check import (
     SyncReason,
     SyncStatus,
@@ -546,7 +546,7 @@ class TestRunCommand:
     @patch("nbkp.cli.run_all_syncs")
     @patch("nbkp.cli.check_all_syncs")
     @patch("nbkp.cli.load_config")
-    def test_verbose(
+    def test_progress(
         self,
         mock_load: MagicMock,
         mock_checks: MagicMock,
@@ -569,11 +569,17 @@ class TestRunCommand:
 
         result = runner.invoke(
             app,
-            ["run", "--config", "/fake.yaml", "-v", "-v"],
+            [
+                "run",
+                "--config",
+                "/fake.yaml",
+                "--progress",
+                "per-file",
+            ],
         )
         assert result.exit_code == 0
         call_kwargs = mock_run.call_args
-        assert call_kwargs.kwargs.get("verbose") == 2
+        assert call_kwargs.kwargs.get("progress") == ProgressMode.PER_FILE
 
     @patch("nbkp.cli.run_all_syncs")
     @patch("nbkp.cli.check_all_syncs")

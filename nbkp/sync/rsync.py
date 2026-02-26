@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shlex
 import subprocess
+from enum import Enum
 from typing import Callable
 
 from ..config import (
@@ -19,6 +20,16 @@ from ..remote import (
     build_ssh_e_option,
     format_remote_path,
 )
+
+
+class ProgressMode(str, Enum):
+    """Rsync progress reporting mode."""
+
+    NONE = "none"
+    OVERALL = "overall"
+    PER_FILE = "per-file"
+    FULL = "full"
+
 
 _DEFAULT_RSYNC_OPTIONS: list[str] = [
     "-a",
@@ -42,7 +53,7 @@ def _base_rsync_args(
     sync: SyncConfig,
     dry_run: bool,
     link_dest: str | None,
-    verbose: int = 0,
+    progress: ProgressMode | None = None,
 ) -> list[str]:
     """Build common rsync flags."""
     options = (
@@ -51,8 +62,35 @@ def _base_rsync_args(
         else _DEFAULT_RSYNC_OPTIONS
     )
     args = ["rsync"] + list(options) + list(sync.extra_rsync_options)
-    if verbose > 0:
-        args.append("-" + "v" * min(verbose, 3))
+    match progress:
+        case ProgressMode.OVERALL:
+            args.extend(
+                [
+                    "--info=progress2",
+                    "--stats",
+                    "--human-readable",
+                ]
+            )
+        case ProgressMode.PER_FILE:
+            args.extend(
+                [
+                    "-v",
+                    "--progress",
+                    "--human-readable",
+                ]
+            )
+        case ProgressMode.FULL:
+            args.extend(
+                [
+                    "-v",
+                    "--progress",
+                    "--info=progress2",
+                    "--stats",
+                    "--human-readable",
+                ]
+            )
+        case ProgressMode.NONE | None:
+            pass
     if dry_run:
         args.append("--dry-run")
     if link_dest:
@@ -75,7 +113,7 @@ def build_rsync_command(
     config: Config,
     dry_run: bool = False,
     link_dest: str | None = None,
-    verbose: int = 0,
+    progress: ProgressMode | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     dest_suffix: str = "latest",
 ) -> list[str]:
@@ -103,14 +141,14 @@ def build_rsync_command(
                 dst_path,
                 dry_run,
                 link_dest,
-                verbose,
+                progress,
                 src_proxy=src_ep.proxy_chain,
                 dst_proxy=dst_ep.proxy_chain,
                 dest_suffix=dest_suffix,
             )
         case (RemoteVolume() as sv, LocalVolume()):
             src_ep = re[sv.slug]
-            rsync_args = _base_rsync_args(sync, dry_run, link_dest, verbose)
+            rsync_args = _base_rsync_args(sync, dry_run, link_dest, progress)
             rsync_args.extend(_filter_args(sync))
             rsync_args.extend(
                 build_ssh_e_option(
@@ -125,7 +163,7 @@ def build_rsync_command(
             return rsync_args
         case (LocalVolume(), RemoteVolume() as dv):
             dst_ep = re[dv.slug]
-            rsync_args = _base_rsync_args(sync, dry_run, link_dest, verbose)
+            rsync_args = _base_rsync_args(sync, dry_run, link_dest, progress)
             rsync_args.extend(_filter_args(sync))
             rsync_args.extend(
                 build_ssh_e_option(
@@ -140,7 +178,7 @@ def build_rsync_command(
             )
             return rsync_args
         case _:
-            rsync_args = _base_rsync_args(sync, dry_run, link_dest, verbose)
+            rsync_args = _base_rsync_args(sync, dry_run, link_dest, progress)
             rsync_args.extend(_filter_args(sync))
             rsync_args.append(f"{src_path}/")
             rsync_args.append(f"{dst_path}/{dest_suffix}/")
@@ -155,7 +193,7 @@ def _build_remote_to_remote(
     dst_path: str,
     dry_run: bool,
     link_dest: str | None,
-    verbose: int = 0,
+    progress: ProgressMode | None = None,
     src_proxy: list[SshEndpoint] | None = None,
     dst_proxy: list[SshEndpoint] | None = None,
     dest_suffix: str = "latest",
@@ -169,8 +207,35 @@ def _build_remote_to_remote(
     inner_rsync_parts = (
         ["rsync"] + list(options) + list(sync.extra_rsync_options)
     )
-    if verbose > 0:
-        inner_rsync_parts.append("-" + "v" * min(verbose, 3))
+    match progress:
+        case ProgressMode.OVERALL:
+            inner_rsync_parts.extend(
+                [
+                    "--info=progress2",
+                    "--stats",
+                    "--human-readable",
+                ]
+            )
+        case ProgressMode.PER_FILE:
+            inner_rsync_parts.extend(
+                [
+                    "-v",
+                    "--progress",
+                    "--human-readable",
+                ]
+            )
+        case ProgressMode.FULL:
+            inner_rsync_parts.extend(
+                [
+                    "-v",
+                    "--progress",
+                    "--info=progress2",
+                    "--stats",
+                    "--human-readable",
+                ]
+            )
+        case ProgressMode.NONE | None:
+            pass
     if dry_run:
         inner_rsync_parts.append("--dry-run")
     if link_dest:
@@ -193,7 +258,7 @@ def run_rsync(
     config: Config,
     dry_run: bool = False,
     link_dest: str | None = None,
-    verbose: int = 0,
+    progress: ProgressMode | None = None,
     on_output: Callable[[str], None] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     dest_suffix: str = "latest",
@@ -204,7 +269,7 @@ def run_rsync(
         config,
         dry_run,
         link_dest,
-        verbose,
+        progress,
         resolved_endpoints,
         dest_suffix=dest_suffix,
     )

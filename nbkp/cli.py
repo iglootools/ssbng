@@ -43,7 +43,12 @@ from .output import (
     print_human_troubleshoot,
 )
 from .scriptgen import ScriptOptions, generate_script
-from .sync import PruneResult, SyncResult, run_all_syncs
+from .sync import (
+    ProgressMode,
+    PruneResult,
+    SyncResult,
+    run_all_syncs,
+)
 
 _MARKER_ONLY_REASONS = {
     SyncReason.SOURCE_MARKER_NOT_FOUND,
@@ -169,15 +174,14 @@ def run(
         OutputFormat,
         typer.Option("--output", "-o", help="Output format"),
     ] = OutputFormat.HUMAN,
-    verbose: Annotated[
-        int,
+    progress: Annotated[
+        Optional[ProgressMode],
         typer.Option(
-            "--verbose",
-            "-v",
-            count=True,
-            help="Increase rsync verbosity (-v, -vv, -vvv)",
+            "--progress",
+            "-p",
+            help=("Progress mode: none, overall," " per-file, or full"),
         ),
-    ] = 0,
+    ] = None,
     prune: Annotated[
         bool,
         typer.Option(
@@ -243,7 +247,10 @@ def run(
         if output_format is OutputFormat.HUMAN:
             typer.echo("")
 
-        use_spinner = output_format is OutputFormat.HUMAN and verbose == 0
+        use_spinner = output_format is OutputFormat.HUMAN and progress in (
+            None,
+            ProgressMode.NONE,
+        )
         stream_output = (
             (lambda chunk: typer.echo(chunk, nl=False))
             if output_format is OutputFormat.HUMAN and not use_spinner
@@ -273,7 +280,7 @@ def run(
             sync_statuses,
             dry_run=dry_run,
             only_syncs=sync,
-            verbose=verbose,
+            progress=progress,
             prune=prune,
             on_rsync_output=stream_output,
             on_sync_start=(on_sync_start if use_spinner else None),

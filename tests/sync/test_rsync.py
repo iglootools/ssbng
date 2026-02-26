@@ -15,7 +15,7 @@ from nbkp.config import (
     SyncEndpoint,
     resolve_all_endpoints,
 )
-from nbkp.sync.rsync import build_rsync_command, run_rsync
+from nbkp.sync.rsync import ProgressMode, build_rsync_command, run_rsync
 
 
 class TestBuildRsyncCommandLocalToLocal:
@@ -918,7 +918,7 @@ class TestBuildRsyncCommandSpacesInPaths:
         assert "'/my backup/my dest/latest/'" in inner
 
 
-class TestBuildRsyncCommandVerbose:
+class TestBuildRsyncCommandProgress:
     def _simple_config(self) -> tuple[SyncConfig, Config]:
         src = LocalVolume(slug="src", path="/mnt/src")
         dst = LocalVolume(slug="dst", path="/mnt/dst")
@@ -933,34 +933,50 @@ class TestBuildRsyncCommandVerbose:
         )
         return sync, config
 
-    def test_no_verbose(self) -> None:
+    def test_no_progress(self) -> None:
         sync, config = self._simple_config()
         cmd = build_rsync_command(sync, config)
         assert "-v" not in cmd
-        assert "-vv" not in cmd
-        assert "-vvv" not in cmd
+        assert "--progress" not in cmd
+        assert "--info=progress2" not in cmd
+        assert "--stats" not in cmd
+        assert "--human-readable" not in cmd
 
-    def test_verbose_1(self) -> None:
+    def test_progress_none(self) -> None:
         sync, config = self._simple_config()
-        cmd = build_rsync_command(sync, config, verbose=1)
+        cmd = build_rsync_command(sync, config, progress=ProgressMode.NONE)
+        assert "-v" not in cmd
+        assert "--progress" not in cmd
+        assert "--info=progress2" not in cmd
+
+    def test_progress_overall(self) -> None:
+        sync, config = self._simple_config()
+        cmd = build_rsync_command(sync, config, progress=ProgressMode.OVERALL)
+        assert "--info=progress2" in cmd
+        assert "--stats" in cmd
+        assert "--human-readable" in cmd
+        assert "-v" not in cmd
+        assert "--progress" not in cmd
+
+    def test_progress_per_file(self) -> None:
+        sync, config = self._simple_config()
+        cmd = build_rsync_command(sync, config, progress=ProgressMode.PER_FILE)
         assert "-v" in cmd
+        assert "--progress" in cmd
+        assert "--human-readable" in cmd
+        assert "--info=progress2" not in cmd
+        assert "--stats" not in cmd
 
-    def test_verbose_2(self) -> None:
+    def test_progress_full(self) -> None:
         sync, config = self._simple_config()
-        cmd = build_rsync_command(sync, config, verbose=2)
-        assert "-vv" in cmd
+        cmd = build_rsync_command(sync, config, progress=ProgressMode.FULL)
+        assert "-v" in cmd
+        assert "--progress" in cmd
+        assert "--info=progress2" in cmd
+        assert "--stats" in cmd
+        assert "--human-readable" in cmd
 
-    def test_verbose_3(self) -> None:
-        sync, config = self._simple_config()
-        cmd = build_rsync_command(sync, config, verbose=3)
-        assert "-vvv" in cmd
-
-    def test_verbose_clamped_to_3(self) -> None:
-        sync, config = self._simple_config()
-        cmd = build_rsync_command(sync, config, verbose=5)
-        assert "-vvv" in cmd
-
-    def test_remote_to_remote_verbose(self) -> None:
+    def test_remote_to_remote_progress(self) -> None:
         src_server = SshEndpoint(slug="src-server", host="src.local")
         dst_server = SshEndpoint(slug="dst-server", host="dst.local")
         src = RemoteVolume(
@@ -989,10 +1005,14 @@ class TestBuildRsyncCommandVerbose:
         resolved = resolve_all_endpoints(config)
 
         cmd = build_rsync_command(
-            sync, config, verbose=2, resolved_endpoints=resolved
+            sync,
+            config,
+            progress=ProgressMode.PER_FILE,
+            resolved_endpoints=resolved,
         )
         inner = cmd[-1]
-        assert "-vv" in inner
+        assert "-v" in inner
+        assert "--progress" in inner
 
 
 class TestDestSuffix:

@@ -36,7 +36,9 @@ def sort_syncs(syncs: dict[str, SyncConfig]) -> list[str]:
     for sync_slug, sync in syncs.items():
         src_key = endpoint_key(sync.source)
         deps = {
-            writer for writer in writers.get(src_key, []) if writer != sync_slug
+            writer
+            for writer in writers.get(src_key, [])
+            if writer != sync_slug
         }
         graph[sync_slug] = deps
 
