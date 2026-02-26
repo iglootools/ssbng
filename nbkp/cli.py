@@ -257,23 +257,24 @@ def run(
             else None
         )
 
-        console = Console() if use_spinner else None
+        console = Console()
         status_display = None
 
         def on_sync_start(slug: str) -> None:
             nonlocal status_display
-            if console is not None:
+            if use_spinner:
                 status_display = console.status(f"Syncing {slug}...")
                 status_display.start()
+            else:
+                console.print(f"Syncing {slug}...")
 
         def on_sync_end(slug: str, result: SyncResult) -> None:
             nonlocal status_display
             if status_display is not None:
                 status_display.stop()
                 status_display = None
-            if console is not None:
-                icon = "[green]✓[/green]" if result.success else "[red]✗[/red]"
-                console.print(f"{icon} {slug}")
+            icon = "[green]✓[/green]" if result.success else "[red]✗[/red]"
+            console.print(f"{icon} {slug}")
 
         results = run_all_syncs(
             cfg,
@@ -283,8 +284,12 @@ def run(
             progress=progress,
             prune=prune,
             on_rsync_output=stream_output,
-            on_sync_start=(on_sync_start if use_spinner else None),
-            on_sync_end=(on_sync_end if use_spinner else None),
+            on_sync_start=(
+                on_sync_start if output_format is OutputFormat.HUMAN else None
+            ),
+            on_sync_end=(
+                on_sync_end if output_format is OutputFormat.HUMAN else None
+            ),
             resolved_endpoints=resolved,
         )
 
