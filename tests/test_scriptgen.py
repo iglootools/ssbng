@@ -447,17 +447,17 @@ class TestBtrfs:
 
 
 class TestPreflightChecks:
-    def test_source_marker(self) -> None:
+    def test_source_sentinel(self) -> None:
         config = _local_to_local_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert ".nbkp-src" in script
-        assert "source marker" in script
+        assert "source sentinel" in script
 
-    def test_destination_marker(self) -> None:
+    def test_destination_sentinel(self) -> None:
         config = _local_to_local_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert ".nbkp-dst" in script
-        assert "destination marker" in script
+        assert "destination sentinel" in script
 
     def test_rsync_availability(self) -> None:
         config = _local_to_local_config()

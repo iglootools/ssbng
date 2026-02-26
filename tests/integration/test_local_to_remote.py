@@ -18,7 +18,7 @@ from nbkp.config import (
 )
 from nbkp.sync.rsync import run_rsync
 from nbkp.testkit.docker import REMOTE_BACKUP_PATH
-from nbkp.testkit.gen.fs import create_seed_markers
+from nbkp.testkit.gen.fs import create_seed_sentinels
 
 from .conftest import ssh_exec
 
@@ -52,7 +52,7 @@ class TestLocalToRemote:
         def _run_remote(cmd: str) -> None:
             ssh_exec(ssh_endpoint, cmd)
 
-        create_seed_markers(config, remote_exec=_run_remote)
+        create_seed_sentinels(config, remote_exec=_run_remote)
 
         resolved = resolve_all_endpoints(config)
         result = run_rsync(
@@ -98,7 +98,7 @@ class TestLocalToRemote:
         def _run_remote(cmd: str) -> None:
             ssh_exec(ssh_endpoint, cmd)
 
-        create_seed_markers(config, remote_exec=_run_remote)
+        create_seed_sentinels(config, remote_exec=_run_remote)
 
         resolved = resolve_all_endpoints(config)
         result = run_rsync(

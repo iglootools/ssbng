@@ -1,4 +1,4 @@
-"""Seed filesystem helpers: markers and sample data."""
+"""Seed filesystem helpers: sentinels and sample data."""
 
 from __future__ import annotations
 
@@ -32,17 +32,17 @@ def _write_zeroed_file(path: Path, size_bytes: int) -> None:
             remaining -= len(chunk)
 
 
-def create_seed_markers(
+def create_seed_sentinels(
     config: Config,
     remote_exec: Callable[[str], None] | None = None,
 ) -> None:
-    """Create volume, source, and destination markers.
+    """Create volume, source, and destination sentinels.
 
-    For local volumes, creates directories and marker files
+    For local volumes, creates directories and sentinel files
     directly.  For remote volumes, uses *remote_exec(command)*
     to run shell commands on the remote host.
     """
-    # Volume markers (.nbkp-vol)
+    # Volume sentinels (.nbkp-vol)
     for vol in config.volumes.values():
         match vol:
             case LocalVolume():
@@ -54,13 +54,13 @@ def create_seed_markers(
                     remote_exec(f"mkdir -p {vol.path}")
                     remote_exec(f"touch {vol.path}/.nbkp-vol")
 
-    # Sync endpoint markers
+    # Sync endpoint sentinels
     for sync in config.syncs.values():
-        _create_source_markers(config, sync, remote_exec)
-        _create_dest_markers(config, sync, remote_exec)
+        _create_source_sentinels(config, sync, remote_exec)
+        _create_dest_sentinels(config, sync, remote_exec)
 
 
-def _create_source_markers(
+def _create_source_sentinels(
     config: Config,
     sync: SyncConfig,
     remote_exec: Callable[[str], None] | None,
@@ -84,7 +84,7 @@ def _create_source_markers(
                 remote_exec(f"touch {rp}/.nbkp-src")
 
 
-def _create_dest_markers(
+def _create_dest_sentinels(
     config: Config,
     sync: SyncConfig,
     remote_exec: Callable[[str], None] | None,

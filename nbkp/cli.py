@@ -50,9 +50,9 @@ from .sync import (
     run_all_syncs,
 )
 
-_MARKER_ONLY_REASONS = {
-    SyncReason.SOURCE_MARKER_NOT_FOUND,
-    SyncReason.DESTINATION_MARKER_NOT_FOUND,
+_SENTINEL_ONLY_REASONS = {
+    SyncReason.SOURCE_SENTINEL_NOT_FOUND,
+    SyncReason.DESTINATION_SENTINEL_NOT_FOUND,
 }
 
 app = typer.Typer(
@@ -85,7 +85,7 @@ def check(
             "--strict/--no-strict",
             help=(
                 "Exit non-zero on any inactive sync,"
-                " including missing markers"
+                " including missing sentinels"
             ),
         ),
     ] = False,
@@ -195,7 +195,7 @@ def run(
             "--strict/--no-strict",
             help=(
                 "Exit non-zero on any inactive sync,"
-                " including missing markers"
+                " including missing sentinels"
             ),
         ),
     ] = False,
@@ -688,7 +688,7 @@ def _check_and_display(
         has_errors = any(not s.active for s in sync_statuses.values())
     else:
         has_errors = any(
-            set(s.reasons) - _MARKER_ONLY_REASONS
+            set(s.reasons) - _SENTINEL_ONLY_REASONS
             for s in sync_statuses.values()
         )
 

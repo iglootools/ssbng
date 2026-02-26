@@ -213,7 +213,7 @@ class TestVolumeStatus:
         vs = VolumeStatus(
             slug="data",
             config=vol,
-            reasons=[VolumeReason.MARKER_NOT_FOUND],
+            reasons=[VolumeReason.SENTINEL_NOT_FOUND],
         )
         assert vs.active is False
 
@@ -401,7 +401,7 @@ class TestCheckLocalVolume:
         vol = LocalVolume(slug="data", path=str(tmp_path))
         status = check_volume(vol)
         assert status.active is False
-        assert status.reasons == [VolumeReason.MARKER_NOT_FOUND]
+        assert status.reasons == [VolumeReason.SENTINEL_NOT_FOUND]
 
 
 class TestCheckRemoteVolume:
@@ -743,7 +743,7 @@ class TestCheckSync:
             "src": VolumeStatus(
                 slug="src",
                 config=config.volumes["src"],
-                reasons=[VolumeReason.MARKER_NOT_FOUND],
+                reasons=[VolumeReason.SENTINEL_NOT_FOUND],
             ),
             "dst": VolumeStatus(
                 slug="dst",
@@ -756,7 +756,7 @@ class TestCheckSync:
         assert status.active is False
         assert SyncReason.SOURCE_UNAVAILABLE in status.reasons
 
-    def test_missing_src_marker(self, tmp_path: Path) -> None:
+    def test_missing_src_sentinel(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -781,9 +781,9 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.SOURCE_MARKER_NOT_FOUND in status.reasons
+        assert SyncReason.SOURCE_SENTINEL_NOT_FOUND in status.reasons
 
-    def _setup_active_markers(self, src: Path, dst: Path) -> None:
+    def _setup_active_sentinels(self, src: Path, dst: Path) -> None:
         (src / ".nbkp-vol").touch()
         (dst / ".nbkp-vol").touch()
         (src / "data").mkdir(exist_ok=True)
@@ -815,7 +815,7 @@ class TestCheckSync:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        self._setup_active_markers(src, dst)
+        self._setup_active_sentinels(src, dst)
 
         config, sync = self._make_config(src, dst)
         vol_statuses = self._make_active_vol_statuses(config)
@@ -838,7 +838,7 @@ class TestCheckSync:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        self._setup_active_markers(src, dst)
+        self._setup_active_sentinels(src, dst)
 
         src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = LocalVolume(slug="dst", path=str(dst))
@@ -872,7 +872,7 @@ class TestCheckSync:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        self._setup_active_markers(src, dst)
+        self._setup_active_sentinels(src, dst)
 
         src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = LocalVolume(slug="dst", path=str(dst))
@@ -914,7 +914,7 @@ class TestCheckSync:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        self._setup_active_markers(src, dst)
+        self._setup_active_sentinels(src, dst)
         (dst / "backup" / "latest").mkdir()
         (dst / "backup" / "snapshots").mkdir()
 
@@ -967,7 +967,7 @@ class TestCheckSync:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        self._setup_active_markers(src, dst)
+        self._setup_active_sentinels(src, dst)
 
         src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = LocalVolume(slug="dst", path=str(dst))
@@ -1006,7 +1006,7 @@ class TestCheckSync:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        self._setup_active_markers(src, dst)
+        self._setup_active_sentinels(src, dst)
 
         src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = LocalVolume(slug="dst", path=str(dst))
@@ -1048,7 +1048,7 @@ class TestCheckSync:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        self._setup_active_markers(src, dst)
+        self._setup_active_sentinels(src, dst)
 
         src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = LocalVolume(slug="dst", path=str(dst))
@@ -1097,7 +1097,7 @@ class TestCheckSync:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        self._setup_active_markers(src, dst)
+        self._setup_active_sentinels(src, dst)
         (dst / "backup" / "latest").mkdir()
         (dst / "backup" / "snapshots").mkdir()
 
@@ -1152,7 +1152,7 @@ class TestCheckSync:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        self._setup_active_markers(src, dst)
+        self._setup_active_sentinels(src, dst)
         # snapshots exists but latest does not
         (dst / "backup" / "snapshots").mkdir()
 
@@ -1212,7 +1212,7 @@ class TestCheckSync:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        self._setup_active_markers(src, dst)
+        self._setup_active_sentinels(src, dst)
         # latest exists but snapshots does not
         (dst / "backup" / "latest").mkdir()
 
@@ -1269,7 +1269,7 @@ class TestCheckSync:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        self._setup_active_markers(src, dst)
+        self._setup_active_sentinels(src, dst)
         # neither latest nor snapshots exist
 
         src_vol = LocalVolume(slug="src", path=str(src))
@@ -1321,7 +1321,7 @@ class TestCheckSync:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        self._setup_active_markers(src, dst)
+        self._setup_active_sentinels(src, dst)
 
         config, sync = self._make_config(src, dst)
         vol_statuses = self._make_active_vol_statuses(config)
@@ -1334,7 +1334,7 @@ class TestCheckSync:
     def test_multiple_failures_accumulated(
         self, mock_which: MagicMock, tmp_path: Path
     ) -> None:
-        """Source marker missing AND rsync missing on both sides."""
+        """Source sentinel missing AND rsync missing on both sides."""
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -1342,7 +1342,7 @@ class TestCheckSync:
         (src / ".nbkp-vol").touch()
         (dst / ".nbkp-vol").touch()
         (src / "data").mkdir()
-        # No .nbkp-src marker
+        # No .nbkp-src sentinel
         (dst / "backup").mkdir()
         (dst / "backup" / ".nbkp-dst").touch()
 
@@ -1351,7 +1351,7 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.SOURCE_MARKER_NOT_FOUND in status.reasons
+        assert SyncReason.SOURCE_SENTINEL_NOT_FOUND in status.reasons
         assert SyncReason.RSYNC_NOT_FOUND_ON_SOURCE in status.reasons
         assert SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION in status.reasons
 
@@ -1367,12 +1367,12 @@ class TestCheckSync:
             "src": VolumeStatus(
                 slug="src",
                 config=config.volumes["src"],
-                reasons=[VolumeReason.MARKER_NOT_FOUND],
+                reasons=[VolumeReason.SENTINEL_NOT_FOUND],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=config.volumes["dst"],
-                reasons=[VolumeReason.MARKER_NOT_FOUND],
+                reasons=[VolumeReason.SENTINEL_NOT_FOUND],
             ),
         }
 
@@ -2361,7 +2361,7 @@ class TestCheckHardLinkDest:
         )
         return config, sync
 
-    def _setup_active_markers(self, src: Path, dst: Path) -> None:
+    def _setup_active_sentinels(self, src: Path, dst: Path) -> None:
         (src / ".nbkp-vol").touch()
         (dst / ".nbkp-vol").touch()
         (src / "data").mkdir(exist_ok=True)
@@ -2400,7 +2400,7 @@ class TestCheckHardLinkDest:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        self._setup_active_markers(src, dst)
+        self._setup_active_sentinels(src, dst)
         # No snapshots dir
 
         config, sync = self._make_hl_config(src, dst)
@@ -2429,7 +2429,7 @@ class TestCheckHardLinkDest:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        self._setup_active_markers(src, dst)
+        self._setup_active_sentinels(src, dst)
         (dst / "backup" / "snapshots").mkdir()
 
         config, sync = self._make_hl_config(src, dst)
@@ -2456,7 +2456,7 @@ class TestCheckHardLinkDest:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        self._setup_active_markers(src, dst)
+        self._setup_active_sentinels(src, dst)
         (dst / "backup" / "snapshots").mkdir()
 
         config, sync = self._make_hl_config(src, dst)
@@ -2483,7 +2483,7 @@ class TestCheckHardLinkDest:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        self._setup_active_markers(src, dst)
+        self._setup_active_sentinels(src, dst)
 
         config, sync = self._make_hl_config(src, dst)
         vol_statuses = self._make_active_vol_statuses(config)
@@ -2510,7 +2510,7 @@ class TestCheckHardLinkDest:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
-        self._setup_active_markers(src, dst)
+        self._setup_active_sentinels(src, dst)
         (dst / "backup" / "snapshots").mkdir()
 
         config, sync = self._make_hl_config(src, dst)

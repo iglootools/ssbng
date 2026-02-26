@@ -395,14 +395,14 @@ def _print_cmd(
     console.print(Padding(syntax, (0, 0, 0, pad)))
 
 
-def _print_marker_fix(
+def _print_sentinel_fix(
     console: Console,
     vol: LocalVolume | RemoteVolume,
     path: str,
-    marker: str,
+    sentinel: str,
     resolved_endpoints: ResolvedEndpoints,
 ) -> None:
-    """Print marker creation fix with mount reminder."""
+    """Print sentinel creation fix with mount reminder."""
     p2 = _INDENT * 2
     console.print(f"{p2}Ensure the volume is mounted, then:")
     _print_cmd(
@@ -412,7 +412,7 @@ def _print_marker_fix(
     _print_cmd(
         console,
         _wrap_cmd(
-            f"touch {path}/{marker}",
+            f"touch {path}/{sentinel}",
             vol,
             resolved_endpoints,
         ),
@@ -505,20 +505,20 @@ def _print_sync_reason_fix(
                         f" '{sync.destination.volume}'"
                         " is not available."
                     )
-        case SyncReason.SOURCE_MARKER_NOT_FOUND:
+        case SyncReason.SOURCE_SENTINEL_NOT_FOUND:
             src = config.volumes[sync.source.volume]
             path = _endpoint_path(src, sync.source.subdir)
-            _print_marker_fix(
+            _print_sentinel_fix(
                 console,
                 src,
                 path,
                 ".nbkp-src",
                 resolved_endpoints,
             )
-        case SyncReason.DESTINATION_MARKER_NOT_FOUND:
+        case SyncReason.DESTINATION_SENTINEL_NOT_FOUND:
             dst = config.volumes[sync.destination.volume]
             path = _endpoint_path(dst, sync.destination.subdir)
-            _print_marker_fix(
+            _print_sentinel_fix(
                 console,
                 dst,
                 path,
@@ -647,8 +647,8 @@ def print_human_troubleshoot(
         for reason in vs.reasons:
             console.print(f"{_INDENT}{reason.value}")
             match reason:
-                case VolumeReason.MARKER_NOT_FOUND:
-                    _print_marker_fix(
+                case VolumeReason.SENTINEL_NOT_FOUND:
+                    _print_sentinel_fix(
                         console,
                         vol,
                         vol.path,

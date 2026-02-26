@@ -95,7 +95,7 @@ def _sample_sync_statuses(
     }
 
 
-def _sample_marker_only_sync_statuses(
+def _sample_sentinel_only_sync_statuses(
     config: Config,
     vol_statuses: dict[str, VolumeStatus],
 ) -> dict[str, SyncStatus]:
@@ -106,8 +106,8 @@ def _sample_marker_only_sync_statuses(
             source_status=vol_statuses["local-data"],
             destination_status=vol_statuses["nas"],
             reasons=[
-                SyncReason.SOURCE_MARKER_NOT_FOUND,
-                SyncReason.DESTINATION_MARKER_NOT_FOUND,
+                SyncReason.SOURCE_SENTINEL_NOT_FOUND,
+                SyncReason.DESTINATION_SENTINEL_NOT_FOUND,
             ],
         ),
     }
@@ -298,13 +298,13 @@ class TestCheckCommand:
 
     @patch("nbkp.cli.check_all_syncs")
     @patch("nbkp.cli.load_config")
-    def test_marker_only_exit_0_by_default(
+    def test_sentinel_only_exit_0_by_default(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
         config = _sample_config()
         mock_load.return_value = config
         vol_s = _sample_all_active_vol_statuses(config)
-        sync_s = _sample_marker_only_sync_statuses(config, vol_s)
+        sync_s = _sample_sentinel_only_sync_statuses(config, vol_s)
         mock_checks.return_value = (vol_s, sync_s)
 
         result = runner.invoke(app, ["check", "--config", "/fake.yaml"])
@@ -312,13 +312,13 @@ class TestCheckCommand:
 
     @patch("nbkp.cli.check_all_syncs")
     @patch("nbkp.cli.load_config")
-    def test_marker_only_exit_1_when_strict(
+    def test_sentinel_only_exit_1_when_strict(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
         config = _sample_config()
         mock_load.return_value = config
         vol_s = _sample_all_active_vol_statuses(config)
-        sync_s = _sample_marker_only_sync_statuses(config, vol_s)
+        sync_s = _sample_sentinel_only_sync_statuses(config, vol_s)
         mock_checks.return_value = (vol_s, sync_s)
 
         result = runner.invoke(
@@ -603,7 +603,7 @@ class TestRunCommand:
     @patch("nbkp.cli.run_all_syncs")
     @patch("nbkp.cli.check_all_syncs")
     @patch("nbkp.cli.load_config")
-    def test_marker_only_proceeds_by_default(
+    def test_sentinel_only_proceeds_by_default(
         self,
         mock_load: MagicMock,
         mock_checks: MagicMock,
@@ -612,7 +612,7 @@ class TestRunCommand:
         config = _sample_config()
         mock_load.return_value = config
         vol_s = _sample_all_active_vol_statuses(config)
-        sync_s = _sample_marker_only_sync_statuses(config, vol_s)
+        sync_s = _sample_sentinel_only_sync_statuses(config, vol_s)
         mock_checks.return_value = (vol_s, sync_s)
         mock_run.return_value = [
             SyncResult(
@@ -631,7 +631,7 @@ class TestRunCommand:
     @patch("nbkp.cli.run_all_syncs")
     @patch("nbkp.cli.check_all_syncs")
     @patch("nbkp.cli.load_config")
-    def test_marker_only_exits_when_strict(
+    def test_sentinel_only_exits_when_strict(
         self,
         mock_load: MagicMock,
         mock_checks: MagicMock,
@@ -640,7 +640,7 @@ class TestRunCommand:
         config = _sample_config()
         mock_load.return_value = config
         vol_s = _sample_all_active_vol_statuses(config)
-        sync_s = _sample_marker_only_sync_statuses(config, vol_s)
+        sync_s = _sample_sentinel_only_sync_statuses(config, vol_s)
         mock_checks.return_value = (vol_s, sync_s)
 
         result = runner.invoke(

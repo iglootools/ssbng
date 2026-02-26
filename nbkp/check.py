@@ -22,7 +22,7 @@ from .remote import run_remote_command
 
 
 class VolumeReason(str, enum.Enum):
-    MARKER_NOT_FOUND = "marker not found"
+    SENTINEL_NOT_FOUND = ".nbkp-vol volume sentinel not found"
     UNREACHABLE = "unreachable"
 
 
@@ -30,8 +30,8 @@ class SyncReason(str, enum.Enum):
     DISABLED = "disabled"
     SOURCE_UNAVAILABLE = "source unavailable"
     DESTINATION_UNAVAILABLE = "destination unavailable"
-    SOURCE_MARKER_NOT_FOUND = "source marker .nbkp-src not found"
-    DESTINATION_MARKER_NOT_FOUND = "destination marker .nbkp-dst not found"
+    SOURCE_SENTINEL_NOT_FOUND = ".nbkp-src source sentinel not found"
+    DESTINATION_SENTINEL_NOT_FOUND = ".nbkp-dst destination sentinel not found"
     RSYNC_NOT_FOUND_ON_SOURCE = "rsync not found on source"
     RSYNC_NOT_FOUND_ON_DESTINATION = "rsync not found on destination"
     BTRFS_NOT_FOUND_ON_DESTINATION = "btrfs not found on destination"
@@ -95,10 +95,10 @@ def check_volume(
 
 
 def _check_local_volume(volume: LocalVolume) -> VolumeStatus:
-    """Check if a local volume is active (.nbkp-vol marker exists)."""
-    marker = Path(volume.path) / ".nbkp-vol"
+    """Check if a local volume is active (.nbkp-vol sentinel exists)."""
+    sentinel = Path(volume.path) / ".nbkp-vol"
     reasons: list[VolumeReason] = (
-        [] if marker.exists() else [VolumeReason.MARKER_NOT_FOUND]
+        [] if sentinel.exists() else [VolumeReason.SENTINEL_NOT_FOUND]
     )
     return VolumeStatus(
         slug=volume.slug,
@@ -111,11 +111,11 @@ def _check_remote_volume(
     volume: RemoteVolume,
     resolved_endpoints: ResolvedEndpoints,
 ) -> VolumeStatus:
-    """Check if a remote volume is active (SSH + .nbkp-vol marker)."""
+    """Check if a remote volume is active (SSH + .nbkp-vol sentinel)."""
     ep = resolved_endpoints[volume.slug]
-    marker_path = f"{volume.path}/.nbkp-vol"
+    sentinel_path = f"{volume.path}/.nbkp-vol"
     result = run_remote_command(
-        ep.server, ["test", "-f", marker_path], ep.proxy_chain
+        ep.server, ["test", "-f", sentinel_path], ep.proxy_chain
     )
     reasons: list[VolumeReason] = (
         [] if result.returncode == 0 else [VolumeReason.UNREACHABLE]
@@ -127,17 +127,17 @@ def _check_remote_volume(
     )
 
 
-def _check_endpoint_marker(
+def _check_endpoint_sentinel(
     volume: Volume,
     subdir: str | None,
-    marker_name: str,
+    sentinel_name: str,
     resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
-    """Check if an endpoint marker file exists."""
+    """Check if an endpoint sentinel file exists."""
     if subdir:
-        rel_path = f"{volume.path}/{subdir}/{marker_name}"
+        rel_path = f"{volume.path}/{subdir}/{sentinel_name}"
     else:
-        rel_path = f"{volume.path}/{marker_name}"
+        rel_path = f"{volume.path}/{sentinel_name}"
 
     match volume:
         case LocalVolume():
@@ -373,25 +373,25 @@ def check_sync(
 
         # Source checks (only if source volume is active)
         if src_status.active:
-            if not _check_endpoint_marker(
+            if not _check_endpoint_sentinel(
                 src_vol,
                 sync.source.subdir,
                 ".nbkp-src",
                 re,
             ):
-                reasons.append(SyncReason.SOURCE_MARKER_NOT_FOUND)
+                reasons.append(SyncReason.SOURCE_SENTINEL_NOT_FOUND)
             if not _check_command_available(src_vol, "rsync", re):
                 reasons.append(SyncReason.RSYNC_NOT_FOUND_ON_SOURCE)
 
         # Destination checks (only if destination volume is active)
         if dst_status.active:
-            if not _check_endpoint_marker(
+            if not _check_endpoint_sentinel(
                 dst_vol,
                 sync.destination.subdir,
                 ".nbkp-dst",
                 re,
             ):
-                reasons.append(SyncReason.DESTINATION_MARKER_NOT_FOUND)
+                reasons.append(SyncReason.DESTINATION_SENTINEL_NOT_FOUND)
             if not _check_command_available(dst_vol, "rsync", re):
                 reasons.append(SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION)
             if sync.destination.btrfs_snapshots.enabled:

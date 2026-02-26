@@ -271,17 +271,17 @@ def ssh_exec(
     return result
 
 
-def create_markers(
+def create_sentinels(
     server: SshEndpoint,
     path: str,
-    markers: list[str],
+    sentinels: list[str],
 ) -> None:
-    """Create marker files on the container via SSH."""
-    for marker in markers:
-        result = ssh_exec(server, f"touch {path}/{marker}", check=False)
+    """Create sentinel files on the container via SSH."""
+    for sentinel in sentinels:
+        result = ssh_exec(server, f"touch {path}/{sentinel}", check=False)
         if result.returncode != 0:
             raise RuntimeError(
-                f"Failed to create marker {marker}:" f" {result.stderr}"
+                f"Failed to create sentinel {sentinel}:" f" {result.stderr}"
             )
 
 

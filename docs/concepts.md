@@ -391,7 +391,7 @@ The generated script resolves its own directory at runtime via `NBKP_SCRIPT_DIR`
 - Rsync filters and filter-file support
 - Btrfs snapshot creation and pruning
 - Hard-link snapshots: incremental backups via `--link-dest`, symlink management, and pruning
-- Pre-flight checks (volume markers, endpoint markers)
+- Pre-flight checks (volume sentinels, endpoint sentinels)
 - Nonzero exit on any sync failure
 
 **What is dropped:**

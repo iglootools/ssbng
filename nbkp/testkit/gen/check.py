@@ -68,7 +68,7 @@ def check_data(
     external_vs = VolumeStatus(
         slug="external-drive",
         config=config.volumes["external-drive"],
-        reasons=[VolumeReason.MARKER_NOT_FOUND],
+        reasons=[VolumeReason.SENTINEL_NOT_FOUND],
     )
 
     vol_statuses = {
@@ -133,8 +133,8 @@ def troubleshoot_config() -> Config:
                     volume="nas-backup",
                 ),
             ),
-            "missing-markers": SyncConfig(
-                slug="missing-markers",
+            "missing-sentinels": SyncConfig(
+                slug="missing-sentinels",
                 source=SyncEndpoint(volume="laptop"),
                 destination=DestinationSyncEndpoint(volume="usb-drive"),
             ),
@@ -188,7 +188,7 @@ def troubleshoot_data(
     laptop_vs = VolumeStatus(
         slug="laptop",
         config=config.volumes["laptop"],
-        reasons=[VolumeReason.MARKER_NOT_FOUND],
+        reasons=[VolumeReason.SENTINEL_NOT_FOUND],
     )
     usb_vs = VolumeStatus(
         slug="usb-drive",
@@ -225,14 +225,14 @@ def troubleshoot_data(
                 SyncReason.DESTINATION_UNAVAILABLE,
             ],
         ),
-        "missing-markers": SyncStatus(
-            slug="missing-markers",
-            config=config.syncs["missing-markers"],
+        "missing-sentinels": SyncStatus(
+            slug="missing-sentinels",
+            config=config.syncs["missing-sentinels"],
             source_status=laptop_vs,
             destination_status=usb_vs,
             reasons=[
-                SyncReason.SOURCE_MARKER_NOT_FOUND,
-                SyncReason.DESTINATION_MARKER_NOT_FOUND,
+                SyncReason.SOURCE_SENTINEL_NOT_FOUND,
+                SyncReason.DESTINATION_SENTINEL_NOT_FOUND,
             ],
         ),
         "rsync-missing": SyncStatus(

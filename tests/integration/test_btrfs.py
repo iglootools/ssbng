@@ -27,7 +27,7 @@ from nbkp.config import (
 )
 from nbkp.sync.rsync import run_rsync
 from nbkp.testkit.docker import REMOTE_BTRFS_PATH
-from nbkp.testkit.gen.fs import create_seed_markers
+from nbkp.testkit.gen.fs import create_seed_sentinels
 
 from .conftest import ssh_exec
 
@@ -39,7 +39,7 @@ def _make_btrfs_config(
     remote_btrfs_volume: RemoteVolume,
     ssh_endpoint: SshEndpoint,
 ) -> tuple[SyncConfig, Config, ResolvedEndpoints]:
-    """Build btrfs config and create seed markers."""
+    """Build btrfs config and create seed sentinels."""
     src_vol = LocalVolume(slug="src", path=src_path)
     sync = SyncConfig(
         slug="test-sync",
@@ -61,7 +61,7 @@ def _make_btrfs_config(
     def _run_remote(cmd: str) -> None:
         ssh_exec(ssh_endpoint, cmd)
 
-    create_seed_markers(config, remote_exec=_run_remote)
+    create_seed_sentinels(config, remote_exec=_run_remote)
 
     resolved = resolve_all_endpoints(config)
     return sync, config, resolved

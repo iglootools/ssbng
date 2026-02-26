@@ -16,7 +16,7 @@ from nbkp.testkit.docker import (  # noqa: F401
     DOCKER_DIR,
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_PATH,
-    create_markers,
+    create_sentinels,
     create_test_ssh_endpoint,
     generate_ssh_keypair,
     prepare_btrfs_snapshot_based_backup_dst,
@@ -251,7 +251,7 @@ def _cleanup_remote(
         ssh_exec(server, cmd, check=False)
 
     # Clean /srv/backups (glob * skips dotfiles, so also remove
-    # markers)
+    # sentinels)
     run(f"rm -rf {REMOTE_BACKUP_PATH}/*")
     run(f"find {REMOTE_BACKUP_PATH}" " -name '.nbkp-*' -delete")
 

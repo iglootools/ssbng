@@ -99,7 +99,7 @@ If you believe that the representation is inaccurate or if there are other tools
 #### Rsync-based
 
 - **[rsnapshot](https://rsnapshot.org/)** — periodic snapshots via rsync + hard links (hourly/daily/weekly/monthly). Designed for server/cron use with no awareness of removable or intermittent targets. Files stored as plain directories.
-- **[Back In Time](https://github.com/bit-team/backintime)** — GUI/CLI tool using rsync + hard links with scheduling and encfs encryption. Provides a Qt interface; uses hard links instead of btrfs snapshots; no marker-file mechanism for removable drives.
+- **[Back In Time](https://github.com/bit-team/backintime)** — GUI/CLI tool using rsync + hard links with scheduling and encfs encryption. Provides a Qt interface; uses hard links instead of btrfs snapshots; no sentinel-file mechanism for removable drives.
 - **[rsync-time-backup](https://github.com/laurent22/rsync-time-backup)** — Time Machine-style shell script using rsync `--link-dest`. Single script, no config file; uses hard links instead of btrfs snapshots; no volume detection.
 - **[rdiff-backup](https://rdiff-backup.net/)** — keeps the latest backup as a plain mirror, stores reverse diffs for older versions. Older versions require the tool to reconstruct; no removable-drive awareness.
 - **[Dirvish](https://dirvish.org/)** — rotating network backup system using rsync + hard links. Oriented toward server-pull workflows; no removable-drive detection or btrfs support.

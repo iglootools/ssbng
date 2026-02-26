@@ -61,7 +61,7 @@ from .testkit.gen.check import (
 from .testkit.gen.config import config_show_config
 from .testkit.gen.fs import (
     create_seed_data,
-    create_seed_markers,
+    create_seed_sentinels,
 )
 from .testkit.gen.sync import (
     dry_run_result,
@@ -407,7 +407,7 @@ def seed(
         syncs=syncs,
     )
 
-    # Create markers and seed data
+    # Create sentinels and seed data
     if docker:
         assert docker_endpoint is not None
         _server = docker_endpoint
@@ -416,14 +416,14 @@ def seed(
             ssh_exec(_server, cmd)
 
         with _console.status("Setting up volumes..."):
-            create_seed_markers(config, remote_exec=_run_remote)
+            create_seed_sentinels(config, remote_exec=_run_remote)
         create_seed_data(
             config,
             big_file_size_mb=big_file_size,
             remote_exec=_run_remote,
         )
     else:
-        create_seed_markers(config)
+        create_seed_sentinels(config)
         create_seed_data(config, big_file_size_mb=big_file_size)
 
     config_path = tmp / "config.yaml"

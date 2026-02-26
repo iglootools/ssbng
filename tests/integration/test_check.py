@@ -25,9 +25,9 @@ from nbkp.config import (
     resolve_all_endpoints,
 )
 from nbkp.testkit.docker import REMOTE_BACKUP_PATH, REMOTE_BTRFS_PATH
-from nbkp.testkit.gen.fs import create_seed_markers
+from nbkp.testkit.gen.fs import create_seed_sentinels
 
-from .conftest import create_markers, ssh_exec
+from .conftest import create_sentinels, ssh_exec
 
 pytestmark = pytest.mark.integration
 
@@ -48,7 +48,7 @@ class TestLocalVolumeCheck:
     def test_local_volume_inactive(self, tmp_path: Path) -> None:
         vol_path = tmp_path / "vol"
         vol_path.mkdir()
-        # No .nbkp-vol marker
+        # No .nbkp-vol sentinel
 
         vol = LocalVolume(slug="local", path=str(vol_path))
         config = Config(
@@ -64,7 +64,7 @@ class TestRemoteVolumeCheck:
         ssh_endpoint: SshEndpoint,
         remote_volume: RemoteVolume,
     ) -> None:
-        create_markers(ssh_endpoint, REMOTE_BACKUP_PATH, [".nbkp-vol"])
+        create_sentinels(ssh_endpoint, REMOTE_BACKUP_PATH, [".nbkp-vol"])
         config = Config(
             ssh_endpoints={"test-server": ssh_endpoint},
             volumes={"test-remote": remote_volume},
@@ -78,7 +78,7 @@ class TestRemoteVolumeCheck:
         ssh_endpoint: SshEndpoint,
         remote_volume: RemoteVolume,
     ) -> None:
-        # No marker created
+        # No sentinel created
         config = Config(
             ssh_endpoints={"test-server": ssh_endpoint},
             volumes={"test-remote": remote_volume},
@@ -111,7 +111,7 @@ class TestSyncCheck:
         def _run_remote(cmd: str) -> None:
             ssh_exec(ssh_endpoint, cmd)
 
-        create_seed_markers(config, remote_exec=_run_remote)
+        create_seed_sentinels(config, remote_exec=_run_remote)
 
         resolved = resolve_all_endpoints(config)
         src_status = check_volume(src_vol, resolved)
@@ -229,12 +229,12 @@ class TestSyncCheckBtrfs:
             ssh_endpoint,
             f"mkdir -p {REMOTE_BTRFS_PATH}/not-a-subvol",
         )
-        create_markers(
+        create_sentinels(
             ssh_endpoint,
             REMOTE_BTRFS_PATH,
             [".nbkp-vol"],
         )
-        create_markers(
+        create_sentinels(
             ssh_endpoint,
             f"{REMOTE_BTRFS_PATH}/not-a-subvol",
             [".nbkp-dst"],

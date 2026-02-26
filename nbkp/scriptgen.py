@@ -476,24 +476,24 @@ def _build_preflight_block(
 
     lines: list[str] = []
 
-    # Source endpoint marker
-    src_marker = f"{src_path}/.nbkp-src"
+    # Source endpoint sentinel
+    src_sentinel = f"{src_path}/.nbkp-src"
     lines.append(
         _build_check_line(
             src_vol,
-            ["-f", src_marker],
-            f"source marker {src_marker} not found",
+            ["-f", src_sentinel],
+            f"source sentinel {src_sentinel} not found",
             resolved_endpoints,
         )
     )
 
-    # Destination endpoint marker
-    dst_marker = f"{dst_path}/.nbkp-dst"
+    # Destination endpoint sentinel
+    dst_sentinel = f"{dst_path}/.nbkp-dst"
     lines.append(
         _build_check_line(
             dst_vol,
-            ["-f", dst_marker],
-            f"destination marker {dst_marker} not found",
+            ["-f", dst_sentinel],
+            f"destination sentinel {dst_sentinel} not found",
             resolved_endpoints,
         )
     )
@@ -840,20 +840,20 @@ def _build_volume_check(
     resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     vpath = vol_paths[slug]
-    marker = f"{vpath}/.nbkp-vol"
+    sentinel = f"{vpath}/.nbkp-vol"
     match vol:
         case LocalVolume():
-            test_cmd = f"test -f {_qp(marker)}"
+            test_cmd = f"test -f {_qp(sentinel)}"
         case RemoteVolume():
             ep = resolved_endpoints[vol.slug]
             test_cmd = _format_remote_test(
-                ep.server, ep.proxy_chain, ["-f", marker]
+                ep.server, ep.proxy_chain, ["-f", sentinel]
             )
     return (
         f"{test_cmd}"
         f" || {{ nbkp_log"
         f' "WARN: volume {slug}:'
-        f' marker {marker} not found";'
+        f' sentinel {sentinel} not found";'
         f" }}"
     )
 

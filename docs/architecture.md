@@ -18,7 +18,7 @@ All modules resolve volumes from `Config.volumes[name]` and dispatch on volume t
 
 ## Sync flow (runner.py)
 
-1. `check_all_syncs()` — verifies volumes are reachable and marker files exist (`.nbkp-vol`, `.nbkp-src`, `.nbkp-dst`)
+1. `check_all_syncs()` — verifies volumes are reachable and sentinel files exist (`.nbkp-vol`, `.nbkp-src`, `.nbkp-dst`)
 2. For each active sync, dispatch on `snapshot_mode`:
    - **`none`**: `run_rsync()` → done
    - **`btrfs`**: `run_rsync()` to `{destination}/latest/` → `create_snapshot()` → optional `prune_snapshots()`

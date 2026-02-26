@@ -29,7 +29,7 @@ from nbkp.sync.hardlinks import (
 )
 from nbkp.sync.rsync import run_rsync
 from nbkp.testkit.docker import REMOTE_BACKUP_PATH
-from nbkp.testkit.gen.fs import create_seed_markers
+from nbkp.testkit.gen.fs import create_seed_sentinels
 
 from .conftest import ssh_exec
 
@@ -42,7 +42,7 @@ def _make_hl_config(
     ssh_endpoint: SshEndpoint,
     max_snapshots: int | None = 5,
 ) -> tuple[SyncConfig, Config, ResolvedEndpoints]:
-    """Build hard-link config and create seed markers."""
+    """Build hard-link config and create seed sentinels."""
     src_vol = LocalVolume(slug="src", path=src_path)
     sync = SyncConfig(
         slug="test-sync",
@@ -66,7 +66,7 @@ def _make_hl_config(
     def _run_remote(cmd: str) -> None:
         ssh_exec(ssh_endpoint, cmd)
 
-    create_seed_markers(config, remote_exec=_run_remote)
+    create_seed_sentinels(config, remote_exec=_run_remote)
 
     resolved = resolve_all_endpoints(config)
     return sync, config, resolved
