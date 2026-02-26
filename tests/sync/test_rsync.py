@@ -6,8 +6,10 @@ import io
 from unittest.mock import MagicMock, patch
 
 from nbkp.config import (
+    BtrfsSnapshotConfig,
     Config,
     DestinationSyncEndpoint,
+    HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
     RsyncOptions,
@@ -854,6 +856,144 @@ class TestBuildRsyncCommandProgress:
         assert "--info=progress2" in cmd
         assert "--stats" in cmd
         assert "--human-readable" in cmd
+
+
+class TestSourceSnapshotPath:
+    """When source has snapshots, rsync should read from latest/."""
+
+    def test_local_to_local_btrfs_source(self) -> None:
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(
+                volume="src",
+                subdir="photos",
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+            ),
+            destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        assert cmd[-2] == "/mnt/src/photos/latest/"
+        assert cmd[-1] == "/mnt/dst/backup/latest/"
+
+    def test_local_to_local_hard_link_source(self) -> None:
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(
+                volume="src",
+                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+            ),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        assert cmd[-2] == "/mnt/src/latest/"
+        assert cmd[-1] == "/mnt/dst/latest/"
+
+    def test_local_to_remote_btrfs_source(self) -> None:
+        server = SshEndpoint(slug="nas", host="nas.local", user="backup")
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = RemoteVolume(slug="dst", ssh_endpoint="nas", path="/backup")
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(
+                volume="src",
+                subdir="data",
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+            ),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            ssh_endpoints={"nas": server},
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+        resolved = resolve_all_endpoints(config)
+
+        cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
+        assert cmd[-2] == "/mnt/src/data/latest/"
+        assert cmd[-1] == "backup@nas.local:/backup/latest/"
+
+    def test_remote_to_local_hard_link_source(self) -> None:
+        server = SshEndpoint(slug="srv", host="srv.local", user="admin")
+        src = RemoteVolume(slug="src", ssh_endpoint="srv", path="/data")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(
+                volume="src",
+                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+            ),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            ssh_endpoints={"srv": server},
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+        resolved = resolve_all_endpoints(config)
+
+        cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
+        assert cmd[-2] == "admin@srv.local:/data/latest/"
+        assert cmd[-1] == "/mnt/dst/latest/"
+
+    def test_no_snapshots_source_unchanged(self) -> None:
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src", subdir="photos"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        assert cmd[-2] == "/mnt/src/photos/"
+        assert cmd[-1] == "/mnt/dst/latest/"
+
+    def test_remote_to_remote_same_server_btrfs_source(self) -> None:
+        server = SshEndpoint(
+            slug="nas",
+            host="nas.local",
+            user="backup",
+        )
+        src = RemoteVolume(slug="src", ssh_endpoint="nas", path="/data/src")
+        dst = RemoteVolume(slug="dst", ssh_endpoint="nas", path="/data/dst")
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(
+                volume="src",
+                subdir="photos",
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+            ),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            ssh_endpoints={"nas": server},
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+        resolved = resolve_all_endpoints(config)
+
+        cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
+        inner = cmd[-1]
+        assert "/data/src/photos/latest/" in inner
+        assert "/data/dst/latest/" in inner
 
 
 class TestDestSuffix:

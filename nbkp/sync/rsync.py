@@ -14,6 +14,7 @@ from ..config import (
     ResolvedEndpoints,
     SshEndpoint,
     SyncConfig,
+    SyncEndpoint,
 )
 from ..remote import (
     build_ssh_base_args,
@@ -48,6 +49,24 @@ def resolve_path(
         return f"{volume.path}/{subdir}"
     else:
         return volume.path
+
+
+def resolve_source_path(
+    volume: LocalVolume | RemoteVolume,
+    source: SyncEndpoint,
+) -> str:
+    """Resolve source path, appending /latest for snapshots.
+
+    When the source endpoint has snapshots configured (btrfs or
+    hard-link), rsync should read from the ``latest/`` directory
+    rather than the volume root.  For hard-link snapshots,
+    ``latest`` is a symlink — rsync's trailing slash causes it
+    to follow the symlink and copy the target's contents.
+    """
+    base = resolve_path(volume, source.subdir)
+    if source.snapshot_mode != "none":
+        return f"{base}/latest"
+    return base
 
 
 def _base_rsync_args(
@@ -133,7 +152,7 @@ def build_rsync_command(
     src_vol = config.volumes[sync.source.volume]
     dst_vol = config.volumes[sync.destination.volume]
 
-    src_path = resolve_path(src_vol, sync.source.subdir)
+    src_path = resolve_source_path(src_vol, sync.source)
     dst_path = resolve_path(dst_vol, sync.destination.subdir)
 
     match (src_vol, dst_vol):

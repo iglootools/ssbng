@@ -177,6 +177,18 @@ def troubleshoot_config() -> Config:
                     ),
                 ),
             ),
+            "source-latest-missing": SyncConfig(
+                slug="source-latest-missing",
+                source=SyncEndpoint(
+                    volume="usb-drive",
+                    btrfs_snapshots=BtrfsSnapshotConfig(
+                        enabled=True,
+                    ),
+                ),
+                destination=DestinationSyncEndpoint(
+                    volume="nas-backup",
+                ),
+            ),
         },
     )
 
@@ -285,6 +297,15 @@ def troubleshoot_data(
             reasons=[
                 SyncReason.DESTINATION_NO_HARDLINK_SUPPORT,
                 SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND,
+            ],
+        ),
+        "source-latest-missing": SyncStatus(
+            slug="source-latest-missing",
+            config=config.syncs["source-latest-missing"],
+            source_status=usb_vs,
+            destination_status=nas_vs,
+            reasons=[
+                SyncReason.SOURCE_LATEST_NOT_FOUND,
             ],
         ),
     }

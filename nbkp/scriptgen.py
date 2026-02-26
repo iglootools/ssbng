@@ -487,6 +487,18 @@ def _build_preflight_block(
         )
     )
 
+    # Source snapshot: verify latest/ exists
+    if sync.source.snapshot_mode != "none":
+        src_latest = f"{src_path}/latest"
+        lines.append(
+            _build_check_line(
+                src_vol,
+                ["-d", src_latest],
+                ("source latest/ not found" f" ({src_latest})"),
+                resolved_endpoints,
+            )
+        )
+
     # Destination endpoint sentinel
     dst_sentinel = f"{dst_path}/.nbkp-dst"
     lines.append(

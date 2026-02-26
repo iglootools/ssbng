@@ -54,6 +54,8 @@ def _sync_options(sync: SyncConfig) -> str:
     opts: list[str] = []
     if sync.filters or sync.filter_file:
         opts.append("rsync-filter")
+    if sync.source.snapshot_mode != "none":
+        opts.append(f"src:{sync.source.snapshot_mode}")
     if sync.destination.btrfs_snapshots.enabled:
         btrfs_label = "btrfs-snapshots"
         max_snap = sync.destination.btrfs_snapshots.max_snapshots
@@ -515,6 +517,31 @@ def _print_sync_reason_fix(
                 ".nbkp-src",
                 resolved_endpoints,
             )
+        case SyncReason.SOURCE_LATEST_NOT_FOUND:
+            src = config.volumes[sync.source.volume]
+            path = _endpoint_path(src, sync.source.subdir)
+            console.print(
+                f"{p2}Source has snapshots enabled"
+                f" but {path}/latest does not"
+                " exist. Ensure the upstream"
+                " sync has run at least once,"
+                " or create it manually:"
+            )
+            if sync.source.btrfs_snapshots.enabled:
+                cmds = [
+                    "sudo btrfs subvolume create" f" {path}/latest",
+                    "sudo chown <user>:<group>" f" {path}/latest",
+                ]
+            else:
+                cmds = [
+                    f"mkdir -p {path}/snapshots/initial",
+                    f"ln -sfn snapshots/initial" f" {path}/latest",
+                ]
+            for cmd in cmds:
+                _print_cmd(
+                    console,
+                    _wrap_cmd(cmd, src, resolved_endpoints),
+                )
         case SyncReason.DESTINATION_SENTINEL_NOT_FOUND:
             dst = config.volumes[sync.destination.volume]
             path = _endpoint_path(dst, sync.destination.subdir)

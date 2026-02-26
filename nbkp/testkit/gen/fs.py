@@ -60,6 +60,9 @@ def create_seed_sentinels(
         _create_dest_sentinels(config, sync, remote_exec)
 
 
+_SEED_SNAPSHOT_NAME = "1970-01-01T00:00:00.000Z"
+
+
 def _create_source_sentinels(
     config: Config,
     sync: SyncConfig,
@@ -67,6 +70,8 @@ def _create_source_sentinels(
 ) -> None:
     vol = config.volumes[sync.source.volume]
     subdir = sync.source.subdir
+    btrfs = sync.source.btrfs_snapshots
+    hard_link = sync.source.hard_link_snapshots
 
     match vol:
         case LocalVolume():
@@ -75,6 +80,15 @@ def _create_source_sentinels(
                 path = path / subdir
             path.mkdir(parents=True, exist_ok=True)
             (path / ".nbkp-src").touch()
+            if hard_link.enabled:
+                snap = path / "snapshots" / _SEED_SNAPSHOT_NAME
+                snap.mkdir(parents=True, exist_ok=True)
+                latest = path / "latest"
+                latest.unlink(missing_ok=True)
+                latest.symlink_to(f"snapshots/{_SEED_SNAPSHOT_NAME}")
+            elif btrfs.enabled:
+                (path / "snapshots").mkdir(exist_ok=True)
+                (path / "latest").mkdir(exist_ok=True)
         case RemoteVolume():
             if remote_exec is not None:
                 rp = vol.path
@@ -82,6 +96,13 @@ def _create_source_sentinels(
                     rp = f"{rp}/{subdir}"
                 remote_exec(f"mkdir -p {rp}")
                 remote_exec(f"touch {rp}/.nbkp-src")
+                if hard_link.enabled:
+                    snap_rel = f"snapshots/{_SEED_SNAPSHOT_NAME}"
+                    remote_exec(f"mkdir -p {rp}/{snap_rel}")
+                    remote_exec(f"ln -sfn {snap_rel} {rp}/latest")
+                elif btrfs.enabled:
+                    remote_exec("btrfs subvolume create" f" {rp}/latest")
+                    remote_exec(f"mkdir -p {rp}/snapshots")
 
 
 def _create_dest_sentinels(

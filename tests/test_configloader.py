@@ -906,3 +906,53 @@ class TestLoadConfig:
             config.volumes["remote"], ef  # type: ignore[arg-type]
         )
         assert result.slug == "multi-server"
+
+    def test_source_btrfs_snapshots(self, tmp_path: Path) -> None:
+        config = Config(
+            volumes={
+                "v": LocalVolume(slug="v", path="/x"),
+            },
+            syncs={
+                "s": SyncConfig(
+                    slug="s",
+                    source=SyncEndpoint(
+                        volume="v",
+                        btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                    ),
+                    destination=DestinationSyncEndpoint(volume="v"),
+                ),
+            },
+        )
+        p = tmp_path / "src_btrfs.yaml"
+        p.write_text(_config_to_yaml(config))
+        cfg = load_config(str(p))
+        sync = cfg.syncs["s"]
+        assert sync.source.btrfs_snapshots.enabled is True
+        assert sync.source.snapshot_mode == "btrfs"
+        assert sync.destination.btrfs_snapshots.enabled is False
+
+    def test_source_hard_link_snapshots(self, tmp_path: Path) -> None:
+        config = Config(
+            volumes={
+                "v": LocalVolume(slug="v", path="/x"),
+            },
+            syncs={
+                "s": SyncConfig(
+                    slug="s",
+                    source=SyncEndpoint(
+                        volume="v",
+                        hard_link_snapshots=HardLinkSnapshotConfig(
+                            enabled=True
+                        ),
+                    ),
+                    destination=DestinationSyncEndpoint(volume="v"),
+                ),
+            },
+        )
+        p = tmp_path / "src_hl.yaml"
+        p.write_text(_config_to_yaml(config))
+        cfg = load_config(str(p))
+        sync = cfg.syncs["s"]
+        assert sync.source.hard_link_snapshots.enabled is True
+        assert sync.source.snapshot_mode == "hard-link"
+        assert sync.source.btrfs_snapshots.enabled is False

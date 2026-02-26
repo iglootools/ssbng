@@ -2675,6 +2675,178 @@ class TestCheckHardLinkDest:
         assert SyncReason.DESTINATION_NO_HARDLINK_SUPPORT in status.reasons
 
 
+class TestCheckSourceLatest:
+    """Tests for SOURCE_LATEST_NOT_FOUND check."""
+
+    def _make_config(
+        self,
+        tmp_src: Path,
+        tmp_dst: Path,
+        source_snapshot: str = "btrfs",
+    ) -> tuple[Config, SyncConfig]:
+        src_vol = LocalVolume(slug="src", path=str(tmp_src))
+        dst_vol = LocalVolume(slug="dst", path=str(tmp_dst))
+        source = (
+            SyncEndpoint(
+                volume="src",
+                subdir="data",
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+            )
+            if source_snapshot == "btrfs"
+            else SyncEndpoint(
+                volume="src",
+                subdir="data",
+                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+            )
+        )
+        sync = SyncConfig(
+            slug="s1",
+            source=source,
+            destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
+        )
+        config = Config(
+            volumes={"src": src_vol, "dst": dst_vol},
+            syncs={"s1": sync},
+        )
+        return config, sync
+
+    def _setup_sentinels(self, src: Path, dst: Path) -> None:
+        (src / ".nbkp-vol").touch()
+        (dst / ".nbkp-vol").touch()
+        (src / "data").mkdir(exist_ok=True)
+        (src / "data" / ".nbkp-src").touch()
+        (dst / "backup").mkdir(exist_ok=True)
+        (dst / "backup" / ".nbkp-dst").touch()
+
+    def _active_vol_statuses(self, config: Config) -> dict[str, VolumeStatus]:
+        return {
+            "src": VolumeStatus(
+                slug="src",
+                config=config.volumes["src"],
+                reasons=[],
+            ),
+            "dst": VolumeStatus(
+                slug="dst",
+                config=config.volumes["dst"],
+                reasons=[],
+            ),
+        }
+
+    @patch(
+        "nbkp.check.shutil.which",
+        return_value="/usr/bin/rsync",
+    )
+    def test_btrfs_source_latest_missing(
+        self, mock_which: MagicMock, tmp_path: Path
+    ) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_sentinels(src, dst)
+        # No latest/ under source
+
+        config, sync = self._make_config(src, dst, "btrfs")
+        vol_statuses = self._active_vol_statuses(config)
+
+        status = check_sync(sync, config, vol_statuses)
+        assert SyncReason.SOURCE_LATEST_NOT_FOUND in status.reasons
+
+    @patch(
+        "nbkp.check.shutil.which",
+        return_value="/usr/bin/rsync",
+    )
+    def test_hard_link_source_latest_missing(
+        self, mock_which: MagicMock, tmp_path: Path
+    ) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_sentinels(src, dst)
+        # No latest/ under source
+
+        config, sync = self._make_config(src, dst, "hard-link")
+        vol_statuses = self._active_vol_statuses(config)
+
+        status = check_sync(sync, config, vol_statuses)
+        assert SyncReason.SOURCE_LATEST_NOT_FOUND in status.reasons
+
+    @patch(
+        "nbkp.check.shutil.which",
+        return_value="/usr/bin/rsync",
+    )
+    def test_btrfs_source_latest_present(
+        self, mock_which: MagicMock, tmp_path: Path
+    ) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_sentinels(src, dst)
+        (src / "data" / "latest").mkdir()
+
+        config, sync = self._make_config(src, dst, "btrfs")
+        vol_statuses = self._active_vol_statuses(config)
+
+        status = check_sync(sync, config, vol_statuses)
+        assert SyncReason.SOURCE_LATEST_NOT_FOUND not in status.reasons
+
+    @patch(
+        "nbkp.check.shutil.which",
+        return_value="/usr/bin/rsync",
+    )
+    def test_hard_link_source_latest_symlink(
+        self, mock_which: MagicMock, tmp_path: Path
+    ) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_sentinels(src, dst)
+        snap = src / "data" / "snapshots" / "2024-01-01T00:00:00.000Z"
+        snap.mkdir(parents=True)
+        (src / "data" / "latest").symlink_to(
+            "snapshots/2024-01-01T00:00:00.000Z"
+        )
+
+        config, sync = self._make_config(src, dst, "hard-link")
+        vol_statuses = self._active_vol_statuses(config)
+
+        status = check_sync(sync, config, vol_statuses)
+        assert SyncReason.SOURCE_LATEST_NOT_FOUND not in status.reasons
+
+    @patch(
+        "nbkp.check.shutil.which",
+        return_value="/usr/bin/rsync",
+    )
+    def test_no_snapshots_source_skips_check(
+        self, mock_which: MagicMock, tmp_path: Path
+    ) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_sentinels(src, dst)
+        # No latest/ but source has no snapshots
+
+        src_vol = LocalVolume(slug="src", path=str(src))
+        dst_vol = LocalVolume(slug="dst", path=str(dst))
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src", subdir="data"),
+            destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
+        )
+        config = Config(
+            volumes={"src": src_vol, "dst": dst_vol},
+            syncs={"s1": sync},
+        )
+        vol_statuses = self._active_vol_statuses(config)
+
+        status = check_sync(sync, config, vol_statuses)
+        assert SyncReason.SOURCE_LATEST_NOT_FOUND not in status.reasons
+
+
 class TestCheckRemoteVolumeSpaces:
     @patch("nbkp.check.run_remote_command")
     def test_active(self, mock_run: MagicMock) -> None:

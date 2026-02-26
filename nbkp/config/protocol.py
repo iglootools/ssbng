@@ -160,13 +160,6 @@ Volume = Annotated[
 ]
 
 
-class SyncEndpoint(_BaseModel):
-    """A sync endpoint referencing a volume by slug."""
-
-    volume: str = Field(..., min_length=1)
-    subdir: Optional[str] = None
-
-
 class BtrfsSnapshotConfig(_BaseModel):
     """Configuration for btrfs snapshot management."""
 
@@ -183,9 +176,18 @@ class HardLinkSnapshotConfig(_BaseModel):
     max_snapshots: Optional[int] = Field(default=None, ge=1)
 
 
-class DestinationSyncEndpoint(SyncEndpoint):
-    """A destination sync endpoint with snapshot options."""
+class SyncEndpoint(_BaseModel):
+    """A sync endpoint referencing a volume by slug.
 
+    When used as a destination, snapshot config controls how
+    backups are stored (btrfs subvolume snapshots or hard-link
+    copies).  When used as a source, snapshot config tells rsync
+    to read from the ``latest/`` directory instead of the volume
+    root.
+    """
+
+    volume: str = Field(..., min_length=1)
+    subdir: Optional[str] = None
     btrfs_snapshots: BtrfsSnapshotConfig = Field(
         default_factory=lambda: BtrfsSnapshotConfig()
     )
@@ -194,7 +196,9 @@ class DestinationSyncEndpoint(SyncEndpoint):
     )
 
     @model_validator(mode="after")
-    def validate_snapshot_exclusivity(self) -> DestinationSyncEndpoint:
+    def validate_snapshot_exclusivity(
+        self,
+    ) -> SyncEndpoint:
         if self.btrfs_snapshots.enabled and self.hard_link_snapshots.enabled:
             raise ValueError(
                 "btrfs-snapshots and hard-link-snapshots"
@@ -214,6 +218,11 @@ class DestinationSyncEndpoint(SyncEndpoint):
             return "none"
 
 
+# Backwards-compatible alias — existing code that imports
+# DestinationSyncEndpoint continues to work unchanged.
+DestinationSyncEndpoint = SyncEndpoint
+
+
 class RsyncOptions(_BaseModel):
     """Rsync flag configuration for a sync operation."""
 
@@ -229,7 +238,7 @@ class SyncConfig(_BaseModel):
 
     slug: Slug
     source: SyncEndpoint
-    destination: DestinationSyncEndpoint
+    destination: SyncEndpoint
     enabled: bool = True
     rsync_options: RsyncOptions = Field(default_factory=lambda: RsyncOptions())
     filters: List[str] = Field(default_factory=list)
