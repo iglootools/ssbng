@@ -655,7 +655,7 @@ class TestCheckBtrfsMountOptionLocal:
             is True
         )
         mock_run.assert_called_once_with(
-            ["findmnt", "-n", "-o", "OPTIONS", "/mnt/data"],
+            ["findmnt", "-T", "/mnt/data", "-n", "-o", "OPTIONS"],
             capture_output=True,
             text=True,
         )
@@ -695,7 +695,7 @@ class TestCheckBtrfsMountOptionRemote:
         server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(
             server,
-            ["findmnt", "-n", "-o", "OPTIONS", "/backup"],
+            ["findmnt", "-T", "/backup", "-n", "-o", "OPTIONS"],
             [],
         )
 

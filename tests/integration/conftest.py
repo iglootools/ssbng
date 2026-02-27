@@ -289,4 +289,36 @@ def _cleanup_remote(
         " 2>/dev/null || true"
     )
     run(f"rm -rf {REMOTE_BTRFS_PATH}/snapshots" " 2>/dev/null || true")
+
+    # Clean chain subpath (btrfs subvolume with its own
+    # latest + snapshots, used by chain test)
+    chain = f"{REMOTE_BTRFS_PATH}/chain"
+    chain_snaps = ssh_exec(
+        server,
+        f"ls {chain}/snapshots 2>/dev/null || true",
+        check=False,
+    )
+    if chain_snaps.stdout.strip():
+        for snap in chain_snaps.stdout.strip().split("\n"):
+            snap = snap.strip()
+            if snap:
+                run(
+                    "btrfs property set"
+                    f" {chain}/snapshots/{snap}"
+                    " ro false 2>/dev/null || true"
+                )
+                run(
+                    "btrfs subvolume delete"
+                    f" {chain}/snapshots/{snap}"
+                    " 2>/dev/null || true"
+                )
+    run(
+        "btrfs property set" f" {chain}/latest ro false" " 2>/dev/null || true"
+    )
+    run(f"btrfs subvolume delete {chain}/latest" " 2>/dev/null || true")
+    run(f"btrfs subvolume delete {chain}" " 2>/dev/null || true")
+
+    # Clean bare subpath on btrfs (regular dir, used by chain test)
+    run(f"rm -rf {REMOTE_BTRFS_PATH}/bare" " 2>/dev/null || true")
+
     run(f"find {REMOTE_BTRFS_PATH}" " -name '.nbkp-*' -delete")

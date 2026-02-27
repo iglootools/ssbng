@@ -270,7 +270,7 @@ def _check_btrfs_mount_option(
     resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
     """Check if the volume is mounted with a specific mount option."""
-    cmd = ["findmnt", "-n", "-o", "OPTIONS", volume.path]
+    cmd = ["findmnt", "-T", volume.path, "-n", "-o", "OPTIONS"]
     match volume:
         case LocalVolume():
             result = subprocess.run(

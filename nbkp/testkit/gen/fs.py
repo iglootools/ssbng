@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shlex
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
@@ -84,11 +85,20 @@ def _create_source_sentinels(
                 snap = path / "snapshots" / _SEED_SNAPSHOT_NAME
                 snap.mkdir(parents=True, exist_ok=True)
                 latest = path / "latest"
-                latest.unlink(missing_ok=True)
-                latest.symlink_to(f"snapshots/{_SEED_SNAPSHOT_NAME}")
+                if not latest.exists():
+                    latest.symlink_to(f"snapshots/{_SEED_SNAPSHOT_NAME}")
             elif btrfs.enabled:
                 (path / "snapshots").mkdir(exist_ok=True)
-                (path / "latest").mkdir(exist_ok=True)
+                if not (path / "latest").exists():
+                    subprocess.run(
+                        [
+                            "btrfs",
+                            "subvolume",
+                            "create",
+                            str(path / "latest"),
+                        ],
+                        check=True,
+                    )
         case RemoteVolume():
             if remote_exec is not None:
                 rp = vol.path
@@ -99,9 +109,16 @@ def _create_source_sentinels(
                 if hard_link.enabled:
                     snap_rel = f"snapshots/{_SEED_SNAPSHOT_NAME}"
                     remote_exec(f"mkdir -p {rp}/{snap_rel}")
-                    remote_exec(f"ln -sfn {snap_rel} {rp}/latest")
+                    remote_exec(
+                        f"test -e {rp}/latest"
+                        f" || ln -sfn {snap_rel} {rp}/latest"
+                    )
                 elif btrfs.enabled:
-                    remote_exec("btrfs subvolume create" f" {rp}/latest")
+                    remote_exec(
+                        f"test -e {rp}/latest"
+                        " || btrfs subvolume create"
+                        f" {rp}/latest"
+                    )
                     remote_exec(f"mkdir -p {rp}/snapshots")
 
 
@@ -124,10 +141,20 @@ def _create_dest_sentinels(
             (path / ".nbkp-dst").touch()
             if hard_link.enabled:
                 (path / "snapshots").mkdir(exist_ok=True)
+            elif btrfs.enabled:
+                if not (path / "latest").exists():
+                    subprocess.run(
+                        [
+                            "btrfs",
+                            "subvolume",
+                            "create",
+                            str(path / "latest"),
+                        ],
+                        check=True,
+                    )
+                (path / "snapshots").mkdir(exist_ok=True)
             else:
                 (path / "latest").mkdir(exist_ok=True)
-                if btrfs.enabled:
-                    (path / "snapshots").mkdir(exist_ok=True)
         case RemoteVolume():
             if remote_exec is not None:
                 rp = vol.path
@@ -138,10 +165,30 @@ def _create_dest_sentinels(
                 if hard_link.enabled:
                     remote_exec(f"mkdir -p {rp}/snapshots")
                 elif btrfs.enabled:
-                    remote_exec("btrfs subvolume create" f" {rp}/latest")
+                    remote_exec(
+                        f"test -e {rp}/latest"
+                        " || btrfs subvolume create"
+                        f" {rp}/latest"
+                    )
                     remote_exec(f"mkdir -p {rp}/snapshots")
                 else:
                     remote_exec(f"mkdir -p {rp}/latest")
+
+
+def _volume_key(
+    vol: LocalVolume | RemoteVolume,
+    subdir: str | None,
+) -> str:
+    """Return a dedup key for a volume + subdir combination."""
+    match vol:
+        case LocalVolume():
+            base = Path(vol.path)
+            return str(base / subdir if subdir else base)
+        case RemoteVolume():
+            rp = vol.path
+            if subdir:
+                rp = f"{rp}/{subdir}"
+            return rp
 
 
 def create_seed_data(
@@ -160,38 +207,51 @@ def create_seed_data(
     to create files on the remote host.
     """
     size_bytes = big_file_size_mb * 1024 * 1024
-    seen: set[str] = set()
 
-    for sync in config.syncs.values():
-        vol = config.volumes[sync.source.volume]
-        match vol:
-            case LocalVolume():
-                base = Path(vol.path)
-                path = (
-                    base / sync.source.subdir if sync.source.subdir else base
+    unique_sources = {
+        _volume_key(config.volumes[s.source.volume], s.source.subdir): (
+            config.volumes[s.source.volume],
+            s.source.subdir,
+        )
+        for s in config.syncs.values()
+    }
+    for vol, subdir in unique_sources.values():
+        seed_volume(
+            vol,
+            subdir,
+            big_file_size_bytes=size_bytes,
+            remote_exec=remote_exec,
+        )
+
+
+def seed_volume(
+    vol: LocalVolume | RemoteVolume,
+    subdir: str | None = None,
+    *,
+    big_file_size_bytes: int = 0,
+    remote_exec: Callable[[str], None] | None = None,
+) -> None:
+    """Write sample files into a single source volume."""
+    match vol:
+        case LocalVolume():
+            base = Path(vol.path)
+            path = base / subdir if subdir else base
+            path.mkdir(parents=True, exist_ok=True)
+            for name, content in _SAMPLE_FILES:
+                (path / name).write_text(content)
+            if big_file_size_bytes:
+                _write_zeroed_file(
+                    path / "large-file.bin",
+                    big_file_size_bytes,
                 )
-                key = str(path)
-                if key in seen:
-                    continue
-                seen.add(key)
-
-                path.mkdir(parents=True, exist_ok=True)
-                for name, content in _SAMPLE_FILES:
-                    (path / name).write_text(content)
-                if big_file_size_mb:
-                    _write_zeroed_file(path / "large-file.bin", size_bytes)
-            case RemoteVolume():
-                if remote_exec is None:
-                    continue
-                rp = vol.path
-                if sync.source.subdir:
-                    rp = f"{rp}/{sync.source.subdir}"
-                if rp in seen:
-                    continue
-                seen.add(rp)
-
-                remote_exec(f"mkdir -p {rp}")
-                for name, content in _SAMPLE_FILES:
-                    remote_exec(
-                        f"printf %s {shlex.quote(content)}" f" > {rp}/{name}"
-                    )
+        case RemoteVolume():
+            if remote_exec is None:
+                return
+            rp = vol.path
+            if subdir:
+                rp = f"{rp}/{subdir}"
+            remote_exec(f"mkdir -p {rp}")
+            for name, content in _SAMPLE_FILES:
+                remote_exec(
+                    f"printf %s {shlex.quote(content)}" f" > {rp}/{name}"
+                )
