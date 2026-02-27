@@ -251,3 +251,8 @@ def seed_volume(
                 remote_exec(
                     f"printf %s {shlex.quote(content)}" f" > {rp}/{name}"
                 )
+            if big_file_size_bytes:
+                remote_exec(
+                    f"truncate -s {big_file_size_bytes}"
+                    f" {rp}/large-file.bin"
+                )
