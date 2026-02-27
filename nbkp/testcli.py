@@ -1,0 +1,619 @@
+"""Developer test CLI: fake output rendering and seed data."""
+
+from __future__ import annotations
+
+import tempfile
+from io import StringIO
+from pathlib import Path
+from typing import Annotated
+
+import typer
+import yaml
+from pydantic import ValidationError
+from rich.console import Console
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.text import Text
+
+from .config import (
+    BtrfsSnapshotConfig,
+    Config,
+    ConfigError,
+    HardLinkSnapshotConfig,
+    LocalVolume,
+    RemoteVolume,
+    RsyncOptions,
+    SshEndpoint,
+    SyncConfig,
+    SyncEndpoint,
+)
+from .testkit.docker import (
+    BASTION_CONTAINER_NAME,
+    CONTAINER_NAME,
+    DOCKER_DIR,
+    REMOTE_BACKUP_PATH,
+    REMOTE_BTRFS_PATH,
+    build_docker_image,
+    check_docker,
+    create_docker_network,
+    create_test_ssh_endpoint,
+    generate_ssh_keypair,
+    ssh_exec,
+    start_bastion_container,
+    start_docker_container,
+    wait_for_ssh,
+)
+from .config.protocol import Config as ConfigModel
+from .config.resolution import resolve_all_endpoints
+from .output import (
+    print_config_error,
+    print_human_check,
+    print_human_config,
+    print_human_prune_results,
+    print_human_results,
+    print_human_troubleshoot,
+)
+from .testkit.gen.check import (
+    check_config,
+    check_data,
+    troubleshoot_config,
+    troubleshoot_data,
+)
+from .testkit.gen.config import config_show_config
+from .testkit.gen.fs import (
+    create_seed_sentinels,
+    seed_volume,
+)
+from .testkit.gen.sync import (
+    dry_run_result,
+    prune_dry_run_results,
+    prune_results,
+    run_results,
+)
+
+_console = Console()
+
+app = typer.Typer(
+    name="nbkp-test",
+    help="NBKP developer test CLI",
+    no_args_is_help=True,
+)
+
+
+# ── Commands ─────────────────────────────────────────────────────
+
+
+def _capture_console() -> tuple[Console, StringIO]:
+    """Create a Console that captures output to a StringIO buffer."""
+    buf = StringIO()
+    console = Console(
+        file=buf,
+        force_terminal=True,
+        width=_console.width - 4,
+    )
+    return console, buf
+
+
+def _print_panel(title: str, buf: StringIO) -> None:
+    """Wrap captured console output in a titled panel."""
+    content = Text.from_ansi(buf.getvalue().rstrip("\n"))
+    _console.print(
+        Panel(
+            content,
+            title=f"[bold]{title}[/bold]",
+            border_style="cyan",
+            padding=(0, 1),
+        )
+    )
+
+
+@app.command()
+def output() -> None:
+    """Render all human output functions with fake data."""
+    _show_config_show()
+    _show_check()
+    _show_results()
+    _show_prune()
+    _show_troubleshoot()
+    _show_config_errors()
+
+
+def _show_config_show() -> None:
+    console, buf = _capture_console()
+    config = config_show_config()
+    re = resolve_all_endpoints(config)
+    print_human_config(config, console=console, resolved_endpoints=re)
+    _print_panel("print_human_config", buf)
+
+
+def _show_check() -> None:
+    console, buf = _capture_console()
+    config = check_config()
+    re = resolve_all_endpoints(config)
+    vol_statuses, sync_statuses = check_data(config)
+    print_human_check(
+        vol_statuses,
+        sync_statuses,
+        config,
+        console=console,
+        resolved_endpoints=re,
+        wrap_in_panel=False,
+    )
+    _print_panel("print_human_check", buf)
+
+
+def _show_results() -> None:
+    config = config_show_config()
+    console, buf = _capture_console()
+    print_human_results(run_results(config), dry_run=False, console=console)
+    _print_panel("print_human_results (run)", buf)
+
+    console, buf = _capture_console()
+    print_human_results(
+        [dry_run_result(config)], dry_run=True, console=console
+    )
+    _print_panel("print_human_results (dry run)", buf)
+
+
+def _show_prune() -> None:
+    config = config_show_config()
+    console, buf = _capture_console()
+    print_human_prune_results(
+        prune_results(config), dry_run=False, console=console
+    )
+    _print_panel("print_human_prune_results (prune)", buf)
+
+    console, buf = _capture_console()
+    print_human_prune_results(
+        prune_dry_run_results(config),
+        dry_run=True,
+        console=console,
+    )
+    _print_panel("print_human_prune_results (dry run)", buf)
+
+
+def _show_troubleshoot() -> None:
+    console, buf = _capture_console()
+    config = troubleshoot_config()
+    re = resolve_all_endpoints(config)
+    vol_statuses, sync_statuses = troubleshoot_data(config)
+    print_human_troubleshoot(
+        vol_statuses,
+        sync_statuses,
+        config,
+        console=console,
+        resolved_endpoints=re,
+    )
+    _print_panel("print_human_troubleshoot", buf)
+
+
+def _show_config_errors() -> None:
+    console, buf = _capture_console()
+    print_config_error(
+        ConfigError("Config file not found: /etc/nbkp/config.yaml"),
+        console=console,
+    )
+    _print_panel("print_config_error (file not found)", buf)
+
+    console, buf = _capture_console()
+    try:
+        yaml.safe_load("not_a_list:\n  - [invalid")
+    except yaml.YAMLError as ye:
+        err = ConfigError(f"Invalid YAML in /etc/nbkp/config.yaml: {ye}")
+        err.__cause__ = ye
+        print_config_error(err, console=console)
+    _print_panel("print_config_error (invalid YAML)", buf)
+
+    console, buf = _capture_console()
+    try:
+        ConfigModel.model_validate(
+            {"volumes": {"v": {"type": "ftp", "path": "/x"}}}
+        )
+    except ValidationError as ve:
+        err = ConfigError(str(ve))
+        err.__cause__ = ve
+        print_config_error(err, console=console)
+    _print_panel("print_config_error (invalid volume type)", buf)
+
+    console, buf = _capture_console()
+    try:
+        ConfigModel.model_validate(
+            {
+                "ssh-endpoints": {},
+                "volumes": {
+                    "v": {
+                        "type": "remote",
+                        "ssh-endpoint": "missing",
+                        "path": "/x",
+                    },
+                },
+                "syncs": {},
+            }
+        )
+    except ValidationError as ve:
+        err = ConfigError(str(ve))
+        err.__cause__ = ve
+        print_config_error(err, console=console)
+    _print_panel("print_config_error (unknown server reference)", buf)
+
+    console, buf = _capture_console()
+    try:
+        ConfigModel.model_validate(
+            {"volumes": {"v": {"type": "local"}}, "syncs": {}}
+        )
+    except ValidationError as ve:
+        err = ConfigError(str(ve))
+        err.__cause__ = ve
+        print_config_error(err, console=console)
+    _print_panel("print_config_error (missing required field)", buf)
+
+
+@app.command()
+def seed(
+    big_file_size: Annotated[
+        int,
+        typer.Option(
+            "--big-file-size",
+            help="Size in MB for large files (e.g. 100, 1024)."
+            " When set, large files are written at this size"
+            " to slow down syncs."
+            " Set to 0 to disable.",
+        ),
+    ] = 1,
+    docker: Annotated[
+        bool,
+        typer.Option(
+            "--docker",
+            help="Start a Docker container for remote syncs.",
+        ),
+    ] = False,
+    bandwidth_limit: Annotated[
+        int,
+        typer.Option(
+            "--bandwidth-limit",
+            help="Rsync bandwidth limit in KiB/s"
+            " (e.g. 100 for ~100 KiB/s)."
+            " Set to 0 to disable.",
+        ),
+    ] = 250,
+) -> None:
+    """Create a temp folder with config and test data."""
+    rsync_opts = (
+        RsyncOptions(extra_options=[f"--bwlimit={bandwidth_limit}"])
+        if bandwidth_limit
+        else RsyncOptions()
+    )
+
+    if docker:
+        check_docker()
+        if not DOCKER_DIR.is_dir():
+            typer.echo(
+                "Error: Docker directory not found:" f" {DOCKER_DIR}",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+    tmp = Path(tempfile.mkdtemp(prefix="nbkp-seed-"))
+
+    # Docker containers
+    docker_endpoint = None
+    bastion_endpoint = None
+    if docker:
+        private_key, pub_key = generate_ssh_keypair(tmp)
+
+        with _console.status("Building Docker image..."):
+            build_docker_image()
+
+        with _console.status("Creating Docker network..."):
+            network_name = create_docker_network()
+
+        with _console.status("Starting bastion container..."):
+            bastion_port = start_bastion_container(pub_key, network_name)
+        bastion_endpoint = create_test_ssh_endpoint(
+            "bastion", "127.0.0.1", bastion_port, private_key
+        )
+        with _console.status("Waiting for bastion SSH..."):
+            wait_for_ssh(bastion_endpoint)
+
+        with _console.status("Starting Docker container..."):
+            docker_port = start_docker_container(
+                pub_key,
+                network_name=network_name,
+                network_alias="backup-server",
+            )
+        docker_endpoint = create_test_ssh_endpoint(
+            "docker", "127.0.0.1", docker_port, private_key
+        )
+        with _console.status("Waiting for SSH..."):
+            wait_for_ssh(docker_endpoint)
+
+    # Config — chain layout matching integration test
+    hl_src = HardLinkSnapshotConfig(enabled=True)
+    hl_dst = HardLinkSnapshotConfig(enabled=True)
+
+    ssh_endpoints: dict[str, SshEndpoint] = {}
+    volumes: dict[str, LocalVolume | RemoteVolume] = {
+        "src-local-bare": LocalVolume(
+            slug="src-local-bare",
+            path=str(tmp / "src-local-bare"),
+        ),
+        "stage-local-hl-snapshots": LocalVolume(
+            slug="stage-local-hl-snapshots",
+            path=str(tmp / "stage-local-hl-snapshots"),
+        ),
+        "dst-local-bare": LocalVolume(
+            slug="dst-local-bare",
+            path=str(tmp / "dst-local-bare"),
+        ),
+    }
+    syncs: dict[str, SyncConfig] = {
+        # local→local, HL destination
+        "step-1": SyncConfig(
+            slug="step-1",
+            source=SyncEndpoint(volume="src-local-bare"),
+            destination=SyncEndpoint(
+                volume="stage-local-hl-snapshots",
+                hard_link_snapshots=hl_dst,
+            ),
+            rsync_options=rsync_opts,
+        ),
+    }
+
+    if docker:
+        assert docker_endpoint is not None
+        assert bastion_endpoint is not None
+        btrfs_snapshots_path = f"{REMOTE_BTRFS_PATH}/snapshots"
+        btrfs_bare_path = f"{REMOTE_BTRFS_PATH}/bare"
+        btrfs_dst = BtrfsSnapshotConfig(enabled=True)
+        btrfs_src = BtrfsSnapshotConfig(enabled=True)
+
+        ssh_endpoints["bastion"] = bastion_endpoint
+        ssh_endpoints["docker"] = docker_endpoint
+        ssh_endpoints["via-bastion"] = create_test_ssh_endpoint(
+            "via-bastion",
+            "backup-server",
+            22,
+            private_key,
+            proxy_jump="bastion",
+        )
+        volumes.update(
+            {
+                "stage-remote-bare": RemoteVolume(
+                    slug="stage-remote-bare",
+                    ssh_endpoint="via-bastion",
+                    path=f"{REMOTE_BACKUP_PATH}/bare",
+                ),
+                "stage-remote-btrfs-snapshots": RemoteVolume(
+                    slug="stage-remote-btrfs-snapshots",
+                    ssh_endpoint="via-bastion",
+                    path=btrfs_snapshots_path,
+                ),
+                "stage-remote-btrfs-bare": RemoteVolume(
+                    slug="stage-remote-btrfs-bare",
+                    ssh_endpoint="via-bastion",
+                    path=btrfs_bare_path,
+                ),
+                "stage-remote-hl-snapshots": RemoteVolume(
+                    slug="stage-remote-hl-snapshots",
+                    ssh_endpoint="via-bastion",
+                    path=f"{REMOTE_BACKUP_PATH}/hl",
+                ),
+            }
+        )
+        syncs.update(
+            {
+                # local→remote (bastion), bare dest
+                "step-2": SyncConfig(
+                    slug="step-2",
+                    source=SyncEndpoint(
+                        volume="stage-local-hl-snapshots",
+                        hard_link_snapshots=hl_src,
+                    ),
+                    destination=SyncEndpoint(
+                        volume="stage-remote-bare",
+                    ),
+                    rsync_options=rsync_opts,
+                ),
+                # remote→remote (bastion), btrfs dest
+                "step-3": SyncConfig(
+                    slug="step-3",
+                    source=SyncEndpoint(
+                        volume="stage-remote-bare",
+                    ),
+                    destination=SyncEndpoint(
+                        volume=("stage-remote-btrfs-snapshots"),
+                        btrfs_snapshots=btrfs_dst,
+                    ),
+                    rsync_options=rsync_opts,
+                ),
+                # remote→remote (bastion), bare on btrfs
+                "step-4": SyncConfig(
+                    slug="step-4",
+                    source=SyncEndpoint(
+                        volume=("stage-remote-btrfs-snapshots"),
+                        btrfs_snapshots=btrfs_src,
+                    ),
+                    destination=SyncEndpoint(
+                        volume="stage-remote-btrfs-bare",
+                    ),
+                    rsync_options=rsync_opts,
+                ),
+                # remote→remote (bastion), HL dest
+                "step-5": SyncConfig(
+                    slug="step-5",
+                    source=SyncEndpoint(
+                        volume="stage-remote-btrfs-bare",
+                    ),
+                    destination=SyncEndpoint(
+                        volume=("stage-remote-hl-snapshots"),
+                        hard_link_snapshots=hl_dst,
+                    ),
+                    rsync_options=rsync_opts,
+                ),
+                # remote (bastion)→local, bare dest
+                "step-6": SyncConfig(
+                    slug="step-6",
+                    source=SyncEndpoint(
+                        volume=("stage-remote-hl-snapshots"),
+                        hard_link_snapshots=hl_src,
+                    ),
+                    destination=SyncEndpoint(
+                        volume="dst-local-bare",
+                    ),
+                    rsync_options=rsync_opts,
+                ),
+            }
+        )
+    else:
+        # Local-only: step-2 goes directly to dst
+        syncs["step-2"] = SyncConfig(
+            slug="step-2",
+            source=SyncEndpoint(
+                volume="stage-local-hl-snapshots",
+                hard_link_snapshots=hl_src,
+            ),
+            destination=SyncEndpoint(
+                volume="dst-local-bare",
+            ),
+            rsync_options=rsync_opts,
+        )
+
+    config = Config(
+        ssh_endpoints=ssh_endpoints,
+        volumes=volumes,
+        syncs=syncs,
+    )
+
+    remote_exec = None
+    # Create sentinels and seed data
+    size_bytes = big_file_size * 1024 * 1024
+    if docker:
+        assert docker_endpoint is not None
+        _server = docker_endpoint
+
+        def _run_remote(cmd: str) -> None:
+            ssh_exec(_server, cmd)
+
+        with _console.status("Creating btrfs subvolume..."):
+            ssh_exec(
+                docker_endpoint,
+                "btrfs subvolume create" f" {btrfs_snapshots_path}",
+            )
+        remote_exec = _run_remote
+
+    with _console.status("Setting up volumes..."):
+        create_seed_sentinels(config, remote_exec=remote_exec)
+        seed_volume(
+            config.volumes["src-local-bare"],
+            big_file_size_bytes=size_bytes,
+        )
+
+    config_path = tmp / "config.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            config.model_dump(by_alias=True),
+            default_flow_style=False,
+            sort_keys=False,
+        )
+    )
+
+    backup_sh = tmp / "backup.sh"
+
+    # Print summary
+    rows: list[tuple[str, str]] = [
+        ("Seed directory", str(tmp)),
+        ("Config file", str(config_path)),
+    ]
+    if docker:
+        assert docker_endpoint is not None
+        assert bastion_endpoint is not None
+        rows.append(
+            (
+                "Bastion",
+                f"{BASTION_CONTAINER_NAME}" f" (port {bastion_endpoint.port})",
+            )
+        )
+        rows.append(
+            (
+                "Docker",
+                f"{CONTAINER_NAME}" f" (port {docker_endpoint.port})",
+            )
+        )
+    label_w = max(len(r[0]) for r in rows)
+    summary = Text()
+    for i, (label, value) in enumerate(rows):
+        if i > 0:
+            summary.append("\n")
+        summary.append(f"{label:<{label_w}}  ", style="bold")
+        summary.append(value)
+    _console.print(Panel(summary, border_style="blue", padding=(0, 1)))
+
+    lines = [
+        f'CFG="{config_path}"',
+        f'SH="{backup_sh}"',
+        "",
+        "# Show parsed configuration",
+        "poetry run nbkp config show --config $CFG",
+        "",
+        "# Show configuration as JSON",
+        "poetry run nbkp config show --config $CFG --output json",
+        "",
+        "# Volume and sync health checks",
+        "poetry run nbkp check --config $CFG",
+        "",
+        "# Preview what rsync would do without changes",
+        "poetry run nbkp run --config $CFG --dry-run",
+        "",
+        "# Execute backup syncs",
+        "poetry run nbkp run --config $CFG",
+        "",
+        "# Prune old btrfs snapshots",
+        "poetry run nbkp prune --config $CFG",
+        "",
+        "# Generate standalone bash script to stdout",
+        "poetry run nbkp sh --config $CFG",
+        "",
+        "# Write script to file, validate, and run",
+        "poetry run nbkp sh --config $CFG -o $SH \\",
+        "  && bash -n $SH \\",
+        "  && $SH --dry-run \\",
+        "  && $SH",
+        "",
+        "# With relative paths (src and dst)",
+        "poetry run nbkp sh --config $CFG -o $SH"
+        " --relative-src --relative-dst \\",
+        "  && bash -n $SH \\",
+        "  && $SH --dry-run \\",
+        "  && $SH",
+    ]
+    if docker:
+        lines += [
+            "",
+            "# Teardown Docker containers and network",
+            f"docker rm -f {CONTAINER_NAME}" f" {BASTION_CONTAINER_NAME}",
+            "docker network rm nbkp-seed-net",
+        ]
+    commands = "\n".join(lines)
+    _console.print(
+        Panel(
+            Syntax(
+                commands,
+                "bash",
+                theme="monokai",
+                background_color="default",
+                word_wrap=True,
+            ),
+            title="[bold]Try[/bold]",
+            border_style="green",
+            padding=(0, 1),
+        )
+    )
+
+
+def main() -> None:
+    """Test CLI entry point."""
+    app()
+
+
+if __name__ == "__main__":
+    main()

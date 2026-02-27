@@ -1,0 +1,20 @@
+# Setup Development Environment
+
+1. [Install and activate mise](https://mise.jdx.dev/installing-mise.html)
+
+2. Install Docker Desktop (or Docker Engine on Linux)
+
+3. Configure github CLI with `gh auth login` and ensure you have access to the repository (optional, for convenience).
+
+4. Activate the virtual environment:
+   ```bash
+   # - Install all the tools defined in mise.toml
+   # - Set up the .venv with the correct Python version
+   mise install
+
+   # vscode and poetry should automatically detect and use the .venv created by mise
+   poetry install
+
+   # To recreate the virtualenv from scratch:
+   poetry env remove --all
+   ```
