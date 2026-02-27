@@ -38,8 +38,8 @@ _DEFAULT_RSYNC_OPTIONS: list[str] = [
     "--delete-excluded",
     "--partial-dir=.rsync-partial",
     "--safe-links",
-    "--filter=P .nbkp-*",
-    "--exclude=.nbkp-*",
+    "--filter=H .nbkp-*",  # hide sentinels from transfer
+    "--filter=P .nbkp-*",  # protect sentinels from deletion
 ]
 
 

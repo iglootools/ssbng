@@ -43,8 +43,8 @@ class TestBuildRsyncCommandLocalToLocal:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--exclude=.nbkp-*",
             "--checksum",
             "/mnt/src/photos/",
             "/mnt/dst/backup/",
@@ -122,8 +122,8 @@ class TestBuildRsyncCommandLocalToRemote:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--exclude=.nbkp-*",
             "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
@@ -166,8 +166,8 @@ class TestBuildRsyncCommandRemoteToLocal:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--exclude=.nbkp-*",
             "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes",
@@ -360,8 +360,8 @@ class TestBuildRsyncCommandFilters:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--exclude=.nbkp-*",
             "--checksum",
             "--filter=+ *.jpg",
             "--filter=- *.tmp",
@@ -391,8 +391,8 @@ class TestBuildRsyncCommandFilters:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--exclude=.nbkp-*",
             "--checksum",
             "--filter=merge /etc/nbkp/filters.rules",
             "/mnt/src/",
@@ -422,8 +422,8 @@ class TestBuildRsyncCommandFilters:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--exclude=.nbkp-*",
             "--checksum",
             "--filter=+ *.jpg",
             "--filter=merge /etc/nbkp/filters.rules",
@@ -448,7 +448,9 @@ class TestBuildRsyncCommandFilters:
         user_filters = [
             a
             for a in cmd
-            if a.startswith("--filter=") and not a.startswith("--filter=P")
+            if a.startswith("--filter=")
+            and not a.startswith("--filter=P")
+            and not a.startswith("--filter=H")
         ]
         assert user_filters == []
 
@@ -518,8 +520,8 @@ class TestBuildRsyncCommandOptions:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--exclude=.nbkp-*",
             "--bwlimit=1000",
             "/mnt/src/",
             "/mnt/dst/",
@@ -650,8 +652,8 @@ class TestBuildRsyncCommandProxyJump:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--exclude=.nbkp-*",
             "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
@@ -709,8 +711,8 @@ class TestBuildRsyncCommandProxyJump:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--exclude=.nbkp-*",
             "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes" f" -o {quoted}",
@@ -782,8 +784,8 @@ class TestBuildRsyncCommandMultiHopProxy:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--exclude=.nbkp-*",
             "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
@@ -818,8 +820,8 @@ class TestBuildRsyncCommandSpacesInPaths:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
+            "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--exclude=.nbkp-*",
             "--checksum",
             "/mnt/my src/my photos/",
             "/mnt/my dst/my backup/",
