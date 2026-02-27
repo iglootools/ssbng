@@ -19,7 +19,7 @@ from .config import (
     BtrfsSnapshotConfig,
     Config,
     ConfigError,
-    DestinationSyncEndpoint,
+    HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
     SshEndpoint,
@@ -60,8 +60,8 @@ from .testkit.gen.check import (
 )
 from .testkit.gen.config import config_show_config
 from .testkit.gen.fs import (
-    create_seed_data,
     create_seed_sentinels,
+    seed_volume,
 )
 from .testkit.gen.sync import (
     dry_run_result,
@@ -278,8 +278,6 @@ def seed(
             raise typer.Exit(1)
 
     tmp = Path(tempfile.mkdtemp(prefix="nbkp-seed-"))
-    src = tmp / "src-data"
-    dst = tmp / "dst-backup"
 
     # Docker containers
     docker_endpoint = None
@@ -294,7 +292,9 @@ def seed(
             network_name = create_docker_network()
 
         with _console.status("Starting bastion container..."):
-            bastion_port = start_bastion_container(pub_key, network_name)
+            bastion_port = start_bastion_container(
+                pub_key, network_name
+            )
         bastion_endpoint = create_test_ssh_endpoint(
             "bastion", "127.0.0.1", bastion_port, private_key
         )
@@ -313,91 +313,161 @@ def seed(
         with _console.status("Waiting for SSH..."):
             wait_for_ssh(docker_endpoint)
 
-    # Config
+    # Config — chain layout matching integration test
+    hl_src = HardLinkSnapshotConfig(enabled=True)
+    hl_dst = HardLinkSnapshotConfig(enabled=True)
+
     ssh_endpoints: dict[str, SshEndpoint] = {}
     volumes: dict[str, LocalVolume | RemoteVolume] = {
-        "src-data": LocalVolume(slug="src-data", path=str(src)),
-        "dst-backup": LocalVolume(slug="dst-backup", path=str(dst)),
+        "src-local-bare": LocalVolume(
+            slug="src-local-bare",
+            path=str(tmp / "src-local-bare"),
+        ),
+        "stage-local-hl-snapshots": LocalVolume(
+            slug="stage-local-hl-snapshots",
+            path=str(tmp / "stage-local-hl-snapshots"),
+        ),
+        "dst-local-bare": LocalVolume(
+            slug="dst-local-bare",
+            path=str(tmp / "dst-local-bare"),
+        ),
     }
     syncs: dict[str, SyncConfig] = {
-        "photos-backup": SyncConfig(
-            slug="photos-backup",
-            source=SyncEndpoint(volume="src-data", subdir="photos"),
-            destination=DestinationSyncEndpoint(volume="dst-backup"),
-        ),
-        "full-backup": SyncConfig(
-            slug="full-backup",
-            source=SyncEndpoint(volume="src-data"),
-            destination=DestinationSyncEndpoint(volume="dst-backup"),
+        # local→local, HL destination
+        "step-1": SyncConfig(
+            slug="step-1",
+            source=SyncEndpoint(volume="src-local-bare"),
+            destination=SyncEndpoint(
+                volume="stage-local-hl-snapshots",
+                hard_link_snapshots=hl_dst,
+            ),
         ),
     }
 
     if docker:
         assert docker_endpoint is not None
         assert bastion_endpoint is not None
+        btrfs_snapshots_path = (
+            f"{REMOTE_BTRFS_PATH}/snapshots"
+        )
+        btrfs_bare_path = f"{REMOTE_BTRFS_PATH}/bare"
+        btrfs_dst = BtrfsSnapshotConfig(enabled=True)
+        btrfs_src = BtrfsSnapshotConfig(enabled=True)
+
         ssh_endpoints["bastion"] = bastion_endpoint
         ssh_endpoints["docker"] = docker_endpoint
-        ssh_endpoints["docker-via-bastion"] = create_test_ssh_endpoint(
-            "docker-via-bastion",
-            "backup-server",
-            22,
-            private_key,
-            proxy_jump="bastion",
+        ssh_endpoints["via-bastion"] = (
+            create_test_ssh_endpoint(
+                "via-bastion",
+                "backup-server",
+                22,
+                private_key,
+                proxy_jump="bastion",
+            )
         )
-        volumes["remote-backup"] = RemoteVolume(
-            slug="remote-backup",
-            ssh_endpoint="docker",
-            path=REMOTE_BACKUP_PATH,
-        )
-        volumes["remote-btrfs"] = RemoteVolume(
-            slug="remote-btrfs",
-            ssh_endpoint="docker",
-            path=REMOTE_BTRFS_PATH,
-        )
-        volumes["proxied-remote"] = RemoteVolume(
-            slug="proxied-remote",
-            ssh_endpoint="docker-via-bastion",
-            path=REMOTE_BACKUP_PATH,
-        )
-        volumes["remote-src"] = RemoteVolume(
-            slug="remote-src",
-            ssh_endpoint="docker",
-            path=f"{REMOTE_BACKUP_PATH}/src",
-        )
-        volumes["remote-dst"] = RemoteVolume(
-            slug="remote-dst",
-            ssh_endpoint="docker",
-            path=f"{REMOTE_BACKUP_PATH}/dst",
-        )
-        syncs["photos-to-remote"] = SyncConfig(
-            slug="photos-to-remote",
-            source=SyncEndpoint(volume="src-data", subdir="photos"),
-            destination=DestinationSyncEndpoint(
-                volume="remote-backup",
-            ),
-        )
-        syncs["full-to-remote-btrfs"] = SyncConfig(
-            slug="full-to-remote-btrfs",
-            source=SyncEndpoint(volume="src-data"),
-            destination=DestinationSyncEndpoint(
-                volume="remote-btrfs",
-                btrfs_snapshots=BtrfsSnapshotConfig(
-                    enabled=True, max_snapshots=5
+        volumes.update(
+            {
+                "stage-remote-bare": RemoteVolume(
+                    slug="stage-remote-bare",
+                    ssh_endpoint="via-bastion",
+                    path=f"{REMOTE_BACKUP_PATH}/bare",
                 ),
-            ),
+                "stage-remote-btrfs-snapshots": RemoteVolume(
+                    slug="stage-remote-btrfs-snapshots",
+                    ssh_endpoint="via-bastion",
+                    path=btrfs_snapshots_path,
+                ),
+                "stage-remote-btrfs-bare": RemoteVolume(
+                    slug="stage-remote-btrfs-bare",
+                    ssh_endpoint="via-bastion",
+                    path=btrfs_bare_path,
+                ),
+                "stage-remote-hl-snapshots": RemoteVolume(
+                    slug="stage-remote-hl-snapshots",
+                    ssh_endpoint="via-bastion",
+                    path=f"{REMOTE_BACKUP_PATH}/hl",
+                ),
+            }
         )
-        syncs["photos-via-bastion"] = SyncConfig(
-            slug="photos-via-bastion",
-            source=SyncEndpoint(volume="src-data", subdir="photos"),
-            destination=DestinationSyncEndpoint(
-                volume="proxied-remote",
-            ),
+        syncs.update(
+            {
+                # local→remote (bastion), bare dest
+                "step-2": SyncConfig(
+                    slug="step-2",
+                    source=SyncEndpoint(
+                        volume="stage-local-hl-snapshots",
+                        hard_link_snapshots=hl_src,
+                    ),
+                    destination=SyncEndpoint(
+                        volume="stage-remote-bare",
+                    ),
+                ),
+                # remote→remote (bastion), btrfs dest
+                "step-3": SyncConfig(
+                    slug="step-3",
+                    source=SyncEndpoint(
+                        volume="stage-remote-bare",
+                        hard_link_snapshots=hl_src,
+                    ),
+                    destination=SyncEndpoint(
+                        volume=(
+                            "stage-remote-btrfs-snapshots"
+                        ),
+                        btrfs_snapshots=btrfs_dst,
+                    ),
+                ),
+                # remote→remote (bastion), bare on btrfs
+                "step-4": SyncConfig(
+                    slug="step-4",
+                    source=SyncEndpoint(
+                        volume=(
+                            "stage-remote-btrfs-snapshots"
+                        ),
+                        btrfs_snapshots=btrfs_src,
+                    ),
+                    destination=SyncEndpoint(
+                        volume="stage-remote-btrfs-bare",
+                    ),
+                ),
+                # remote→remote (bastion), HL dest
+                "step-5": SyncConfig(
+                    slug="step-5",
+                    source=SyncEndpoint(
+                        volume="stage-remote-btrfs-bare",
+                        hard_link_snapshots=hl_src,
+                    ),
+                    destination=SyncEndpoint(
+                        volume=(
+                            "stage-remote-hl-snapshots"
+                        ),
+                        hard_link_snapshots=hl_dst,
+                    ),
+                ),
+                # remote (bastion)→local, bare dest
+                "step-6": SyncConfig(
+                    slug="step-6",
+                    source=SyncEndpoint(
+                        volume=(
+                            "stage-remote-hl-snapshots"
+                        ),
+                        hard_link_snapshots=hl_src,
+                    ),
+                    destination=SyncEndpoint(
+                        volume="dst-local-bare",
+                    ),
+                ),
+            }
         )
-        syncs["remote-to-local"] = SyncConfig(
-            slug="remote-to-local",
-            source=SyncEndpoint(volume="remote-src"),
-            destination=DestinationSyncEndpoint(
-                volume="remote-dst",
+    else:
+        # Local-only: step-2 goes directly to dst
+        syncs["step-2"] = SyncConfig(
+            slug="step-2",
+            source=SyncEndpoint(
+                volume="stage-local-hl-snapshots",
+                hard_link_snapshots=hl_src,
+            ),
+            destination=SyncEndpoint(
+                volume="dst-local-bare",
             ),
         )
 
@@ -408,6 +478,7 @@ def seed(
     )
 
     # Create sentinels and seed data
+    size_bytes = big_file_size * 1024 * 1024
     if docker:
         assert docker_endpoint is not None
         _server = docker_endpoint
@@ -415,16 +486,28 @@ def seed(
         def _run_remote(cmd: str) -> None:
             ssh_exec(_server, cmd)
 
+        with _console.status(
+            "Creating btrfs subvolume..."
+        ):
+            ssh_exec(
+                docker_endpoint,
+                "btrfs subvolume create"
+                f" {btrfs_snapshots_path}",
+            )
         with _console.status("Setting up volumes..."):
-            create_seed_sentinels(config, remote_exec=_run_remote)
-        create_seed_data(
-            config,
-            big_file_size_mb=big_file_size,
-            remote_exec=_run_remote,
+            create_seed_sentinels(
+                config, remote_exec=_run_remote
+            )
+        seed_volume(
+            config.volumes["src-local-bare"],
+            big_file_size_bytes=size_bytes,
         )
     else:
         create_seed_sentinels(config)
-        create_seed_data(config, big_file_size_mb=big_file_size)
+        seed_volume(
+            config.volumes["src-local-bare"],
+            big_file_size_bytes=size_bytes,
+        )
 
     config_path = tmp / "config.yaml"
     config_path.write_text(
