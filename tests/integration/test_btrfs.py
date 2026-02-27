@@ -83,7 +83,9 @@ class TestBtrfsSnapshots:
         )
 
         # Rsync into latest
-        result = run_rsync(sync, config, resolved_endpoints=resolved)
+        result = run_rsync(
+            sync, config, resolved_endpoints=resolved, dest_suffix="latest"
+        )
         assert result.returncode == 0
 
         # Create snapshot
@@ -108,7 +110,9 @@ class TestBtrfsSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(src), remote_btrfs_volume, ssh_endpoint
         )
-        run_rsync(sync, config, resolved_endpoints=resolved)
+        run_rsync(
+            sync, config, resolved_endpoints=resolved, dest_suffix="latest"
+        )
         snapshot_path = create_snapshot(
             sync, config, resolved_endpoints=resolved
         )
@@ -136,7 +140,9 @@ class TestBtrfsSnapshots:
         )
 
         # First sync + snapshot
-        run_rsync(sync, config, resolved_endpoints=resolved)
+        run_rsync(
+            sync, config, resolved_endpoints=resolved, dest_suffix="latest"
+        )
         create_snapshot(sync, config, resolved_endpoints=resolved)
 
         # Small delay to ensure distinct timestamp
@@ -156,6 +162,7 @@ class TestBtrfsSnapshots:
             config,
             link_dest=link_dest,
             resolved_endpoints=resolved,
+            dest_suffix="latest",
         )
         assert result.returncode == 0
 
@@ -195,6 +202,7 @@ class TestBtrfsSnapshots:
             config,
             dry_run=True,
             resolved_endpoints=resolved,
+            dest_suffix="latest",
         )
         assert result.returncode == 0
 
@@ -242,7 +250,9 @@ class TestPruneSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(src), remote_btrfs_volume, ssh_endpoint
         )
-        run_rsync(sync, config, resolved_endpoints=resolved)
+        run_rsync(
+            sync, config, resolved_endpoints=resolved, dest_suffix="latest"
+        )
 
         self._create_snapshots(sync, config, resolved, 3)
 
@@ -276,7 +286,9 @@ class TestPruneSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(src), remote_btrfs_volume, ssh_endpoint
         )
-        run_rsync(sync, config, resolved_endpoints=resolved)
+        run_rsync(
+            sync, config, resolved_endpoints=resolved, dest_suffix="latest"
+        )
 
         self._create_snapshots(sync, config, resolved, 3)
 
@@ -311,7 +323,9 @@ class TestPruneSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(src), remote_btrfs_volume, ssh_endpoint
         )
-        run_rsync(sync, config, resolved_endpoints=resolved)
+        run_rsync(
+            sync, config, resolved_endpoints=resolved, dest_suffix="latest"
+        )
 
         self._create_snapshots(sync, config, resolved, 2)
 

@@ -301,7 +301,7 @@ class TestLocalToLocal:
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert "rsync" in script
         assert "/mnt/src/photos/" in script
-        assert "/mnt/dst/backup/latest/" in script
+        assert "/mnt/dst/backup/" in script
 
     def test_function_name(self) -> None:
         config = _local_to_local_config()
@@ -339,7 +339,7 @@ class TestRemoteToLocal:
             config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
         )
         assert "admin@remote.example.com:/data/" in script
-        assert "/mnt/backup/latest/" in script
+        assert "/mnt/backup/" in script
 
 
 class TestDisabledSync:
@@ -696,7 +696,7 @@ class TestEdgeCases:
         script = generate_script(config, _OPTIONS, now=_NOW)
         # Paths with spaces should be properly quoted
         assert "'/mnt/my data/'" in script
-        assert "'/mnt/my backup/latest/'" in script
+        assert "'/mnt/my backup/'" in script
         result = subprocess.run(
             ["bash", "-n"],
             input=script,
@@ -1000,7 +1000,7 @@ class TestRelativePaths:
         assert "/mnt/src/photos/" in script
         # Dest uses NBKP_SCRIPT_DIR-relative path
         assert "${NBKP_SCRIPT_DIR}" in script
-        assert "/mnt/dst/backup/latest/" not in script
+        assert "/mnt/dst/backup/" not in script
 
     def test_relative_src_local_to_local(self) -> None:
         config = _local_to_local_config()
@@ -1013,7 +1013,7 @@ class TestRelativePaths:
         # Source uses NBKP_SCRIPT_DIR-relative path
         assert "${NBKP_SCRIPT_DIR}" in script
         # Dest stays absolute
-        assert "/mnt/dst/backup/latest/" in script
+        assert "/mnt/dst/backup/" in script
 
     def test_relative_both(self) -> None:
         config = _local_to_local_config()
@@ -1027,7 +1027,7 @@ class TestRelativePaths:
         assert "${NBKP_SCRIPT_DIR}" in script
         # Both absolute paths replaced
         assert "/mnt/src/photos/" not in script
-        assert "/mnt/dst/backup/latest/" not in script
+        assert "/mnt/dst/backup/" not in script
 
     def test_relative_src_local_to_remote(self) -> None:
         config = _local_to_remote_config()

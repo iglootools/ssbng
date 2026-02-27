@@ -180,6 +180,7 @@ def _run_plain_sync(
             progress=progress,
             on_output=on_rsync_output,
             resolved_endpoints=resolved_endpoints,
+            dest_suffix=None,
         )
     except Exception as e:
         return SyncResult(
@@ -232,6 +233,7 @@ def _run_btrfs_sync(
             progress=progress,
             on_output=on_rsync_output,
             resolved_endpoints=resolved_endpoints,
+            dest_suffix="latest",
         )
     except Exception as e:
         return SyncResult(

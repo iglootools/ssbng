@@ -43,12 +43,11 @@ class TestBuildRsyncCommandLocalToLocal:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
-            "--exclude=.nbkp-vol",
-            "--exclude=.nbkp-src",
-            "--exclude=.nbkp-dst",
+            "--filter=P .nbkp-*",
+            "--exclude=.nbkp-*",
             "--checksum",
             "/mnt/src/photos/",
-            "/mnt/dst/backup/latest/",
+            "/mnt/dst/backup/",
         ]
 
     def test_dry_run(self) -> None:
@@ -123,15 +122,14 @@ class TestBuildRsyncCommandLocalToRemote:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
-            "--exclude=.nbkp-vol",
-            "--exclude=.nbkp-src",
-            "--exclude=.nbkp-dst",
+            "--filter=P .nbkp-*",
+            "--exclude=.nbkp-*",
             "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
             " -p 5022 -i ~/.ssh/key",
             "/mnt/src/photos/",
-            "backup@nas.local:/backup/photos/latest/",
+            "backup@nas.local:/backup/photos/",
         ]
 
 
@@ -168,14 +166,13 @@ class TestBuildRsyncCommandRemoteToLocal:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
-            "--exclude=.nbkp-vol",
-            "--exclude=.nbkp-src",
-            "--exclude=.nbkp-dst",
+            "--filter=P .nbkp-*",
+            "--exclude=.nbkp-*",
             "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes",
             "admin@server.local:/data/",
-            "/mnt/dst/backup/latest/",
+            "/mnt/dst/backup/",
         ]
 
 
@@ -245,7 +242,7 @@ class TestBuildRsyncCommandRemoteToRemoteSameServer:
         assert "-e 'ssh" not in inner
         assert "backup@nas.local:" not in inner
         assert "/data/src/photos/" in inner
-        assert "/data/dst/backup/latest/" in inner
+        assert "/data/dst/backup/" in inner
 
     def test_dry_run(self) -> None:
         sync, config = self._simple_config()
@@ -323,7 +320,7 @@ class TestBuildRsyncCommandRemoteToRemoteSameServer:
         inner = cmd[-1]
         assert "-e 'ssh" not in inner
         assert "/data/src/" in inner
-        assert "/data/dst/latest/" in inner
+        assert "/data/dst/" in inner
 
     def test_progress(self) -> None:
         sync, config = self._simple_config()
@@ -363,14 +360,13 @@ class TestBuildRsyncCommandFilters:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
-            "--exclude=.nbkp-vol",
-            "--exclude=.nbkp-src",
-            "--exclude=.nbkp-dst",
+            "--filter=P .nbkp-*",
+            "--exclude=.nbkp-*",
             "--checksum",
             "--filter=+ *.jpg",
             "--filter=- *.tmp",
             "/mnt/src/",
-            "/mnt/dst/latest/",
+            "/mnt/dst/",
         ]
 
     def test_filter_file(self) -> None:
@@ -395,13 +391,12 @@ class TestBuildRsyncCommandFilters:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
-            "--exclude=.nbkp-vol",
-            "--exclude=.nbkp-src",
-            "--exclude=.nbkp-dst",
+            "--filter=P .nbkp-*",
+            "--exclude=.nbkp-*",
             "--checksum",
             "--filter=merge /etc/nbkp/filters.rules",
             "/mnt/src/",
-            "/mnt/dst/latest/",
+            "/mnt/dst/",
         ]
 
     def test_filters_and_filter_file(self) -> None:
@@ -427,14 +422,13 @@ class TestBuildRsyncCommandFilters:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
-            "--exclude=.nbkp-vol",
-            "--exclude=.nbkp-src",
-            "--exclude=.nbkp-dst",
+            "--filter=P .nbkp-*",
+            "--exclude=.nbkp-*",
             "--checksum",
             "--filter=+ *.jpg",
             "--filter=merge /etc/nbkp/filters.rules",
             "/mnt/src/",
-            "/mnt/dst/latest/",
+            "/mnt/dst/",
         ]
 
     def test_no_filters(self) -> None:
@@ -451,7 +445,12 @@ class TestBuildRsyncCommandFilters:
         )
 
         cmd = build_rsync_command(sync, config)
-        assert not any("--filter" in arg for arg in cmd)
+        user_filters = [
+            a
+            for a in cmd
+            if a.startswith("--filter=") and not a.startswith("--filter=P")
+        ]
+        assert user_filters == []
 
 
 class TestBuildRsyncCommandOptions:
@@ -491,7 +490,7 @@ class TestBuildRsyncCommandOptions:
             "rsync",
             "-a",
             "/mnt/src/",
-            "/mnt/dst/latest/",
+            "/mnt/dst/",
         ]
 
     def test_extra_options(self) -> None:
@@ -519,12 +518,11 @@ class TestBuildRsyncCommandOptions:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
-            "--exclude=.nbkp-vol",
-            "--exclude=.nbkp-src",
-            "--exclude=.nbkp-dst",
+            "--filter=P .nbkp-*",
+            "--exclude=.nbkp-*",
             "--bwlimit=1000",
             "/mnt/src/",
-            "/mnt/dst/latest/",
+            "/mnt/dst/",
         ]
 
     def test_override_and_extra(self) -> None:
@@ -552,7 +550,7 @@ class TestBuildRsyncCommandOptions:
             "--delete",
             "--bwlimit=1000",
             "/mnt/src/",
-            "/mnt/dst/latest/",
+            "/mnt/dst/",
         ]
 
     def test_checksum_default(self) -> None:
@@ -652,16 +650,15 @@ class TestBuildRsyncCommandProxyJump:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
-            "--exclude=.nbkp-vol",
-            "--exclude=.nbkp-src",
-            "--exclude=.nbkp-dst",
+            "--filter=P .nbkp-*",
+            "--exclude=.nbkp-*",
             "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
             " -p 5022 -i ~/.ssh/key"
             f" -o {quoted}",
             "/mnt/src/",
-            "backup@nas.local:/backup/latest/",
+            "backup@nas.local:/backup/",
         ]
 
     def test_remote_to_local_with_proxy(self) -> None:
@@ -712,14 +709,13 @@ class TestBuildRsyncCommandProxyJump:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
-            "--exclude=.nbkp-vol",
-            "--exclude=.nbkp-src",
-            "--exclude=.nbkp-dst",
+            "--filter=P .nbkp-*",
+            "--exclude=.nbkp-*",
             "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes" f" -o {quoted}",
             "backup@server.internal:/data/",
-            "/mnt/dst/latest/",
+            "/mnt/dst/",
         ]
 
 
@@ -786,16 +782,15 @@ class TestBuildRsyncCommandMultiHopProxy:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
-            "--exclude=.nbkp-vol",
-            "--exclude=.nbkp-src",
-            "--exclude=.nbkp-dst",
+            "--filter=P .nbkp-*",
+            "--exclude=.nbkp-*",
             "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
             " -p 5022 -i ~/.ssh/key"
             f" -o {quoted}",
             "/mnt/src/",
-            "backup@nas.local:/backup/latest/",
+            "backup@nas.local:/backup/",
         ]
 
 
@@ -823,12 +818,11 @@ class TestBuildRsyncCommandSpacesInPaths:
             "--delete-excluded",
             "--partial-dir=.rsync-partial",
             "--safe-links",
-            "--exclude=.nbkp-vol",
-            "--exclude=.nbkp-src",
-            "--exclude=.nbkp-dst",
+            "--filter=P .nbkp-*",
+            "--exclude=.nbkp-*",
             "--checksum",
             "/mnt/my src/my photos/",
-            "/mnt/my dst/my backup/latest/",
+            "/mnt/my dst/my backup/",
         ]
 
 
@@ -913,7 +907,7 @@ class TestSourceSnapshotPath:
 
         cmd = build_rsync_command(sync, config)
         assert cmd[-2] == "/mnt/src/photos/latest/"
-        assert cmd[-1] == "/mnt/dst/backup/latest/"
+        assert cmd[-1] == "/mnt/dst/backup/"
 
     def test_local_to_local_hard_link_source(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/src")
@@ -933,7 +927,7 @@ class TestSourceSnapshotPath:
 
         cmd = build_rsync_command(sync, config)
         assert cmd[-2] == "/mnt/src/latest/"
-        assert cmd[-1] == "/mnt/dst/latest/"
+        assert cmd[-1] == "/mnt/dst/"
 
     def test_local_to_remote_btrfs_source(self) -> None:
         server = SshEndpoint(slug="nas", host="nas.local", user="backup")
@@ -957,7 +951,7 @@ class TestSourceSnapshotPath:
 
         cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
         assert cmd[-2] == "/mnt/src/data/latest/"
-        assert cmd[-1] == "backup@nas.local:/backup/latest/"
+        assert cmd[-1] == "backup@nas.local:/backup/"
 
     def test_remote_to_local_hard_link_source(self) -> None:
         server = SshEndpoint(slug="srv", host="srv.local", user="admin")
@@ -980,7 +974,7 @@ class TestSourceSnapshotPath:
 
         cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
         assert cmd[-2] == "admin@srv.local:/data/latest/"
-        assert cmd[-1] == "/mnt/dst/latest/"
+        assert cmd[-1] == "/mnt/dst/"
 
     def test_no_snapshots_source_unchanged(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/src")
@@ -997,7 +991,7 @@ class TestSourceSnapshotPath:
 
         cmd = build_rsync_command(sync, config)
         assert cmd[-2] == "/mnt/src/photos/"
-        assert cmd[-1] == "/mnt/dst/latest/"
+        assert cmd[-1] == "/mnt/dst/"
 
     def test_remote_to_remote_same_server_btrfs_source(self) -> None:
         server = SshEndpoint(
@@ -1026,11 +1020,11 @@ class TestSourceSnapshotPath:
         cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
         inner = cmd[-1]
         assert "/data/src/photos/latest/" in inner
-        assert "/data/dst/latest/" in inner
+        assert "/data/dst/" in inner
 
 
 class TestDestSuffix:
-    def test_default_latest(self) -> None:
+    def test_default_bare(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/src")
         dst = LocalVolume(slug="dst", path="/mnt/dst")
         sync = SyncConfig(
@@ -1044,6 +1038,22 @@ class TestDestSuffix:
         )
 
         cmd = build_rsync_command(sync, config)
+        assert cmd[-1] == "/mnt/dst/"
+
+    def test_default_btrfs(self) -> None:
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config, dest_suffix="latest")
         assert cmd[-1] == "/mnt/dst/latest/"
 
     def test_custom_suffix(self) -> None:

@@ -620,7 +620,7 @@ def _build_rsync_block(
     vol_paths: dict[str, str],
     resolved_endpoints: ResolvedEndpoints,
     *,
-    dest_suffix: str = "latest",
+    dest_suffix: str | None = None,
     has_link_dest: bool = False,
 ) -> str:
     """Build rsync command block at indent 0."""
@@ -1034,8 +1034,22 @@ def _build_sync_context(
             dest_suffix="snapshots/$NBKP_TS",
             has_link_dest=True,
         )
+    elif has_btrfs:
+        rsync = _build_rsync_block(
+            sync,
+            config,
+            vol_paths,
+            resolved_endpoints,
+            dest_suffix="latest",
+        )
     else:
-        rsync = _build_rsync_block(sync, config, vol_paths, resolved_endpoints)
+        rsync = _build_rsync_block(
+            sync,
+            config,
+            vol_paths,
+            resolved_endpoints,
+            dest_suffix=None,
+        )
 
     # Btrfs blocks
     snapshot = (

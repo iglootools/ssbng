@@ -38,10 +38,8 @@ _DEFAULT_RSYNC_OPTIONS: list[str] = [
     "--delete-excluded",
     "--partial-dir=.rsync-partial",
     "--safe-links",
-    # Exclude the sentinel files
-    "--exclude=.nbkp-vol",
-    "--exclude=.nbkp-src",
-    "--exclude=.nbkp-dst",
+    "--filter=P .nbkp-*",
+    "--exclude=.nbkp-*",
 ]
 
 
@@ -145,7 +143,7 @@ def build_rsync_command(
     link_dest: str | None = None,
     progress: ProgressMode | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
-    dest_suffix: str = "latest",
+    dest_suffix: str | None = None,
 ) -> list[str]:
     """Build the rsync command for a sync operation.
 
@@ -186,7 +184,10 @@ def build_rsync_command(
             rsync_args.append(
                 format_remote_path(src_ep.server, src_path) + "/"
             )
-            rsync_args.append(f"{dst_path}/{dest_suffix}/")
+            dst_target = (
+                f"{dst_path}/{dest_suffix}/" if dest_suffix else f"{dst_path}/"
+            )
+            rsync_args.append(dst_target)
             return rsync_args
         case (LocalVolume(), RemoteVolume() as dv):
             dst_ep = re[dv.slug]
@@ -199,16 +200,22 @@ def build_rsync_command(
                 )
             )
             rsync_args.append(f"{src_path}/")
-            rsync_args.append(
-                format_remote_path(dst_ep.server, dst_path)
-                + f"/{dest_suffix}/"
+            dst_remote = format_remote_path(dst_ep.server, dst_path)
+            dst_target = (
+                f"{dst_remote}/{dest_suffix}/"
+                if dest_suffix
+                else f"{dst_remote}/"
             )
+            rsync_args.append(dst_target)
             return rsync_args
         case _:
             rsync_args = _base_rsync_args(sync, dry_run, link_dest, progress)
             rsync_args.extend(_filter_args(sync))
             rsync_args.append(f"{src_path}/")
-            rsync_args.append(f"{dst_path}/{dest_suffix}/")
+            dst_target = (
+                f"{dst_path}/{dest_suffix}/" if dest_suffix else f"{dst_path}/"
+            )
+            rsync_args.append(dst_target)
             return rsync_args
 
 
@@ -221,7 +228,7 @@ def _build_remote_same_server(
     link_dest: str | None,
     progress: ProgressMode | None = None,
     proxy_chain: list[SshEndpoint] | None = None,
-    dest_suffix: str = "latest",
+    dest_suffix: str | None = None,
 ) -> list[str]:
     """Build rsync command when both volumes are on the same server.
 
@@ -230,7 +237,10 @@ def _build_remote_same_server(
     rsync_args = _base_rsync_args(sync, dry_run, link_dest, progress)
     rsync_args.extend(_filter_args(sync))
     rsync_args.append(f"{src_path}/")
-    rsync_args.append(f"{dst_path}/{dest_suffix}/")
+    dst_target = (
+        f"{dst_path}/{dest_suffix}/" if dest_suffix else f"{dst_path}/"
+    )
+    rsync_args.append(dst_target)
 
     inner_command = shlex.join(rsync_args)
     return build_ssh_base_args(server, proxy_chain) + [inner_command]
@@ -244,7 +254,7 @@ def run_rsync(
     progress: ProgressMode | None = None,
     on_output: Callable[[str], None] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
-    dest_suffix: str = "latest",
+    dest_suffix: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Build and execute the rsync command for a sync."""
     cmd = build_rsync_command(

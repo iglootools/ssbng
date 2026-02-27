@@ -74,7 +74,7 @@ class TestProxyJump:
         # Verify file arrived via direct connection
         check = ssh_exec(
             ssh_endpoint,
-            f"cat {REMOTE_BACKUP_PATH}/latest/hello.txt",
+            f"cat {REMOTE_BACKUP_PATH}/hello.txt",
         )
         assert check.returncode == 0
         assert check.stdout.strip() == "via bastion"

@@ -68,7 +68,7 @@ class TestRemoteToLocal:
         assert result.returncode == 0
 
         # Verify file arrived locally
-        local_file = dst_dir / "latest" / "remote-file.txt"
+        local_file = dst_dir / "remote-file.txt"
         assert local_file.exists()
         assert local_file.read_text().strip() == "hello from remote"
 
@@ -118,6 +118,6 @@ class TestRemoteToLocal:
         )
         assert result.returncode == 0
 
-        local_file = dst_dir / "photos-backup" / "latest" / "img.jpg"
+        local_file = dst_dir / "photos-backup" / "img.jpg"
         assert local_file.exists()
         assert local_file.read_text().strip() == "image-data"

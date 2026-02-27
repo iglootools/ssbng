@@ -70,6 +70,6 @@ class TestRemoteToRemoteSameServer:
 
         out = ssh_exec(
             ssh_endpoint,
-            f"cat {REMOTE_BACKUP_PATH}/dst/latest/remote-file.txt",
+            f"cat {REMOTE_BACKUP_PATH}/dst/remote-file.txt",
         )
         assert out.stdout.strip() == "hello from remote"

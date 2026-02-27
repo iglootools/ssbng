@@ -153,8 +153,6 @@ def _create_dest_sentinels(
                         check=True,
                     )
                 (path / "snapshots").mkdir(exist_ok=True)
-            else:
-                (path / "latest").mkdir(exist_ok=True)
         case RemoteVolume():
             if remote_exec is not None:
                 rp = vol.path
@@ -171,8 +169,6 @@ def _create_dest_sentinels(
                         f" {rp}/latest"
                     )
                     remote_exec(f"mkdir -p {rp}/snapshots")
-                else:
-                    remote_exec(f"mkdir -p {rp}/latest")
 
 
 def _volume_key(

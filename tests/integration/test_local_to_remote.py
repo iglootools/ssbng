@@ -65,7 +65,7 @@ class TestLocalToRemote:
         # Verify file arrived on container
         check = ssh_exec(
             ssh_endpoint,
-            f"cat {REMOTE_BACKUP_PATH}/latest/hello.txt",
+            f"cat {REMOTE_BACKUP_PATH}/hello.txt",
         )
         assert check.returncode == 0
         assert check.stdout.strip() == "hello from local"
@@ -110,7 +110,7 @@ class TestLocalToRemote:
 
         check = ssh_exec(
             ssh_endpoint,
-            f"cat {REMOTE_BACKUP_PATH}/photos-backup/latest/img.jpg",
+            f"cat {REMOTE_BACKUP_PATH}/photos-backup/img.jpg",
         )
         assert check.returncode == 0
         assert check.stdout.strip() == "image-data"

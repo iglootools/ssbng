@@ -51,7 +51,7 @@ class TestLocalToLocal:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
-        (dst / "latest").mkdir(parents=True)
+        dst.mkdir()
 
         (src / "file1.txt").write_text("hello")
         (src / "file2.txt").write_text("world")
@@ -60,56 +60,54 @@ class TestLocalToLocal:
         result = run_rsync(sync, config)
 
         assert result.returncode == 0
-        assert (dst / "latest" / "file1.txt").read_text() == "hello"
-        assert (dst / "latest" / "file2.txt").read_text() == "world"
+        assert (dst / "file1.txt").read_text() == "hello"
+        assert (dst / "file2.txt").read_text() == "world"
 
     def test_incremental_sync(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
-        (dst / "latest").mkdir(parents=True)
+        dst.mkdir()
 
         (src / "file1.txt").write_text("version-one")
 
         sync, config = _make_local_config(str(src), str(dst))
         run_rsync(sync, config)
-        assert (dst / "latest" / "file1.txt").read_text() == "version-one"
+        assert (dst / "file1.txt").read_text() == "version-one"
 
         # Modify (different size) and re-sync
         (src / "file1.txt").write_text("version-two-updated")
         result = run_rsync(sync, config)
 
         assert result.returncode == 0
-        assert (
-            dst / "latest" / "file1.txt"
-        ).read_text() == "version-two-updated"
+        assert (dst / "file1.txt").read_text() == "version-two-updated"
 
     def test_delete_propagation(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
-        (dst / "latest").mkdir(parents=True)
+        dst.mkdir()
 
         (src / "keep.txt").write_text("keep")
         (src / "remove.txt").write_text("remove")
 
         sync, config = _make_local_config(str(src), str(dst))
         run_rsync(sync, config)
-        assert (dst / "latest" / "remove.txt").exists()
+        assert (dst / "remove.txt").exists()
 
         # Delete from source and re-sync (--delete is in rsync args)
         (src / "remove.txt").unlink()
         result = run_rsync(sync, config)
 
         assert result.returncode == 0
-        assert (dst / "latest" / "keep.txt").exists()
-        assert not (dst / "latest" / "remove.txt").exists()
+        assert (dst / "keep.txt").exists()
+        assert not (dst / "remove.txt").exists()
 
     def test_dry_run_no_copy(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
-        (dst / "latest").mkdir(parents=True)
+        dst.mkdir()
 
         (src / "file.txt").write_text("data")
 
@@ -117,13 +115,13 @@ class TestLocalToLocal:
         result = run_rsync(sync, config, dry_run=True)
 
         assert result.returncode == 0
-        assert not (dst / "latest" / "file.txt").exists()
+        assert not (dst / "file.txt").exists()
 
     def test_subdir(self, tmp_path: Path) -> None:
         src = tmp_path / "src" / "photos"
         dst = tmp_path / "dst" / "photos-backup"
         src.mkdir(parents=True)
-        (dst / "latest").mkdir(parents=True)
+        dst.mkdir(parents=True)
 
         (src / "img.jpg").write_text("jpeg-data")
 
@@ -136,4 +134,4 @@ class TestLocalToLocal:
         result = run_rsync(sync, config)
 
         assert result.returncode == 0
-        assert (dst / "latest" / "img.jpg").read_text() == "jpeg-data"
+        assert (dst / "img.jpg").read_text() == "jpeg-data"

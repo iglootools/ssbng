@@ -401,7 +401,6 @@ def seed(
                     slug="step-3",
                     source=SyncEndpoint(
                         volume="stage-remote-bare",
-                        hard_link_snapshots=hl_src,
                     ),
                     destination=SyncEndpoint(
                         volume=("stage-remote-btrfs-snapshots"),
@@ -424,7 +423,6 @@ def seed(
                     slug="step-5",
                     source=SyncEndpoint(
                         volume="stage-remote-btrfs-bare",
-                        hard_link_snapshots=hl_src,
                     ),
                     destination=SyncEndpoint(
                         volume=("stage-remote-hl-snapshots"),

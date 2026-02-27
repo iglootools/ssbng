@@ -125,7 +125,6 @@ def _build_chain_config(
             slug="step-3",
             source=SyncEndpoint(
                 volume="stage-remote-bare",
-                hard_link_snapshots=hl_src,
             ),
             destination=SyncEndpoint(
                 volume="stage-remote-btrfs-snapshots",
@@ -148,7 +147,6 @@ def _build_chain_config(
             slug="step-5",
             source=SyncEndpoint(
                 volume="stage-remote-btrfs-bare",
-                hard_link_snapshots=hl_src,
             ),
             destination=SyncEndpoint(
                 volume="stage-remote-hl-snapshots",
@@ -249,8 +247,8 @@ class TestChainSync:
             assert r.success, f"{r.sync_slug}: {r.error}"
 
         # 7. Verify final destination matches source
-        dst_latest = tmp_path / "dst-local-bare" / "latest"
-        _assert_trees_equal(src, dst_latest)
+        dst = tmp_path / "dst-local-bare"
+        _assert_trees_equal(src, dst)
 
         # 8. Verify topological ordering
         slugs = [r.sync_slug for r in results]
