@@ -292,9 +292,7 @@ def seed(
             network_name = create_docker_network()
 
         with _console.status("Starting bastion container..."):
-            bastion_port = start_bastion_container(
-                pub_key, network_name
-            )
+            bastion_port = start_bastion_container(pub_key, network_name)
         bastion_endpoint = create_test_ssh_endpoint(
             "bastion", "127.0.0.1", bastion_port, private_key
         )
@@ -347,23 +345,19 @@ def seed(
     if docker:
         assert docker_endpoint is not None
         assert bastion_endpoint is not None
-        btrfs_snapshots_path = (
-            f"{REMOTE_BTRFS_PATH}/snapshots"
-        )
+        btrfs_snapshots_path = f"{REMOTE_BTRFS_PATH}/snapshots"
         btrfs_bare_path = f"{REMOTE_BTRFS_PATH}/bare"
         btrfs_dst = BtrfsSnapshotConfig(enabled=True)
         btrfs_src = BtrfsSnapshotConfig(enabled=True)
 
         ssh_endpoints["bastion"] = bastion_endpoint
         ssh_endpoints["docker"] = docker_endpoint
-        ssh_endpoints["via-bastion"] = (
-            create_test_ssh_endpoint(
-                "via-bastion",
-                "backup-server",
-                22,
-                private_key,
-                proxy_jump="bastion",
-            )
+        ssh_endpoints["via-bastion"] = create_test_ssh_endpoint(
+            "via-bastion",
+            "backup-server",
+            22,
+            private_key,
+            proxy_jump="bastion",
         )
         volumes.update(
             {
@@ -410,9 +404,7 @@ def seed(
                         hard_link_snapshots=hl_src,
                     ),
                     destination=SyncEndpoint(
-                        volume=(
-                            "stage-remote-btrfs-snapshots"
-                        ),
+                        volume=("stage-remote-btrfs-snapshots"),
                         btrfs_snapshots=btrfs_dst,
                     ),
                 ),
@@ -420,9 +412,7 @@ def seed(
                 "step-4": SyncConfig(
                     slug="step-4",
                     source=SyncEndpoint(
-                        volume=(
-                            "stage-remote-btrfs-snapshots"
-                        ),
+                        volume=("stage-remote-btrfs-snapshots"),
                         btrfs_snapshots=btrfs_src,
                     ),
                     destination=SyncEndpoint(
@@ -437,9 +427,7 @@ def seed(
                         hard_link_snapshots=hl_src,
                     ),
                     destination=SyncEndpoint(
-                        volume=(
-                            "stage-remote-hl-snapshots"
-                        ),
+                        volume=("stage-remote-hl-snapshots"),
                         hard_link_snapshots=hl_dst,
                     ),
                 ),
@@ -447,9 +435,7 @@ def seed(
                 "step-6": SyncConfig(
                     slug="step-6",
                     source=SyncEndpoint(
-                        volume=(
-                            "stage-remote-hl-snapshots"
-                        ),
+                        volume=("stage-remote-hl-snapshots"),
                         hard_link_snapshots=hl_src,
                     ),
                     destination=SyncEndpoint(
@@ -486,18 +472,13 @@ def seed(
         def _run_remote(cmd: str) -> None:
             ssh_exec(_server, cmd)
 
-        with _console.status(
-            "Creating btrfs subvolume..."
-        ):
+        with _console.status("Creating btrfs subvolume..."):
             ssh_exec(
                 docker_endpoint,
-                "btrfs subvolume create"
-                f" {btrfs_snapshots_path}",
+                "btrfs subvolume create" f" {btrfs_snapshots_path}",
             )
         with _console.status("Setting up volumes..."):
-            create_seed_sentinels(
-                config, remote_exec=_run_remote
-            )
+            create_seed_sentinels(config, remote_exec=_run_remote)
         seed_volume(
             config.volumes["src-local-bare"],
             big_file_size_bytes=size_bytes,

@@ -181,7 +181,7 @@ def _assert_trees_equal(expected: Path, actual: Path) -> None:
     expected_files = {
         p.relative_to(expected): p
         for p in sorted(expected.rglob("*"))
-        if p.is_file()
+        if p.is_file() and not p.name.startswith(".nbkp-")
     }
     actual_files = {
         p.relative_to(actual): p
