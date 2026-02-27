@@ -461,6 +461,7 @@ def seed(
         syncs=syncs,
     )
 
+    remote_exec = None
     # Create sentinels and seed data
     size_bytes = big_file_size * 1024 * 1024
     if docker:
@@ -475,14 +476,10 @@ def seed(
                 docker_endpoint,
                 "btrfs subvolume create" f" {btrfs_snapshots_path}",
             )
-        with _console.status("Setting up volumes..."):
-            create_seed_sentinels(config, remote_exec=_run_remote)
-        seed_volume(
-            config.volumes["src-local-bare"],
-            big_file_size_bytes=size_bytes,
-        )
-    else:
-        create_seed_sentinels(config)
+        remote_exec = _run_remote
+        
+    with _console.status("Setting up volumes..."):
+        create_seed_sentinels(config, remote_exec=remote_exec)
         seed_volume(
             config.volumes["src-local-bare"],
             big_file_size_bytes=size_bytes,
