@@ -542,6 +542,21 @@ def _print_sync_reason_fix(
                     console,
                     _wrap_cmd(cmd, src, resolved_endpoints),
                 )
+        case SyncReason.SOURCE_SNAPSHOTS_DIR_NOT_FOUND:
+            src = config.volumes[sync.source.volume]
+            path = _endpoint_path(src, sync.source.subdir)
+            if sync.source.btrfs_snapshots.enabled:
+                cmds = [
+                    f"sudo mkdir {path}/snapshots",
+                    "sudo chown <user>:<group>" f" {path}/snapshots",
+                ]
+            else:
+                cmds = [f"mkdir -p {path}/snapshots"]
+            for cmd in cmds:
+                _print_cmd(
+                    console,
+                    _wrap_cmd(cmd, src, resolved_endpoints),
+                )
         case SyncReason.DESTINATION_SENTINEL_NOT_FOUND:
             dst = config.volumes[sync.destination.volume]
             path = _endpoint_path(dst, sync.destination.subdir)

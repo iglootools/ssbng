@@ -33,6 +33,7 @@ class SyncReason(str, enum.Enum):
     SOURCE_SENTINEL_NOT_FOUND = ".nbkp-src source sentinel not found"
     DESTINATION_SENTINEL_NOT_FOUND = ".nbkp-dst destination sentinel not found"
     SOURCE_LATEST_NOT_FOUND = "source latest/ directory not found"
+    SOURCE_SNAPSHOTS_DIR_NOT_FOUND = "source snapshots/ directory not found"
     RSYNC_NOT_FOUND_ON_SOURCE = "rsync not found on source"
     RSYNC_NOT_FOUND_ON_DESTINATION = "rsync not found on destination"
     BTRFS_NOT_FOUND_ON_DESTINATION = "btrfs not found on destination"
@@ -389,6 +390,10 @@ def check_sync(
                     src_vol, f"{src_ep}/latest", re
                 ):
                     reasons.append(SyncReason.SOURCE_LATEST_NOT_FOUND)
+                if not _check_directory_exists(
+                    src_vol, f"{src_ep}/snapshots", re
+                ):
+                    reasons.append(SyncReason.SOURCE_SNAPSHOTS_DIR_NOT_FOUND)
 
         # Destination checks (only if destination volume is active)
         if dst_status.active:

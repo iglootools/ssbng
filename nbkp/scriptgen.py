@@ -487,7 +487,7 @@ def _build_preflight_block(
         )
     )
 
-    # Source snapshot: verify latest/ exists
+    # Source snapshot: verify latest/ and snapshots/ exist
     if sync.source.snapshot_mode != "none":
         src_latest = f"{src_path}/latest"
         lines.append(
@@ -495,6 +495,15 @@ def _build_preflight_block(
                 src_vol,
                 ["-d", src_latest],
                 ("source latest/ not found" f" ({src_latest})"),
+                resolved_endpoints,
+            )
+        )
+        src_snapshots = f"{src_path}/snapshots"
+        lines.append(
+            _build_check_line(
+                src_vol,
+                ["-d", src_snapshots],
+                ("source snapshots/ not found" f" ({src_snapshots})"),
                 resolved_endpoints,
             )
         )

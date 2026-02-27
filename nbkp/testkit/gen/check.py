@@ -306,6 +306,7 @@ def troubleshoot_data(
             destination_status=nas_vs,
             reasons=[
                 SyncReason.SOURCE_LATEST_NOT_FOUND,
+                SyncReason.SOURCE_SNAPSHOTS_DIR_NOT_FOUND,
             ],
         ),
     }
