@@ -22,6 +22,7 @@ from .config import (
     HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
+    RsyncOptions,
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
@@ -258,7 +259,7 @@ def seed(
             " to slow down syncs."
             " Set to 0 to disable.",
         ),
-    ] = 1024,
+    ] = 1,
     docker: Annotated[
         bool,
         typer.Option(
@@ -266,8 +267,23 @@ def seed(
             help="Start a Docker container for remote syncs.",
         ),
     ] = False,
+    bandwidth_limit: Annotated[
+        int,
+        typer.Option(
+            "--bandwidth-limit",
+            help="Rsync bandwidth limit in KiB/s"
+            " (e.g. 100 for ~100 KiB/s)."
+            " Set to 0 to disable.",
+        ),
+    ] = 250,
 ) -> None:
     """Create a temp folder with config and test data."""
+    rsync_opts = (
+        RsyncOptions(extra_options=[f"--bwlimit={bandwidth_limit}"])
+        if bandwidth_limit
+        else RsyncOptions()
+    )
+
     if docker:
         check_docker()
         if not DOCKER_DIR.is_dir():
@@ -339,6 +355,7 @@ def seed(
                 volume="stage-local-hl-snapshots",
                 hard_link_snapshots=hl_dst,
             ),
+            rsync_options=rsync_opts,
         ),
     }
 
@@ -395,6 +412,7 @@ def seed(
                     destination=SyncEndpoint(
                         volume="stage-remote-bare",
                     ),
+                    rsync_options=rsync_opts,
                 ),
                 # remote→remote (bastion), btrfs dest
                 "step-3": SyncConfig(
@@ -406,6 +424,7 @@ def seed(
                         volume=("stage-remote-btrfs-snapshots"),
                         btrfs_snapshots=btrfs_dst,
                     ),
+                    rsync_options=rsync_opts,
                 ),
                 # remote→remote (bastion), bare on btrfs
                 "step-4": SyncConfig(
@@ -417,6 +436,7 @@ def seed(
                     destination=SyncEndpoint(
                         volume="stage-remote-btrfs-bare",
                     ),
+                    rsync_options=rsync_opts,
                 ),
                 # remote→remote (bastion), HL dest
                 "step-5": SyncConfig(
@@ -428,6 +448,7 @@ def seed(
                         volume=("stage-remote-hl-snapshots"),
                         hard_link_snapshots=hl_dst,
                     ),
+                    rsync_options=rsync_opts,
                 ),
                 # remote (bastion)→local, bare dest
                 "step-6": SyncConfig(
@@ -439,6 +460,7 @@ def seed(
                     destination=SyncEndpoint(
                         volume="dst-local-bare",
                     ),
+                    rsync_options=rsync_opts,
                 ),
             }
         )
@@ -453,6 +475,7 @@ def seed(
             destination=SyncEndpoint(
                 volume="dst-local-bare",
             ),
+            rsync_options=rsync_opts,
         )
 
     config = Config(
@@ -477,7 +500,7 @@ def seed(
                 "btrfs subvolume create" f" {btrfs_snapshots_path}",
             )
         remote_exec = _run_remote
-        
+
     with _console.status("Setting up volumes..."):
         create_seed_sentinels(config, remote_exec=remote_exec)
         seed_volume(
